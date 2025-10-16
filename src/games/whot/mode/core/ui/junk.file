@@ -1,0 +1,355 @@
+import React, { forwardRef, useImperativeHandle } from 'react';
+import {
+    useSharedValue,
+    withTiming,
+    WithTimingConfig,
+    runOnJS,
+} from 'react-native-reanimated';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+
+import { AnimatedWhotCard } from './AnimatedWhotCard';
+import { Card, AnimatedCard, CARD_WIDTH, CARD_HEIGHT } from './WhotCardTypes';
+
+// This handle defines the functions that the parent component can call on this card
+export interface IndividualCardHandle {
+    moveCard: (
+        targetX: number,
+        targetY: number,
+        config?: WithTimingConfig
+    ) => Promise<void>;
+    flipCard: (
+        isFaceUp: boolean,
+        config?: WithTimingConfig
+    ) => Promise<void>;
+}
+
+interface IndividualAnimatedCardProps {
+    card: Card;
+    index: number;
+    initialPosition: { x: number; y: number };
+    onPress: (card: Card) => void; // Prop to handle the tap event
+}
+
+const IndividualAnimatedCard = forwardRef<IndividualCardHandle, IndividualAnimatedCardProps>(
+    ({ card, index, initialPosition, onPress }, ref) => {
+        // --- Animated State ---
+        const x = useSharedValue(initialPosition.x - CARD_WIDTH / 2);
+        const y = useSharedValue(initialPosition.y - CARD_HEIGHT / 2);
+        const rotate = useSharedValue(0);
+
+        // --- Gesture Logic ---
+        const tapGesture = Gesture.Tap().onEnd(() => {
+            // Use runOnJS to call the React state-related function from the UI thread
+            runOnJS(onPress)(card);
+        });
+
+        // --- Animation Logic ---
+        useImperativeHandle(ref, () => ({
+            moveCard: (targetX, targetY, config = { duration: 300 }) => {
+                return new Promise((resolve) => {
+                    const adjustedX = targetX - CARD_WIDTH / 2;
+                    const adjustedY = targetY - CARD_HEIGHT / 2;
+                    
+                    const onComplete = (finished?: boolean) => {
+                        'worklet';
+                        if (finished) {
+                            runOnJS(resolve)();
+                        }
+                    };
+
+                    x.value = withTiming(adjustedX, config, onComplete);
+                    y.value = withTiming(adjustedY, config);
+                });
+            },
+            flipCard: (isFaceUp, config = { duration: 300 }) => {
+                return new Promise((resolve) => {
+                    const onComplete = (finished?: boolean) => {
+                        'worklet';
+                        if (finished) {
+                            runOnJS(resolve)();
+                        }
+                    };
+                    
+                    rotate.value = withTiming(isFaceUp ? Math.PI : 0, config, onComplete);
+                });
+            },
+        }));
+
+        // --- Render Data ---
+        const animatedCardData: AnimatedCard = {
+            ...card,
+            x,
+            y,
+            rotate,
+            width: CARD_WIDTH,
+            height: CARD_HEIGHT,
+            initialIndex: index,
+        };
+
+        // --- Render ---
+        // Wrap the card drawing component with the gesture detector
+        return (
+            <GestureDetector gesture={tapGesture}>
+                <AnimatedWhotCard card={animatedCardData} />
+            </GestureDetector>
+        );
+    }
+);
+
+export default IndividualAnimatedCard;
+
+
+
+
+import React, { forwardRef, useImperativeHandle, useRef, useCallback } from 'react';
+import { WithTimingConfig } from 'react-native-reanimated';
+import { getCoords } from '../coordinateHelper';
+import { Card } from '../types';
+import IndividualAnimatedCard, { IndividualCardHandle } from './IndividualAnimatedCard';
+
+export interface AnimatedCardListHandle {
+    dealCard: (
+        card: Card,
+        target: 'player' | 'computer' | 'pile',
+        options: { cardIndex: number; handSize: number },
+        shouldFlip: boolean
+    ) => Promise<void>;
+    flipCard: (
+        card: Card,
+        isFaceUp: boolean
+    ) => Promise<void>;
+}
+
+interface AnimatedCardListProps {
+    cardsInPlay: Card[];
+    marketPos: { x: number; y: number };
+    onCardPress: (card: Card) => void; // Prop to receive the handler
+}
+
+const AnimatedCardList = forwardRef<AnimatedCardListHandle, AnimatedCardListProps>(
+    ({ cardsInPlay, marketPos, onCardPress }, ref) => {
+        const cardRefs = useRef<{ [key: string]: IndividualCardHandle | null }>({});
+        
+        const dealCard = useCallback(
+            async (cardToDeal: Card, target: 'player' | 'computer' | 'pile', options: { cardIndex: number; handSize: number }, shouldFlip: boolean) => {
+                const cardRef = cardRefs.current[cardToDeal.id];
+                if (!cardRef) {
+                    console.error('Card ref not found:', cardToDeal.id);
+                    return;
+                }
+                
+                const targetCoords = getCoords(target, options);
+                const moveConfig: WithTimingConfig = { duration: 400 };
+                const flipConfig: WithTimingConfig = { duration: 400 };
+
+                const movePromise = cardRef.moveCard(targetCoords.x, targetCoords.y, moveConfig);
+                const flipPromise = shouldFlip
+                    ? cardRef.flipCard(true, flipConfig)
+                    : Promise.resolve();
+
+                await Promise.all([movePromise, flipPromise]);
+            },
+            []
+        );
+        
+        const flipCard = useCallback(
+            async (cardToFlip: Card, isFaceUp: boolean) => {
+                const cardRef = cardRefs.current[cardToFlip.id];
+                if (!cardRef) {
+                    console.error('Card ref not found for flipping:', cardToFlip.id);
+                    return;
+                }
+                const flipConfig: WithTimingConfig = { duration: 400 };
+                await cardRef.flipCard(isFaceUp, flipConfig);
+            },
+            []
+        );
+        
+        AnimatedCardList.displayName = 'AnimatedCardList';
+
+        useImperativeHandle(ref, () => ({
+            dealCard,
+            flipCard,
+        }));
+        
+        return (
+            <>
+                {cardsInPlay.map((card, i) => (
+                    <IndividualAnimatedCard
+                        key={card.id}
+                        card={card}
+                        index={i}
+                        ref={(el) => { cardRefs.current[card.id] = el; }}
+                        initialPosition={marketPos}
+                        onPress={onCardPress} // Pass the handler down
+                    />
+                ))}
+            </>
+        );
+    }
+);
+
+export default AnimatedCardList;
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { View, StyleSheet, Dimensions, Text, Button, SafeAreaView } from "react-native";
+import { Canvas, Rect } from "@shopify/react-native-skia";
+import { runOnJS } from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler'; // Import Root View
+
+import AnimatedCardList, { AnimatedCardListHandle } from "../core/ui/AnimatedCardList";
+import { Card, GameState } from '../core/types';
+import { getCoords } from '../core/coordinateHelper';
+import { initGame } from '../core/whotLogic';
+
+import ComputerUI, { levels as computerLevels } from "./whotComputerUI";
+
+type GameData = ReturnType<typeof initGame>;
+
+const WhotComputerGameScreen = () => {
+    const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
+    const [game, setGame] = useState<GameData | null>(null);
+    const [isAnimating, setIsAnimating] = useState(false);
+    const [allCards, setAllCards] = useState<Card[]>([]);
+    const [cardsReady, setCardsReady] = useState(false);
+
+    const cardListRef = useRef<AnimatedCardListHandle>(null);
+    const marketPosition = useMemo(() => getCoords('market'), []);
+
+    const initializeGame = useCallback((lvl: number) => {
+        const gameData = initGame(["Player", "Computer"], 6);
+        setAllCards(gameData.allCards);
+        setGame(gameData);
+        setSelectedLevel(lvl);
+        setIsAnimating(true);
+    }, []);
+
+    const handleComputerMove = useCallback((newState: GameState) => {
+        setGame(prevGame => {
+            if (!prevGame) return null;
+            console.log("Computer's turn is over. Updating game state.");
+            return { ...prevGame, gameState: newState };
+        });
+    }, []);
+
+    // The handler for when a player taps a card
+    const handleCardPress = useCallback((card: Card) => {
+        if (isAnimating) {
+            console.log("Animation in progress, ignoring press.");
+            return;
+        }
+        
+        // This is where you would put your game logic for playing a card.
+        // For example: check if it's the player's turn, if the move is valid, etc.
+        console.log(`✅ Card pressed: ${card.number} of ${card.suit} (ID: ${card.id})`);
+        
+        // TODO: Implement actual game logic to play the card
+    }, [isAnimating, game]);
+
+    useEffect(() => {
+        if (game && allCards.length > 0) {
+            const timer = setTimeout(() => setCardsReady(true), 100);
+            return () => clearTimeout(timer);
+        }
+    }, [game, allCards]);
+
+    useEffect(() => {
+        if (!cardsReady || !cardListRef.current || !game) return;
+        const dealer = cardListRef.current;
+        const dealSequentially = async () => {
+            console.log("Starting SEQUENTIAL deal...");
+            const handSize = game.gameState.players[0].hand.length;
+            const flipPromises: Promise<void>[] = [];
+            for (let i = 0; i < handSize; i++) {
+                const playerCard = game.gameState.players[0].hand[i];
+                const computerCard = game.gameState.players[1].hand[i];
+                if (playerCard) {
+                    await dealer.dealCard(playerCard, 'player', { cardIndex: i, handSize }, false);
+                }
+                if (computerCard) {
+                    await dealer.dealCard(computerCard, 'computer', { cardIndex: i, handSize }, false);
+                }
+            }
+            const pileCard = game.gameState.pile[0];
+            if (pileCard) {
+                await dealer.dealCard(pileCard, 'pile', { cardIndex: 0, handSize: 1 }, false);
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+            for (let i = 0; i < handSize; i++) {
+                const playerCard = game.gameState.players[0].hand[i];
+                if (playerCard) {
+                    flipPromises.push(dealer.flipCard(playerCard, true));
+                }
+            }
+            if (pileCard) {
+                flipPromises.push(dealer.flipCard(pileCard, true));
+            }
+            await Promise.all(flipPromises);
+            console.log("Deal sequence complete.");
+            runOnJS(setIsAnimating)(false);
+        };
+        dealSequentially();
+        setCardsReady(false);
+    }, [cardsReady, game]);
+
+    if (!selectedLevel) {
+        return (
+            <View style={[styles.container, styles.centerContent]}>
+                <Text style={styles.title}>Select Computer Level</Text>
+                {computerLevels.map((level) => (
+                    <View key={level.value} style={styles.levelButtonContainer}>
+                        <Button
+                            title={`${level.label}`}
+                            onPress={() => initializeGame(level.value)}
+                            color="#1E5E4E"
+                        />
+                    </View>
+                ))}
+            </View>
+        );
+    }
+    
+    // The entire screen must be wrapped in GestureHandlerRootView
+    return (
+        <GestureHandlerRootView style={styles.container}>
+            <Canvas style={[StyleSheet.absoluteFillObject, isAnimating && { zIndex: 21 }]}>
+                <Rect x={0} y={0} width={Dimensions.get('window').width} height={Dimensions.get('window').height} color="#1E5E4E" />
+                {allCards.length > 0 && (
+                    <AnimatedCardList
+                        ref={cardListRef}
+                        cardsInPlay={allCards}
+                        marketPos={marketPosition}
+                        onCardPress={handleCardPress} // Pass the handler
+                    />
+                )}
+            </Canvas>
+
+            <SafeAreaView style={styles.topOverlay}>
+                <ComputerUI
+                    state={game?.gameState ?? null}
+                    playerIndex={1}
+                    level={selectedLevel}
+                    onStateChange={handleComputerMove}
+                />
+            </SafeAreaView>
+
+            <View style={styles.controlsOverlay}>
+                <Text style={styles.playerHandText}>Your Hand ({game?.gameState.players[0].hand.length ?? 0} cards)</Text>
+                {isAnimating && <View style={styles.blocker}><Text style={{ color: 'white' }}>Dealing...</Text></View>}
+            </View>
+        </GestureHandlerRootView>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: '#1E5E4E' },
+    centerContent: { justifyContent: 'center', alignItems: 'center', padding: 20 },
+    title: { fontSize: 24, color: '#FFF', marginBottom: 20, textAlign: 'center' },
+    levelButtonContainer: { marginBottom: 15, width: 200 },
+    topOverlay: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', zIndex: 10 },
+    controlsOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 150, justifyContent: 'center', alignItems: 'center', zIndex: 10 },
+    playerHandText: { color: 'white', fontSize: 16, marginBottom: 10 },
+    blocker: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 20 }
+});
+
+export default WhotComputerGameScreen;
