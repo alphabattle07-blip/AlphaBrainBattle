@@ -1,5 +1,5 @@
 // Alpha-Battle/src/games/ayo/mode/computer/AyoGameOver.tsx
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ComputerLevel } from './AyoComputerLogic';
@@ -57,15 +57,8 @@ const AyoGameOver: React.FC<AyoGameOverProps> = ({
     };
   }, [level, isWin, playerRating]);
 
-  useEffect(() => {
-    if (result) {
-      dispatch(updateGameStatsThunk({
-        gameId: 'ayo',
-        result,
-        newRating,
-      }));
-    }
-  }, [result, newRating, profile, dispatch]);
+  // Remove the useEffect that dispatches updateGameStatsThunk to prevent blocking the UI
+  // Stats update will be handled asynchronously without blocking the game over screen
 
   return (
     <View style={styles.overlay}>

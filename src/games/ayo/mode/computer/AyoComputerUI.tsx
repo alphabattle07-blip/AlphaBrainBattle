@@ -127,15 +127,8 @@ export default function AyoComputerUI() {
         };
     }, [level]);
 
-  // --- FIX: Add a loading state check here ---
-  if (playerProfile.isLoading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#fff" />
-        <Text style={styles.loadingText}>Loading Profile...</Text>
-      </View>
-    );
-  }
+  // --- FIX: Remove loading state check to allow immediate game over display ---
+  // Profile loading should not block the game UI
 
   return (
     <View style={styles.container}>

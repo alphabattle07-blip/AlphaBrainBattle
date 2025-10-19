@@ -1,112 +1,100 @@
-// IndividualAnimatedCard.tsx (CORRECTED)
-import React, { forwardRef, useImperativeHandle } from 'react';
+import React, { forwardRef, useImperativeHandle } from "react";
+import { Group, Skia, type SkFont } from "@shopify/react-native-skia";
 import Animated, {
  useSharedValue,
  withTiming,
  Easing,
  runOnJS,
- useAnimatedStyle,
-} from 'react-native-reanimated';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { Card, CARD_WIDTH, CARD_HEIGHT } from './WhotCardTypes';
+ useDerivedValue,
+} from "react-native-reanimated";
+
+import { AnimatedWhotCard } from "./AnimatedWhotCard";
+import type { Card } from "./WhotCardTypes";
+import { CARD_WIDTH, CARD_HEIGHT } from "./WhotCardTypes";
+
+export type AnimatedCardValues = {
+ x: Animated.SharedValue<number>;
+ y: Animated.SharedValue<number>;
+};
 
 export interface IndividualCardHandle {
  moveCard: (targetX: number, targetY: number) => Promise<void>;
  flipCard: (isFaceUp: boolean) => Promise<void>;
- animatedValues: {
-  x: Animated.SharedValue<number>;
-  y: Animated.SharedValue<number>;
-  rotate: Animated.SharedValue<number>;
- };
+ animatedValues: AnimatedCardValues;
 }
 
 interface IndividualAnimatedCardProps {
  card: Card;
  initialPosition: { x: number; y: number };
- onPress: (card: Card) => void;
+ initialIndex: number;
+ // ✅ Accept fonts as props
+ font: SkFont;
+ whotFont: SkFont;
 }
 
 const IndividualAnimatedCard = forwardRef<IndividualCardHandle, IndividualAnimatedCardProps>(
- ({ card, initialPosition, onPress }, ref) => {
-  // ✅ FIX: Add a guard clause to prevent rendering if the prop isn't ready.
-  if (!initialPosition) {
-   return null;
-  }
-
+ ({ card, initialPosition, initialIndex, font, whotFont }, ref) => {
   const x = useSharedValue(initialPosition.x - CARD_WIDTH / 2);
   const y = useSharedValue(initialPosition.y - CARD_HEIGHT / 2);
   const rotate = useSharedValue(0);
 
+  const matrix = useDerivedValue(() => {
+   "worklet";
+   const m = Skia.Matrix();
+   m.translate(x.value, y.value);
+   return m;
+  });
+
   useImperativeHandle(ref, () => ({
-   // ✅ Smooth card movement
    moveCard: (targetX, targetY) => {
     return new Promise((resolve) => {
-     const adjustedX = targetX - CARD_WIDTH / 2;
-     const adjustedY = targetY - CARD_HEIGHT / 2;
      const onComplete = (finished?: boolean) => {
-      'worklet';
+      "worklet";
       if (finished) runOnJS(resolve)();
      };
-
-     // 💨 smooth easing motion
-     x.value = withTiming(adjustedX, {
-      duration: 600,
-      easing: Easing.out(Easing.cubic),
-     }, onComplete);
-
-     y.value = withTiming(adjustedY, {
-      duration: 600,
-      easing: Easing.out(Easing.cubic),
-     });
+     x.value = withTiming(
+      targetX - CARD_WIDTH / 2,
+      { duration: 600, easing: Easing.out(Easing.cubic) },
+      onComplete
+     );
+     y.value = withTiming(
+      targetY - CARD_HEIGHT / 2,
+      { duration: 600, easing: Easing.out(Easing.cubic) }
+     );
     });
    },
-
-   // ✅ Smooth flip animation
    flipCard: (isFaceUp) => {
     return new Promise((resolve) => {
      const onComplete = (finished?: boolean) => {
-      'worklet';
+      "worklet";
       if (finished) runOnJS(resolve)();
      };
-
      rotate.value = withTiming(
       isFaceUp ? Math.PI : 0,
-      {
-       duration: 500,
-       easing: Easing.inOut(Easing.ease),
-      },
+      { duration: 500 },
       onComplete
      );
     });
    },
-
-   // ✅ expose animated values for the drawing layer
-   animatedValues: { x, y, rotate },
-  }));
-
-  const tapGesture = Gesture.Tap().onEnd(() => {
-   'worklet';
-   runOnJS(onPress)(card);
-  });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-   position: 'absolute',
-   width: CARD_WIDTH,
-   height: CARD_HEIGHT,
-   transform: [
-    { translateX: x.value },
-    { translateY: y.value },
-    { rotateY: `${rotate.value}rad` },
-   ],
+   animatedValues: { x, y },
   }));
 
   return (
-   <GestureDetector gesture={tapGesture}>
-    <Animated.View style={animatedStyle} />
-   </GestureDetector>
+   <Group matrix={matrix}>
+    <AnimatedWhotCard
+     card={{
+      ...card,
+      width: CARD_WIDTH,
+      height: CARD_HEIGHT,
+      rotate,
+     }}
+     // ✅ Pass fonts down
+     font={font}
+     whotFont={whotFont}
+    />
+   </Group>
   );
  }
 );
 
-IndividualAnimatedCard.displayName = 'IndividualAnimatedCard';
 export default IndividualAnimatedCard;
