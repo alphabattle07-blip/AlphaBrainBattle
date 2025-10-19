@@ -152,7 +152,7 @@ const WhotComputerGameScreen = () => {
    </Canvas>
 
    {/* ✅ 5. Pass fonts to AnimatedCardList */}
-   {animatedCards.length > 0 && (
+   {animatedCards.length > 0 && font && whotFont && (
     <AnimatedCardList
      ref={cardListRef}
      cardsInPlay={animatedCards}
@@ -163,7 +163,6 @@ const WhotComputerGameScreen = () => {
       console.log("Card pressed:", card);
      }}
      onReady={() => {
-      console.log("🚀 AnimatedCardList is ready! Starting animations...");
       setIsCardListReady(true);
      }}
     />

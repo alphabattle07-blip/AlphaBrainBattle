@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import React, { forwardRef, useImperativeHandle, useRef, useState, useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { Canvas, type SkFont } from "@shopify/react-native-skia";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
@@ -40,6 +40,7 @@ const AnimatedCardList = forwardRef<
   [id: string]: AnimatedCardValues | undefined;
  }>({});
  const hasCalledReady = useRef(false);
+ const [refsReadyCount, setRefsReadyCount] = useState(0);
 
  useImperativeHandle(ref, () => ({
   dealCard: async (cardToDeal, target, options, shouldFlip) => {
@@ -57,36 +58,33 @@ const AnimatedCardList = forwardRef<
   },
  }));
 
- React.useEffect(() => {
-  if (cardsInPlay.length > 0 && !hasCalledReady.current) {
-   const allRefsPresent = cardsInPlay.every(
-    (card) => cardRefs.current[card.id] !== undefined
-   );
-   if (allRefsPresent) {
-    const timeoutId = setTimeout(() => {
-     if (!hasCalledReady.current) {
-      onReady();
-      hasCalledReady.current = true;
-     }
-    }, 0);
-    return () => clearTimeout(timeoutId);
-   }
+ useEffect(() => {
+  if (refsReadyCount === cardsInPlay.length && cardsInPlay.length > 0 && !hasCalledReady.current) {
+   console.log("🚀 AnimatedCardList is ready! Starting animations...");
+   onReady();
+   hasCalledReady.current = true;
   }
- }, [cardsInPlay, onReady]);
+ }, [refsReadyCount, cardsInPlay.length, onReady]);
 
  const tapGesture = Gesture.Tap().onEnd((event) => {
   "worklet";
+  console.log("Tap detected at:", event.x, event.y);
   for (let i = cardsInPlay.length - 1; i >= 0; i--) {
    const card = cardsInPlay[i];
    const animatedValues = cardAnimatedValues.value[card.id];
-   if (!animatedValues) continue;
+   if (!animatedValues) {
+    console.log("No animated values for card:", card.id);
+    continue;
+   }
    const { x, y } = animatedValues;
+   console.log(`Checking card ${card.id}: x=${x.value}, y=${y.value}, width=${CARD_WIDTH}, height=${CARD_HEIGHT}`);
    if (
     event.x >= x.value &&
     event.x <= x.value + CARD_WIDTH &&
     event.y >= y.value &&
     event.y <= y.value + CARD_HEIGHT
    ) {
+    console.log("Card tapped:", card);
     runOnJS(onCardPress)(card);
     break;
    }
@@ -105,12 +103,14 @@ const AnimatedCardList = forwardRef<
         const newValues = { ...cardAnimatedValues.value };
         delete newValues[card.id];
         cardAnimatedValues.value = newValues;
+        setRefsReadyCount(prev => prev - 1);
        } else {
         cardRefs.current[card.id] = el;
         cardAnimatedValues.value = {
          ...cardAnimatedValues.value,
          [card.id]: el.animatedValues,
         };
+        setRefsReadyCount(prev => prev + 1);
        }
       }}
       card={card}
