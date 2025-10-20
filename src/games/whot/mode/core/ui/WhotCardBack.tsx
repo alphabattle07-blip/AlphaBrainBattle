@@ -1,3 +1,4 @@
+// WhotCardBack.tsx
 import React from 'react';
 import { RoundedRect, Text, Group, type SkFont } from '@shopify/react-native-skia';
 

@@ -1,25 +1,32 @@
-# TODO: Fix Whot Card Dealing Animation Issue
+# Online Multiplayer Ayo Implementation
 
-## Summary
-The card dealing animation in the Whot game was not visible; the screen remained blank during animation, with cards only appearing at the end. Root cause: Separate Canvas in AnimatedCardList wasn't re-rendering during animation, as React components only update when props/state change.
+## Backend Setup
+- [ ] Install Socket.IO in backend
+- [ ] Add Game and GameSession models to Prisma schema
+- [ ] Run Prisma migration
+- [ ] Initialize Socket.IO server in backend/src/index.js
+- [ ] Create game controller (backend/src/controllers/game.controller.js)
+- [ ] Create game routes (backend/src/routes/game.route.js)
+- [ ] Create socket service (backend/src/services/socket.service.js)
+- [ ] Implement matchmaking logic
+- [ ] Implement game room management
+- [ ] Implement move validation and state sync
 
-## Changes Made
-- [x] **IndividualAnimatedCard.tsx**: Moved visual rendering (Canvas with AnimatedWhotCard) inside the Animated.View to ensure visuals animate with the view.
-- [x] **AnimatedCardList.tsx**: Removed the separate Canvas layer; visuals are now embedded in IndividualAnimatedCard.
+## Frontend Setup
+- [ ] Implement useSocket hook
+- [ ] Create online game Redux slice
+- [ ] Create game service API
+- [ ] Build matchmaking UI
+- [ ] Build waiting room UI
+- [ ] Build online game UI with opponent info
+- [ ] Integrate online logic with existing Ayo core logic
+- [ ] Add connection status and error handling
+- [ ] Add disconnection/reconnection handling
 
-## Testing Steps
-- [ ] Run the app and navigate to WhotComputerGameScreen.
-- [ ] Select a computer level to start the game.
-- [ ] Observe the card dealing animation: Cards should smoothly animate from the market position to their final positions in the player's hand.
-- [ ] Verify console logs: "🚀 AnimatedCardList is ready! Starting animations...", "🴴 Starting smooth deal...", "✅ Deal complete."
-- [ ] Ensure no blank screen; animations are visible in real-time.
-- [ ] Test flip animations after dealing.
-
-## Best Practices Implemented
-- Applied animations directly to visual components using Reanimated's Animated.View.
-- Ensured shared values are used correctly for real-time updates.
-- Simplified component structure by embedding visuals in the animated container.
-
-## Next Steps
-- If testing passes, mark as complete.
-- If issues remain, debug further (e.g., check for z-index or opacity issues).
+## Testing & Integration
+- [ ] Test Socket.IO connection
+- [ ] Test matchmaking flow
+- [ ] Test game synchronization
+- [ ] Test move validation
+- [ ] Test disconnection scenarios
+- [ ] Update game statistics for online games

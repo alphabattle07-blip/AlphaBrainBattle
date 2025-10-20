@@ -1,130 +1,143 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState, useEffect } from "react";
-import { StyleSheet } from "react-native";
-import { Canvas, type SkFont } from "@shopify/react-native-skia";
-import { runOnJS, useSharedValue } from "react-native-reanimated";
-import type { Card } from "./WhotCardTypes";
-import { getCoords } from "../coordinateHelper";
-import { CARD_WIDTH, CARD_HEIGHT } from "./WhotCardTypes";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+// AnimatedCardList.tsx (FIXED)
+import React, {
+ forwardRef,
+ useImperativeHandle,
+ useRef,
+ useState,
+ useEffect,
+ useMemo, // ✅ Import useMemo
+} from "react";
+import { StyleSheet, View } from "react-native";
+import { SkFont } from "@shopify/react-native-skia"; // ✅ Import SkFont
+
 import IndividualAnimatedCard, {
- IndividualCardHandle,
- AnimatedCardValues,
+ IndividualAnimatedCardHandle,
 } from "./IndividualAnimatedCard";
 
+import { Card } from "../types";
+import { getCoords } from "../coordinateHelper"; // ✅ Import getCoords
+
+// ✅ Define the props expected by WhotComputerGameScreen
+interface Props {
+ cardsInPlay: Card[];
+ playerHand: Card[];
+ font: SkFont | null;
+ whotFont: SkFont | null;
+ onCardPress?: (card: Card) => void;
+ onReady?: () => void;
+}
+
+// ✅ Define the correct handle API
 export interface AnimatedCardListHandle {
  dealCard: (
   card: Card,
   target: "player" | "computer" | "pile",
-  options: { cardIndex: number; handSize: number },
-  shouldFlip: boolean
+  options: { cardIndex: number; handSize?: number },
+  instant?: boolean
  ) => Promise<void>;
- flipCard: (card: Card, isFaceUp: boolean) => Promise<void>;
+ flipCard: (card: Card, faceUp: boolean) => Promise<void>;
 }
 
-interface AnimatedCardListProps {
- cardsInPlay: Card[];
- marketPos: { x: number; y: number };
- onCardPress: (card: Card) => void;
- onReady: () => void;
- // ✅ Accept fonts as props
- font: SkFont;
- whotFont: SkFont;
-}
-
-const AnimatedCardList = forwardRef<
- AnimatedCardListHandle,
- AnimatedCardListProps
->(({ cardsInPlay, marketPos, onCardPress, onReady, font, whotFont }, ref) => {
- const cardRefs = useRef<{ [id: string]: IndividualCardHandle | null }>({});
- const cardAnimatedValues = useSharedValue<{
-  [id: string]: AnimatedCardValues | undefined;
- }>({});
- const hasCalledReady = useRef(false);
- const [refsReadyCount, setRefsReadyCount] = useState(0);
-
- useImperativeHandle(ref, () => ({
-  dealCard: async (cardToDeal, target, options, shouldFlip) => {
-   const cardRef = cardRefs.current[cardToDeal.id];
-   if (!cardRef) return;
-   const coords = getCoords(target, options);
-   const movePromise = cardRef.moveCard(coords.x, coords.y);
-   const flipPromise = shouldFlip ? cardRef.flipCard(true) : Promise.resolve();
-   await Promise.all([movePromise, flipPromise]);
+const AnimatedCardList = forwardRef<AnimatedCardListHandle, Props>(
+ (
+  {
+   cardsInPlay,
+   playerHand,
+   font,
+   whotFont,
+   onCardPress,
+   onReady,
   },
-  flipCard: async (cardToFlip, isFaceUp) => {
-   const cardRef = cardRefs.current[cardToFlip.id];
-   if (!cardRef) return;
-   await cardRef.flipCard(isFaceUp);
-  },
- }));
+  ref
+ ) => {
+  const [uniqueCards, setUniqueCards] = useState<Card[]>([]);
+  const cardRefs = useRef<Record<string, IndividualAnimatedCardHandle | null>>({});
+  // ✅ Get the market position to pass down to individual cards
+  const marketPosition = useMemo(() => getCoords("market"), []);
 
- useEffect(() => {
-  if (refsReadyCount === cardsInPlay.length && cardsInPlay.length > 0 && !hasCalledReady.current) {
-   console.log("🚀 AnimatedCardList is ready! Starting animations...");
-   onReady();
-   hasCalledReady.current = true;
-  }
- }, [refsReadyCount, cardsInPlay.length, onReady]);
+  useEffect(() => {
+   if (!cardsInPlay) return;
+   
+   console.log("LOG All cards before unique filtering:", cardsInPlay.map((c) => c.id));
+   const seen = new Set<string>();
+   const filtered = cardsInPlay.filter((c) => {
+    if (seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+   });
+   
+   console.log("LOG Unique cards after filtering:", filtered.map((c) => c.id));
+   setUniqueCards(filtered);
 
- const tapGesture = Gesture.Tap().onEnd((event) => {
-  "worklet";
-  console.log("Tap detected at:", event.x, event.y);
-  for (let i = cardsInPlay.length - 1; i >= 0; i--) {
-   const card = cardsInPlay[i];
-   const animatedValues = cardAnimatedValues.value[card.id];
-   if (!animatedValues) {
-    console.log("No animated values for card:", card.id);
-    continue;
-   }
-   const { x, y } = animatedValues;
-   console.log(`Checking card ${card.id}: x=${x.value}, y=${y.value}, width=${CARD_WIDTH}, height=${CARD_HEIGHT}`);
-   if (
-    event.x >= x.value &&
-    event.x <= x.value + CARD_WIDTH &&
-    event.y >= y.value &&
-    event.y <= y.value + CARD_HEIGHT
-   ) {
-    console.log("Card tapped:", card);
-    runOnJS(onCardPress)(card);
-    break;
-   }
-  }
- });
+   // ✅ Call onReady when cards are filtered
+   // Use setTimeout to ensure refs are set in the render pass after this state update
+   const timer = setTimeout(() => {
+    if (onReady) {
+     console.log("LOG ✅ Card list is ready, calling onReady().");
+     onReady();
+    }
+   }, 0);
+   
+   return () => clearTimeout(timer);
+  }, [cardsInPlay, onReady]); // Add onReady to dependency array
 
- return (
-  <GestureDetector gesture={tapGesture}>
-   <Canvas style={StyleSheet.absoluteFill}>
-    {cardsInPlay.map((card, index) => (
-     <IndividualAnimatedCard
-      key={card.id}
-      ref={(el) => {
-       if (el === null) {
-        delete cardRefs.current[card.id];
-        const newValues = { ...cardAnimatedValues.value };
-        delete newValues[card.id];
-        cardAnimatedValues.value = newValues;
-        setRefsReadyCount(prev => prev - 1);
-       } else {
-        cardRefs.current[card.id] = el;
-        cardAnimatedValues.value = {
-         ...cardAnimatedValues.value,
-         [card.id]: el.animatedValues,
-        };
-        setRefsReadyCount(prev => prev + 1);
-       }
-      }}
-      card={card}
-      initialPosition={marketPos}
-      initialIndex={index}
-      // ✅ Pass fonts down
-      font={font}
-      whotFont={whotFont}
-     />
-    ))}
-   </Canvas>
-  </GestureDetector>
- );
+  // ✅ Implement the handle methods your screen expects
+  useImperativeHandle(ref, () => ({
+   async dealCard(card, target, options, instant) {
+    const cardRef = cardRefs.current[card.id];
+    if (cardRef) {
+     await cardRef.dealTo(target, options, instant);
+    } else {
+     console.warn(`No ref found for card ${card.id} to deal.`);
+    }
+   },
+   async flipCard(card, faceUp) {
+    const cardRef = cardRefs.current[card.id];
+    if (cardRef) {
+     await cardRef.flip(faceUp);
+    } else {
+     console.warn(`No ref found for card ${card.id} to flip.`);
+    }
+   },
+  }));
+
+  // ❌ The old 'dealAll' and related 'dealt' prop logic are removed
+  // as WhotComputerGameScreen handles the dealing sequence manually.
+
+  return (
+   <View style={styles.container}>
+    {/* The Canvas is now inside each IndividualAnimatedCard */}
+    {uniqueCards.map((card) => {
+     // ✅ Determine if card is in player's hand
+     const isPlayerCard = playerHand.some((c) => c.id === card.id);
+     
+     return (
+      <IndividualAnimatedCard
+       key={card.id}
+       ref={(el) => (cardRefs.current[card.id] = el)}
+       card={card}
+       // ✅ Pass correct props down
+       font={font}
+       whotFont={whotFont}
+       marketPos={marketPosition}
+       isPlayerCard={isPlayerCard} // Note: flip is now controlled by flipCard
+       onPress={onCardPress}
+      />
+     );
+    })}
+   </View>
+  );
+ }
+);
+
+const styles = StyleSheet.create({
+ container: {
+  width: "100%",
+  height: "100%",
+  position: "relative",
+  // Add pointerEvents to allow tapping through the container
+  pointerEvents: "box-none",
+ },
 });
 
-AnimatedCardList.displayName = "AnimatedCardList";
 export default AnimatedCardList;

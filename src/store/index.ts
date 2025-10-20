@@ -6,11 +6,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import userReducer from './slices/userSlice';
 import authReducer from './slices/authSlice';
 import gameStatsReducer from './slices/gameStatsSlice';
+import onlineGameReducer from './slices/onlineGameSlice';
 
 const rootReducer = combineReducers({
   user: userReducer,
   auth: authReducer,
   gameStats: gameStatsReducer,
+  onlineGame: onlineGameReducer,
 });
 
 const persistConfig = {

@@ -1,3 +1,4 @@
+// WhotCardTypes.ts
 import type { SkFont } from '@shopify/react-native-skia';
 import type { SharedValue } from 'react-native-reanimated';
 

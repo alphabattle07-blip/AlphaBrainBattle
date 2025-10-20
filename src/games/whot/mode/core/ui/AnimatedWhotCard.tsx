@@ -1,3 +1,4 @@
+// AnimatedWhotCard.tsx
 import React, { useMemo } from "react";
 import { Group, Skia, type SkFont } from "@shopify/react-native-skia";
 import { useDerivedValue } from "react-native-reanimated";
