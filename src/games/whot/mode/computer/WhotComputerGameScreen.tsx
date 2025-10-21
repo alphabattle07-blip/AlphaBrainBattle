@@ -189,14 +189,18 @@ const WhotComputerGameScreen = () => {
           height={Dimensions.get("window").height}
           color="#1E5E4E"
         />
+      
+      </Canvas>
         {game && (
           <MarketPile
             cards={game.gameState.market}
             font={whotFont}
             smallFont={font}
+            onPress={() => {
+      console.log("👉 Market Pile Pressed! (using GestureDetector)");
+     }}
           />
         )}
-      </Canvas>
 
       {/* 🃏 Card Rendering Layer */}
       {animatedCards.length > 0 && font && whotFont && (

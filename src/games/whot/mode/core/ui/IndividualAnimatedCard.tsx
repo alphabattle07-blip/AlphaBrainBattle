@@ -45,8 +45,6 @@ const IndividualAnimatedCard = forwardRef<IndividualAnimatedCardHandle, Props>(
    return null;
   }
 
-  // --- All Hooks are called below this line ---
-
   // Shared values for the ANCHOR POINT (top-left) of the Animated.View
   const x = useSharedValue(marketPos.x - CARD_WIDTH / 2);
   const y = useSharedValue(marketPos.y - CARD_HEIGHT / 2);
