@@ -70,52 +70,67 @@ const WhotComputerGameScreen = () => {
   );
 
   // 🧩 Animate the card dealing sequence
+// WhotComputerGameScreen.tsx
+
+  // ... (keep all the code above this)
+
+  // 🧩 Animate the card dealing sequence
   useEffect(() => {
     if (!isCardListReady || !cardListRef.current || !game) return;
 
     const dealer = cardListRef.current;
     let isMounted = true;
 
+    // ✅ CHANGED: This function is updated for sequential dealing
     const dealSmoothly = async () => {
       console.log("🎴 Starting smooth deal...");
       const handSize = game.gameState.players[0].hand.length;
       const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+      const dealDelay = 150; // How long to wait between each card
 
-      // Deal to both player and computer hands
+      // Deal one card at a time, alternating
       for (let i = 0; i < handSize; i++) {
+        if (!isMounted) return; // Stop if component unmounts
+
+        // 1. Deal to Player
         const playerCard = game.gameState.players[0].hand[i];
+        if (playerCard) {
+          await dealer.dealCard(
+            playerCard,
+            "player",
+            { cardIndex: i, handSize },
+            false
+          );
+          await delay(dealDelay);
+        }
+
+        if (!isMounted) return; // Stop if component unmounts
+
+        // 2. Deal to Computer
         const computerCard = game.gameState.players[1].hand[i];
-
-        const playerPromise = playerCard
-          ? dealer.dealCard(
-              playerCard,
-              "player",
-              { cardIndex: i, handSize },
-              false
-            )
-          : Promise.resolve();
-
-        const computerPromise = computerCard
-          ? dealer.dealCard(
-              computerCard,
-              "computer",
-              { cardIndex: i, handSize },
-              false
-            )
-          : Promise.resolve();
-
-        await Promise.all([playerPromise, computerPromise]);
-        if (playerCard || computerCard) await delay(150);
+        if (computerCard) {
+          await dealer.dealCard(
+            computerCard,
+            "computer",
+            { cardIndex: i, handSize },
+            false
+          );
+          await delay(dealDelay);
+        }
       }
 
-      // Deal the pile card
+      // Deal the pile card (this part is the same)
+      if (!isMounted) return;
       const pileCard = game.gameState.pile[0];
-      if (pileCard)
+      if (pileCard) {
         await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
+      }
 
-      await delay(500);
+      await delay(500); // Wait after all cards are dealt
 
-      // Flip player and pile cards
+      if (!isMounted) return;
+
+      // Flip player and pile cards (this part is the same)
       const flipPromises: Promise<void>[] = [];
       game.gameState.players[0].hand.forEach((playerCard) => {
         if (playerCard) flipPromises.push(dealer.flipCard(playerCard, true));
@@ -137,6 +152,8 @@ const WhotComputerGameScreen = () => {
       clearTimeout(timerId);
     };
   }, [isCardListReady, game]);
+
+  // ... (keep all the code below this)
 
   // 🕓 Show loading indicator until fonts are ready
   if (!areLoaded) {
