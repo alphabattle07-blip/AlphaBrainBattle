@@ -1,9 +1,15 @@
-// WhotComputerGameScreen.tsx
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+// WhotComputerGameScreen.tsx (FIXED)
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   View,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions, // ✅ Use this hook
   Text,
   Button,
   ActivityIndicator,
@@ -13,18 +19,23 @@ import { runOnJS } from "react-native-reanimated";
 
 import AnimatedCardList, {
   AnimatedCardListHandle,
-} from "../core/ui/AnimatedCardList"; // ✅ this now includes dealCard & flipCard
+} from "../core/ui/AnimatedCardList";
 import { Card, GameState } from "../core/types";
 import { getCoords } from "../core/coordinateHelper";
 import { initGame } from "../core/whotLogic";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 import { MarketPile } from "../core/ui/MarketPile";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
+// ✅ Import from your whotConfig file
+import { CARD_HEIGHT } from "../core/ui/WhotCardTypes"; 
 
 type GameData = ReturnType<typeof initGame>;
 
 const WhotComputerGameScreen = () => {
-  // ✅ Load fonts
+  // --- ALL HOOKS MUST BE AT THE TOP ---
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
   const { font, whotFont, areLoaded } = useWhotFonts();
 
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
@@ -37,7 +48,28 @@ const WhotComputerGameScreen = () => {
   const [isCardListReady, setIsCardListReady] = useState(false);
 
   const cardListRef = useRef<AnimatedCardListHandle>(null);
-  const marketPosition = useMemo(() => getCoords("market"), []);
+
+  // ✅ START: Dynamic Styles (MOVED TO TOP)
+  const playerHandStyle = useMemo(
+    () => [
+      styles.handContainerBase,
+      isLandscape
+        ? styles.playerHandContainerLandscape
+        : styles.playerHandContainerPortrait,
+    ],
+    [isLandscape]
+  );
+
+  const computerHandStyle = useMemo(
+    () => [
+      styles.handContainerBase,
+      isLandscape
+        ? styles.computerHandContainerLandscape
+        : styles.computerHandContainerPortrait,
+    ],
+    [isLandscape]
+  );
+  // ✅ END: Dynamic Styles
 
   // 🧩 Initialize new game
   const initializeGame = useCallback((lvl: ComputerLevel) => {
@@ -70,18 +102,12 @@ const WhotComputerGameScreen = () => {
   );
 
   // 🧩 Animate the card dealing sequence
-// WhotComputerGameScreen.tsx
-
-  // ... (keep all the code above this)
-
-  // 🧩 Animate the card dealing sequence
   useEffect(() => {
     if (!isCardListReady || !cardListRef.current || !game) return;
 
     const dealer = cardListRef.current;
     let isMounted = true;
 
-    // ✅ CHANGED: This function is updated for sequential dealing
     const dealSmoothly = async () => {
       console.log("🎴 Starting smooth deal...");
       const handSize = game.gameState.players[0].hand.length;
@@ -119,7 +145,7 @@ const WhotComputerGameScreen = () => {
         }
       }
 
-      // Deal the pile card (this part is the same)
+      // Deal the pile card
       if (!isMounted) return;
       const pileCard = game.gameState.pile[0];
       if (pileCard) {
@@ -130,7 +156,7 @@ const WhotComputerGameScreen = () => {
 
       if (!isMounted) return;
 
-      // Flip player and pile cards (this part is the same)
+      // Flip player and pile cards
       const flipPromises: Promise<void>[] = [];
       game.gameState.players[0].hand.forEach((playerCard) => {
         if (playerCard) flipPromises.push(dealer.flipCard(playerCard, true));
@@ -153,7 +179,7 @@ const WhotComputerGameScreen = () => {
     };
   }, [isCardListReady, game]);
 
-  // ... (keep all the code below this)
+  // --- CONDITIONAL RETURNS (Now safe) ---
 
   // 🕓 Show loading indicator until fonts are ready
   if (!areLoaded) {
@@ -183,11 +209,16 @@ const WhotComputerGameScreen = () => {
     );
   }
 
+  // --- MAIN RENDER ---
+  // If we get here, all hooks have run, and we are loaded and have a level.
+
   // 🧩 Main Game Screen
   return (
     <View style={styles.container}>
       {game && (
-        <View style={[styles.computerUIContainer, { pointerEvents: "box-none" }]}>
+        <View
+          style={[styles.computerUIContainer, { pointerEvents: "box-none" }]}
+        >
           <ComputerUI
             state={game.gameState}
             playerIndex={1}
@@ -202,22 +233,28 @@ const WhotComputerGameScreen = () => {
         <Rect
           x={0}
           y={0}
-          width={Dimensions.get("window").width}
-          height={Dimensions.get("window").height}
+          width={width} // ✅ Use dynamic width
+          height={height} // ✅ Use dynamic height
           color="#1E5E4E"
         />
-      
       </Canvas>
-        {game && (
-          <MarketPile
-            cards={game.gameState.market}
-            font={whotFont}
-            smallFont={font}
-            onPress={() => {
-      console.log("👉 Market Pile Pressed! (using GestureDetector)");
-     }}
-          />
-        )}
+
+      {/* ✅ Hand "Boards" now use dynamic styles */}
+      <View style={computerHandStyle} />
+      <View style={playerHandStyle} />
+
+      {game && (
+        <MarketPile
+          cards={game.gameState.market}
+          font={whotFont}
+          smallFont={font}
+          width={width} // ✅ Pass width
+          height={height} // ✅ Pass height
+          onPress={() => {
+            console.log("👉 Market Pile Pressed!");
+          }}
+        />
+      )}
 
       {/* 🃏 Card Rendering Layer */}
       {animatedCards.length > 0 && font && whotFont && (
@@ -227,6 +264,8 @@ const WhotComputerGameScreen = () => {
           playerHand={game?.gameState.players[0].hand || []}
           font={font}
           whotFont={whotFont}
+          width={width} // ✅ Pass width
+          height={height} // ✅ Pass height
           onCardPress={(card) => {
             console.log("🃏 Card pressed:", card);
           }}
@@ -250,6 +289,36 @@ const styles = StyleSheet.create({
     top: 50,
     alignSelf: "center",
     zIndex: 10,
+  },
+  // ✅ Base style for hand containers
+  handContainerBase: {
+    position: "absolute",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    borderRadius: 20,
+    zIndex: 0,
+    height: CARD_HEIGHT + 40,
+  },
+  // ✅ Portrait styles
+  playerHandContainerPortrait: {
+    bottom: 40,
+    left: "5%",
+    width: "90%",
+  },
+  computerHandContainerPortrait: {
+    top: 40,
+    left: "10%",
+    width: "80%",
+  },
+  // ✅ Landscape styles
+  playerHandContainerLandscape: {
+    bottom: 20,
+    left: "5%",
+    width: "90%",
+  },
+  computerHandContainerLandscape: {
+    top: 20,
+    left: "10%",
+    width: "80%",
   },
 });
 

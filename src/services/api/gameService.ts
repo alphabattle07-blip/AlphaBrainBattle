@@ -1,22 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/api';
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 export interface Game {
   id: string;
   gameType: string;
@@ -36,37 +20,48 @@ export interface Game {
   winnerId: string | null;
   createdAt: string;
   updatedAt: string;
-  startedAt: string | null;
-  endedAt: string | null;
 }
 
-export const gameService = {
-  // Create a new game
-  createGame: async (gameType: string): Promise<Game> => {
-    const response = await api.post('/games', { gameType });
-    return response.data.game;
-  },
+class GameService {
+  private api = axios.create({
+    baseURL: `${API_BASE_URL}/api/games`,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-  // Join an existing game
-  joinGame: async (gameId: string): Promise<Game> => {
-    const response = await api.post(`/games/${gameId}/join`);
-    return response.data.game;
-  },
+  constructor() {
+    // Add auth token to requests
+    this.api.interceptors.request.use((config) => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+  }
 
-  // Get available games
-  getAvailableGames: async (): Promise<Game[]> => {
-    const response = await api.get('/games/available');
+  async createGame(gameType: string): Promise<Game> {
+    const response = await this.api.post('', { gameType });
+    return response.data.game;
+  }
+
+  async joinGame(gameId: string): Promise<Game> {
+    const response = await this.api.post(`/${gameId}/join`);
+    return response.data.game;
+  }
+
+  async getAvailableGames(): Promise<Game[]> {
+    const response = await this.api.get('/available');
     return response.data.games;
-  },
+  }
 
-  // Get specific game
-  getGame: async (gameId: string): Promise<Game> => {
-    const response = await api.get(`/games/${gameId}`);
+  async getGame(gameId: string): Promise<Game> {
+    const response = await this.api.get(`/${gameId}`);
     return response.data.game;
-  },
+  }
 
-  // Update game state
-  updateGameState: async (
+  async updateGameState(
     gameId: string,
     updates: {
       board?: any;
@@ -74,8 +69,10 @@ export const gameService = {
       winnerId?: string;
       status?: 'WAITING' | 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
     }
-  ): Promise<Game> => {
-    const response = await api.put(`/games/${gameId}`, updates);
+  ): Promise<Game> {
+    const response = await this.api.put(`/${gameId}`, updates);
     return response.data.game;
   }
-};
+}
+
+export const gameService = new GameService();

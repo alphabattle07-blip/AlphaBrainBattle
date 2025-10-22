@@ -1,73 +1,105 @@
-// coordinateHelper.ts (FINAL & CORRECTED)
-import { Dimensions } from "react-native";
+// core/coordinateHelper.ts
+// (Replace the old file with this)
 
-export const CARD_WIDTH = 80;
-export const CARD_HEIGHT = 120;
+import { CARD_WIDTH, CARD_HEIGHT } from "./ui/WhotCardTypes";
+
+type Target = "player" | "computer" | "pile" | "market";
+interface CoordsOptions {
+  cardIndex?: number;
+  handSize?: number;
+}
 
 /**
- * Calculates the X and Y coordinates for a card based on its location.
- * @param location - The area where the card should appear ('market', 'pile', 'player', 'computer').
- * @param options - Additional data (card index and hand size).
- * @returns { x, y, rotation } coordinates for the card.
+ * Calculates the target x, y (center) and rotation for a card
+ * based on the current screen dimensions.
  */
 export const getCoords = (
-  location: "market" | "player" | "computer" | "pile",
-  options: { cardIndex?: number; handSize?: number } = {}
-) => {
-  // ✅ Get current screen dimensions each time for responsive layout
-  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+  target: Target,
+  options: CoordsOptions = {},
+  screenWidth: number,
+  screenHeight: number
+): { x: number; y: number; rotation: number } => {
   const { cardIndex = 0, handSize = 1 } = options;
+  const isLandscape = screenWidth > screenHeight;
 
-  const deckCenter = {
-    x: SCREEN_WIDTH / 2,
-    y: SCREEN_HEIGHT / 2 - CARD_HEIGHT / 2,
-    rotation: 0,
-  };
-
-  switch (location) {
-    case "market":
-      return {
-        x: deckCenter.x - CARD_WIDTH * 0.7,
-        y: deckCenter.y,
-        rotation: 0,
-      };
-
+  switch (target) {
+    // --- PILE (Played Cards) ---
     case "pile":
+      if (isLandscape) {
+        // Middle-Right in Landscape
+        return {
+          x: screenWidth * 0.65,
+          y: screenHeight / 2,
+          rotation: 0,
+        };
+      }
+      // Middle-Center in Portrait
       return {
-        x: deckCenter.x + CARD_WIDTH * 0.7,
-        y: deckCenter.y,
+        x: screenWidth / 2,
+        y: screenHeight * 0.45,
         rotation: 0,
       };
 
-    case "player":
-    case "computer": {
-      const HAND_GAP = 15; // Gap between cards
-      const MAX_VISIBLE_CARDS = 8;
-
-      // Shrink spacing if too many cards
-      const effectiveCardWidth =
-        handSize > MAX_VISIBLE_CARDS
-          ? (SCREEN_WIDTH * 0.9) / handSize
-          : CARD_WIDTH + HAND_GAP;
-
-      const totalHandWidth =
-        handSize * effectiveCardWidth - (handSize > 1 ? HAND_GAP : 0);
-      const startX = (SCREEN_WIDTH - totalHandWidth) / 2;
-
-      const cardX = startX + cardIndex * effectiveCardWidth + CARD_WIDTH / 2;
-      const cardY =
-        location === "player"
-          ? SCREEN_HEIGHT - CARD_HEIGHT * 0.75
-          : CARD_HEIGHT * 0.75;
-
+    // --- MARKET (Draw Pile) ---
+    case "market":
+      if (isLandscape) {
+        // Middle-Left in Landscape
+        return {
+          x: screenWidth * 0.35,
+          y: screenHeight / 2,
+          rotation: 0,
+        };
+      }
+      // Bottom-Right in Portrait (near player hand)
       return {
-        x: cardX,
-        y: cardY,
-        rotation: location === "computer" ? 180 : 0,
+        x: screenWidth * 0.75,
+        y: screenHeight * 0.7,
+        rotation: 0,
       };
+
+    // --- COMPUTER (Top Hand) ---
+    case "computer": {
+      const y = isLandscape ? screenHeight * 0.2 : screenHeight * 0.15;
+      const maxComputerWidth = screenWidth * 0.7;
+      const defaultVisualWidth = CARD_WIDTH * 0.4; // Overlap by 60%
+
+      let totalWidth = CARD_WIDTH + (handSize - 1) * defaultVisualWidth;
+      let visualWidth = defaultVisualWidth;
+
+      // Squeeze cards if they don't fit
+      if (totalWidth > maxComputerWidth && handSize > 1) {
+        visualWidth = (maxComputerWidth - CARD_WIDTH) / (handSize - 1);
+        totalWidth = maxComputerWidth;
+      }
+
+      const startX = (screenWidth - totalWidth) / 2;
+      const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
+
+      return { x, y, rotation: 0 };
+    }
+
+    // --- PLAYER (Bottom Hand) ---
+    case "player": {
+      const y = isLandscape ? screenHeight * 0.8 : screenHeight * 0.85;
+      const maxPlayerWidth = screenWidth * 0.9;
+      const defaultVisualWidth = CARD_WIDTH * 0.5; // Overlap by 50%
+
+      let totalWidth = CARD_WIDTH + (handSize - 1) * defaultVisualWidth;
+      let visualWidth = defaultVisualWidth;
+
+      // Squeeze cards if they don't fit
+      if (totalWidth > maxPlayerWidth && handSize > 1) {
+        visualWidth = (maxPlayerWidth - CARD_WIDTH) / (handSize - 1);
+        totalWidth = maxPlayerWidth;
+      }
+
+      const startX = (screenWidth - totalWidth) / 2;
+      const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
+
+      return { x, y, rotation: 0 };
     }
 
     default:
-      return deckCenter;
+      return { x: screenWidth / 2, y: screenHeight / 2, rotation: 0 };
   }
 };
