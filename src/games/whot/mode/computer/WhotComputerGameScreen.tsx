@@ -9,7 +9,7 @@ import React, {
 import {
   View,
   StyleSheet,
-  useWindowDimensions, // ✅ Use this hook
+  useWindowDimensions,
   Text,
   Button,
   ActivityIndicator,
@@ -26,8 +26,7 @@ import { initGame } from "../core/whotLogic";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 import { MarketPile } from "../core/ui/MarketPile";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
-// ✅ Import from your whotConfig file
-import { CARD_HEIGHT } from "../core/ui/WhotCardTypes"; 
+import { CARD_HEIGHT } from "../core/ui/whotConfig"; // ✅ Correct import
 
 type GameData = ReturnType<typeof initGame>;
 
@@ -49,7 +48,6 @@ const WhotComputerGameScreen = () => {
 
   const cardListRef = useRef<AnimatedCardListHandle>(null);
 
-  // ✅ START: Dynamic Styles (MOVED TO TOP)
   const playerHandStyle = useMemo(
     () => [
       styles.handContainerBase,
@@ -69,7 +67,6 @@ const WhotComputerGameScreen = () => {
     ],
     [isLandscape]
   );
-  // ✅ END: Dynamic Styles
 
   // 🧩 Initialize new game
   const initializeGame = useCallback((lvl: ComputerLevel) => {
@@ -79,7 +76,7 @@ const WhotComputerGameScreen = () => {
     const cardsToAnimate = [
       ...gameState.players[0].hand,
       ...gameState.players[1].hand,
-      gameState.pile[0],
+      ...gameState.pile, // ✅ Animate ALL pile cards
     ].filter(Boolean) as Card[];
 
     setAnimatedCards(cardsToAnimate);
@@ -110,16 +107,14 @@ const WhotComputerGameScreen = () => {
 
     const dealSmoothly = async () => {
       console.log("🎴 Starting smooth deal...");
-      const handSize = game.gameState.players[0].hand.length;
+      const { players, pile } = game.gameState;
+      const handSize = players[0].hand.length;
       const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-      const dealDelay = 150; // How long to wait between each card
+      const dealDelay = 150;
 
-      // Deal one card at a time, alternating
       for (let i = 0; i < handSize; i++) {
-        if (!isMounted) return; // Stop if component unmounts
-
-        // 1. Deal to Player
-        const playerCard = game.gameState.players[0].hand[i];
+        if (!isMounted) return;
+        const playerCard = players[0].hand[i];
         if (playerCard) {
           await dealer.dealCard(
             playerCard,
@@ -130,10 +125,8 @@ const WhotComputerGameScreen = () => {
           await delay(dealDelay);
         }
 
-        if (!isMounted) return; // Stop if component unmounts
-
-        // 2. Deal to Computer
-        const computerCard = game.gameState.players[1].hand[i];
+        if (!isMounted) return;
+        const computerCard = players[1].hand[i];
         if (computerCard) {
           await dealer.dealCard(
             computerCard,
@@ -145,23 +138,26 @@ const WhotComputerGameScreen = () => {
         }
       }
 
-      // Deal the pile card
       if (!isMounted) return;
-      const pileCard = game.gameState.pile[0];
-      if (pileCard) {
-        await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
+      // Deal all pile cards to the pile spot
+      for (const pileCard of pile) {
+         if (pileCard) {
+           await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
+         }
       }
-
-      await delay(500); // Wait after all cards are dealt
-
+      
+      await delay(500);
       if (!isMounted) return;
 
-      // Flip player and pile cards
       const flipPromises: Promise<void>[] = [];
-      game.gameState.players[0].hand.forEach((playerCard) => {
-        if (playerCard) flipPromises.push(dealer.flipCard(playerCard, true));
+      players[0].hand.forEach((card) => {
+        if (card) flipPromises.push(dealer.flipCard(card, true));
       });
-      if (pileCard) flipPromises.push(dealer.flipCard(pileCard, true));
+      // Flip the TOP card of the pile
+      const topPileCard = pile[pile.length - 1];
+      if (topPileCard) {
+        flipPromises.push(dealer.flipCard(topPileCard, true));
+      }
 
       await Promise.all(flipPromises);
 
@@ -177,11 +173,62 @@ const WhotComputerGameScreen = () => {
       isMounted = false;
       clearTimeout(timerId);
     };
-  }, [isCardListReady, game]);
+  }, [isCardListReady, game]); // This effect runs ONCE when 'game' is created
+
+  // ✅ --- NEW EFFECT TO HANDLE ROTATION ---
+  useEffect(() => {
+    // Don't run this if the list isn't ready or we're in the middle of the initial deal
+    if (!isCardListReady || !cardListRef.current || !game || isAnimating) {
+      return;
+    }
+
+    const dealer = cardListRef.current;
+    console.log("🔄 Screen rotated, instantly moving cards...");
+
+    // 1. Move Player Hand
+    const playerHand = game.gameState.players[0].hand;
+    const playerHandSize = playerHand.length;
+    playerHand.forEach((card, index) => {
+      if (card) {
+        dealer.dealCard(
+          card,
+          "player",
+          { cardIndex: index, handSize: playerHandSize },
+          true // true for instant
+        );
+      }
+    });
+
+    // 2. Move Computer Hand
+    const computerHand = game.gameState.players[1].hand;
+    const computerHandSize = computerHand.length;
+    computerHand.forEach((card, index) => {
+      if (card) {
+        dealer.dealCard(
+          card,
+          "computer",
+          { cardIndex: index, handSize: computerHandSize },
+          true // true for instant
+        );
+      }
+    });
+
+    // 3. Move Pile Cards
+    const pile = game.gameState.pile;
+    pile.forEach((card, index) => {
+      if (card) {
+        dealer.dealCard(
+          card,
+          "pile",
+          { cardIndex: index, handSize: pile.length },
+          true // true for instant
+        );
+      }
+    });
+  }, [width, height, isCardListReady, game, isAnimating]); // Dependencies
+  // ✅ --- END OF NEW EFFECT ---
 
   // --- CONDITIONAL RETURNS (Now safe) ---
-
-  // 🕓 Show loading indicator until fonts are ready
   if (!areLoaded) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -191,7 +238,6 @@ const WhotComputerGameScreen = () => {
     );
   }
 
-  // 🧩 Choose level screen
   if (!selectedLevel) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -210,9 +256,6 @@ const WhotComputerGameScreen = () => {
   }
 
   // --- MAIN RENDER ---
-  // If we get here, all hooks have run, and we are loaded and have a level.
-
-  // 🧩 Main Game Screen
   return (
     <View style={styles.container}>
       {game && (
@@ -228,18 +271,10 @@ const WhotComputerGameScreen = () => {
         </View>
       )}
 
-      {/* Background */}
       <Canvas style={StyleSheet.absoluteFill}>
-        <Rect
-          x={0}
-          y={0}
-          width={width} // ✅ Use dynamic width
-          height={height} // ✅ Use dynamic height
-          color="#1E5E4E"
-        />
+        <Rect x={0} y={0} width={width} height={height} color="#1E5E4E" />
       </Canvas>
 
-      {/* ✅ Hand "Boards" now use dynamic styles */}
       <View style={computerHandStyle} />
       <View style={playerHandStyle} />
 
@@ -248,15 +283,14 @@ const WhotComputerGameScreen = () => {
           cards={game.gameState.market}
           font={whotFont}
           smallFont={font}
-          width={width} // ✅ Pass width
-          height={height} // ✅ Pass height
+          width={width}
+          height={height}
           onPress={() => {
             console.log("👉 Market Pile Pressed!");
           }}
         />
       )}
 
-      {/* 🃏 Card Rendering Layer */}
       {animatedCards.length > 0 && font && whotFont && (
         <AnimatedCardList
           ref={cardListRef}
@@ -264,8 +298,8 @@ const WhotComputerGameScreen = () => {
           playerHand={game?.gameState.players[0].hand || []}
           font={font}
           whotFont={whotFont}
-          width={width} // ✅ Pass width
-          height={height} // ✅ Pass height
+          width={width}
+          height={height}
           onCardPress={(card) => {
             console.log("🃏 Card pressed:", card);
           }}
@@ -290,7 +324,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     zIndex: 10,
   },
-  // ✅ Base style for hand containers
   handContainerBase: {
     position: "absolute",
     backgroundColor: "rgba(0, 0, 0, 0.2)",
@@ -298,7 +331,6 @@ const styles = StyleSheet.create({
     zIndex: 0,
     height: CARD_HEIGHT + 40,
   },
-  // ✅ Portrait styles
   playerHandContainerPortrait: {
     bottom: 40,
     left: "5%",
@@ -309,7 +341,6 @@ const styles = StyleSheet.create({
     left: "10%",
     width: "80%",
   },
-  // ✅ Landscape styles
   playerHandContainerLandscape: {
     bottom: 20,
     left: "5%",

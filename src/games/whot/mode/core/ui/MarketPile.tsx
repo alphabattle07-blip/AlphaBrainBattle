@@ -1,24 +1,24 @@
-// core/ui/MarketPile.tsx
-// (Replace the old file with this)
-
-import React, { useMemo } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import { Group, type SkFont, Canvas } from '@shopify/react-native-skia';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import React, { useMemo } from "react";
+import { StyleSheet, View, Text } from "react-native";
+import { Canvas, Group } from "@shopify/react-native-skia";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS } from "react-native-reanimated";
-import { WhotCardBack } from './WhotCardBack';
-import { Card } from '../types';
-import { CARD_WIDTH, CARD_HEIGHT } from "./WhotCardTypes";
-import { getCoords } from '../coordinateHelper';
+import { WhotCardBack } from "./WhotCardBack";
+import { Card } from "../types";
+import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig";
+import { getCoords } from "../coordinateHelper";
 
 interface MarketPileProps {
   cards: Card[];
-  font: SkFont | null;
-  smallFont: SkFont | null;
+  font: any;
+  smallFont: any;
   onPress?: () => void;
-  width: number; // ✅ Screen width
-  height: number; // ✅ Screen height
+  width: number;  // Screen width
+  height: number; // Screen height
 }
+
+const MAX_STACK_CARDS = 15;
+const STACK_OFFSET = 0.4;
 
 export const MarketPile = ({
   cards,
@@ -28,26 +28,30 @@ export const MarketPile = ({
   width,
   height,
 }: MarketPileProps) => {
-  // ✅ Calculate position based on screen size
   const marketPos = useMemo(
-    () => getCoords('market', {}, width, height),
+    () => getCoords("market", {}, width, height),
     [width, height]
   );
 
-  // ✅ Position the component using a style
   const style = useMemo(
     () => ({
-      position: 'absolute' as const,
+      position: "absolute" as const,
       width: CARD_WIDTH,
-      height: CARD_HEIGHT,
-      top: marketPos.y - CARD_HEIGHT / 2,
+      // ✅ Added extra height & overflow to prevent cutting
+      height: CARD_HEIGHT + (MAX_STACK_CARDS * STACK_OFFSET) + 20,
+      top: marketPos.y - CARD_HEIGHT / 2 - 10,
       left: marketPos.x - CARD_WIDTH / 2,
-      zIndex: 5, // Make sure it's clickable
+      zIndex: 5,
+      overflow: "visible", // ✅ ensures the 3D stack isn't clipped
     }),
     [marketPos]
   );
 
-  // ✅ Create the tap gesture
+  const visualStack = useMemo(
+    () => cards.slice(0, Math.min(cards.length, MAX_STACK_CARDS)),
+    [cards]
+  );
+
   const tapGesture = useMemo(
     () =>
       Gesture.Tap().onEnd(() => {
@@ -58,7 +62,6 @@ export const MarketPile = ({
     [onPress]
   );
 
-  // ✅ Don't render if no cards or no fonts
   if (cards.length === 0 || !font || !smallFont) {
     return null;
   }
@@ -66,19 +69,26 @@ export const MarketPile = ({
   return (
     <GestureDetector gesture={tapGesture}>
       <Animated.View style={style}>
-        {/* Canvas for the card back */}
+        {/* Canvas showing the stacked cards */}
         <Canvas style={StyleSheet.absoluteFill}>
-          <Group>
-            <WhotCardBack
-              width={CARD_WIDTH}
-              height={CARD_HEIGHT}
-              font={font}
-              smallFont={smallFont}
-            />
-          </Group>
+          {visualStack.map((card, index) => (
+            <Group
+              key={card.id}
+              transform={[
+                { translateY: index * STACK_OFFSET },
+              ]}
+            >
+              <WhotCardBack
+                width={CARD_WIDTH}
+                height={CARD_HEIGHT}
+                font={font}
+                smallFont={smallFont}
+              />
+            </Group>
+          ))}
         </Canvas>
 
-        {/* ✅ Native View for the count badge */}
+        {/* Card count badge */}
         <View style={styles.badgeContainer}>
           <Text style={styles.badgeText}>{cards.length}</Text>
         </View>
@@ -89,19 +99,20 @@ export const MarketPile = ({
 
 const styles = StyleSheet.create({
   badgeContainer: {
-    position: 'absolute',
+    position: "absolute",
     left: -12,
     top: 8,
-    backgroundColor: '#00008B', // Dark Blue
+    backgroundColor: "#00008B", // Dark Blue
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: "#FFFFFF",
   },
   badgeText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+    color: "#FFFFFF",
+    fontWeight: "bold",
     fontSize: 14,
   },
 });
+  

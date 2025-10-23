@@ -9,7 +9,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { Canvas, SkFont } from "@shopify/react-native-skia";
 import { Card } from "../types";
-import { AnimatedCard, CARD_WIDTH, CARD_HEIGHT } from "./WhotCardTypes";
+import {  CARD_WIDTH, CARD_HEIGHT } from './whotConfig';
+import {AnimatedCard} from "./WhotCardTypes";
 import { getCoords } from "../coordinateHelper";
 import { AnimatedWhotCard } from "./AnimatedWhotCard";
 
