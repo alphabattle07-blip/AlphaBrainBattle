@@ -26,7 +26,7 @@ import { initGame } from "../core/whotLogic";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 import { MarketPile } from "../core/ui/MarketPile";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
-import { CARD_HEIGHT } from "../core/ui/whotConfig"; // ✅ Correct import
+import { CARD_HEIGHT } from "../core/ui/whotConfig";
 
 type GameData = ReturnType<typeof initGame>;
 
@@ -45,9 +45,11 @@ const WhotComputerGameScreen = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [animatedCards, setAnimatedCards] = useState<Card[]>([]);
   const [isCardListReady, setIsCardListReady] = useState(false);
+  const [playerHandOffset, setPlayerHandOffset] = useState(0);
 
   const cardListRef = useRef<AnimatedCardListHandle>(null);
 
+  // --- Memos ---
   const playerHandStyle = useMemo(
     () => [
       styles.handContainerBase,
@@ -68,6 +70,17 @@ const WhotComputerGameScreen = () => {
     [isLandscape]
   );
 
+  // --- PAGING CONSTANTS ---
+ const playerHand = game?.gameState.players[0].hand || [];
+ const playerHandLimit = 6; // ✅ Always 6 now
+
+  // ✅ FIX 1: Logic for a single button
+  // Paging is active if the hand size is larger than the limit
+  const isPagingActive = playerHand.length > playerHandLimit;
+  // Show the button if paging is active and we're not in the middle of the initial deal
+  const showPagingButton = !!game && !isAnimating; // ✅ Always show when game is active
+
+
   // 🧩 Initialize new game
   const initializeGame = useCallback((lvl: ComputerLevel) => {
     const { gameState, allCards } = initGame(["Player", "Computer"], 6);
@@ -76,14 +89,15 @@ const WhotComputerGameScreen = () => {
     const cardsToAnimate = [
       ...gameState.players[0].hand,
       ...gameState.players[1].hand,
-      ...gameState.pile, // ✅ Animate ALL pile cards
+      ...gameState.pile,
     ].filter(Boolean) as Card[];
 
     setAnimatedCards(cardsToAnimate);
     setSelectedLevel(levels.find((l) => l.value === lvl)?.label || null);
     setComputerLevel(lvl);
-    setIsAnimating(true);
+    setPlayerHandOffset(0);
     setIsCardListReady(false);
+    setIsAnimating(true);
   }, []);
 
   // 🧩 Handle computer AI updates
@@ -98,108 +112,129 @@ const WhotComputerGameScreen = () => {
     [game]
   );
 
+  // ✅ FIX 2: Paging Button Click Handler
+  const handlePagingPress = () => {
+    // This is the max index a card can be at and still start a "full" page.
+    // e.g., 7 cards, limit 5. Max offset is (7 - 5) = 2.
+    // Offsets will be 0, 1, 2.
+    const maxOffset = playerHand.length - playerHandLimit;
+    const nextOffset = playerHandOffset + 1;
+
+    if (nextOffset > maxOffset) {
+      setPlayerHandOffset(0); // Loop back to start
+    } else {
+      setPlayerHandOffset(nextOffset);
+    }
+  };
+
   // 🧩 Animate the card dealing sequence
   useEffect(() => {
-    if (!isCardListReady || !cardListRef.current || !game) return;
-
+    if (!isCardListReady || !cardListRef.current || !game || !isAnimating) {
+      return;
+    }
     const dealer = cardListRef.current;
     let isMounted = true;
-
     const dealSmoothly = async () => {
       console.log("🎴 Starting smooth deal...");
       const { players, pile } = game.gameState;
-      const handSize = players[0].hand.length;
+      const playerHand = players[0].hand;
+      const computerHand = players[1].hand;
+      const computerHandSize = computerHand.length;
+      const playerHandLimit = 6;
+      const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
+      const hiddenPlayerHand = playerHand.slice(playerHandLimit);
       const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
       const dealDelay = 150;
-
-      for (let i = 0; i < handSize; i++) {
+      for (let i = 0; i < computerHandSize; i++) {
         if (!isMounted) return;
-        const playerCard = players[0].hand[i];
-        if (playerCard) {
-          await dealer.dealCard(
-            playerCard,
-            "player",
-            { cardIndex: i, handSize },
-            false
-          );
-          await delay(dealDelay);
-        }
-
-        if (!isMounted) return;
-        const computerCard = players[1].hand[i];
+        const computerCard = computerHand[i];
         if (computerCard) {
           await dealer.dealCard(
             computerCard,
             "computer",
-            { cardIndex: i, handSize },
+            { cardIndex: i, handSize: computerHandSize },
             false
           );
           await delay(dealDelay);
         }
       }
-
-      if (!isMounted) return;
-      // Deal all pile cards to the pile spot
-      for (const pileCard of pile) {
-         if (pileCard) {
-           await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
-         }
+      for (let i = 0; i < visiblePlayerHand.length; i++) {
+        if (!isMounted) return;
+        const playerCard = visiblePlayerHand[i];
+        if (playerCard) {
+          await dealer.dealCard(
+            playerCard,
+            "player",
+            { cardIndex: i, handSize: visiblePlayerHand.length },
+            false
+          );
+          await delay(dealDelay);
+        }
       }
-      
+      for (const hiddenCard of hiddenPlayerHand) {
+        if (!isMounted) return;
+        await dealer.dealCard(hiddenCard, "market", { cardIndex: 0 }, true);
+      }
+      for (const pileCard of pile) {
+        if (pileCard) {
+          await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
+        }
+      }
       await delay(500);
       if (!isMounted) return;
-
       const flipPromises: Promise<void>[] = [];
       players[0].hand.forEach((card) => {
         if (card) flipPromises.push(dealer.flipCard(card, true));
       });
-      // Flip the TOP card of the pile
       const topPileCard = pile[pile.length - 1];
       if (topPileCard) {
         flipPromises.push(dealer.flipCard(topPileCard, true));
       }
-
       await Promise.all(flipPromises);
-
       console.log("✅ Deal complete.");
       if (isMounted) {
         runOnJS(setIsAnimating)(false);
       }
     };
-
     const timerId = setTimeout(dealSmoothly, 0);
-
     return () => {
       isMounted = false;
       clearTimeout(timerId);
     };
-  }, [isCardListReady, game]); // This effect runs ONCE when 'game' is created
+  }, [isCardListReady, game, width, height, isAnimating]);
 
-  // ✅ --- NEW EFFECT TO HANDLE ROTATION ---
+  // --- EFFECT TO HANDLE ROTATION AND PAGING ---
   useEffect(() => {
-    // Don't run this if the list isn't ready or we're in the middle of the initial deal
     if (!isCardListReady || !cardListRef.current || !game || isAnimating) {
       return;
     }
-
     const dealer = cardListRef.current;
-    console.log("🔄 Screen rotated, instantly moving cards...");
-
-    // 1. Move Player Hand
+    console.log("🔄 Screen rotated or paged, instantly moving cards...");
     const playerHand = game.gameState.players[0].hand;
-    const playerHandSize = playerHand.length;
-    playerHand.forEach((card, index) => {
+    const visiblePlayerHand = playerHand.slice(
+      playerHandOffset,
+      playerHandOffset + playerHandLimit
+    );
+    const hiddenPlayerHand = [
+      ...playerHand.slice(0, playerHandOffset),
+      ...playerHand.slice(playerHandOffset + playerHandLimit),
+    ];
+    const visibleHandSize = visiblePlayerHand.length;
+    visiblePlayerHand.forEach((card, index) => {
       if (card) {
         dealer.dealCard(
           card,
           "player",
-          { cardIndex: index, handSize: playerHandSize },
-          true // true for instant
+          { cardIndex: index, handSize: visibleHandSize },
+          true
         );
       }
     });
-
-    // 2. Move Computer Hand
+    hiddenPlayerHand.forEach((card) => {
+      if (card) {
+        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+      }
+    });
     const computerHand = game.gameState.players[1].hand;
     const computerHandSize = computerHand.length;
     computerHand.forEach((card, index) => {
@@ -208,12 +243,10 @@ const WhotComputerGameScreen = () => {
           card,
           "computer",
           { cardIndex: index, handSize: computerHandSize },
-          true // true for instant
+          true
         );
       }
     });
-
-    // 3. Move Pile Cards
     const pile = game.gameState.pile;
     pile.forEach((card, index) => {
       if (card) {
@@ -221,14 +254,14 @@ const WhotComputerGameScreen = () => {
           card,
           "pile",
           { cardIndex: index, handSize: pile.length },
-          true // true for instant
+          true
         );
       }
     });
-  }, [width, height, isCardListReady, game, isAnimating]); // Dependencies
-  // ✅ --- END OF NEW EFFECT ---
+  }, [width, height, isCardListReady, game, isAnimating, playerHandOffset]);
+  // --- END OF EFFECT ---
 
-  // --- CONDITIONAL RETURNS (Now safe) ---
+  // --- CONDITIONAL RETURNS ---
   if (!areLoaded) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -237,7 +270,6 @@ const WhotComputerGameScreen = () => {
       </View>
     );
   }
-
   if (!selectedLevel) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -270,13 +302,34 @@ const WhotComputerGameScreen = () => {
           />
         </View>
       )}
-
       <Canvas style={StyleSheet.absoluteFill}>
         <Rect x={0} y={0} width={width} height={height} color="#1E5E4E" />
       </Canvas>
-
       <View style={computerHandStyle} />
       <View style={playerHandStyle} />
+
+      {/* ✅ --- PAGING BUTTONS (FIX 3) --- */}
+      <View
+        style={[
+          styles.pagingContainer,
+          isLandscape
+            ? styles.pagingContainerLandscape
+            : styles.pagingContainerPortrait,
+        ]}
+        pointerEvents="box-none" // Container doesn't block clicks
+      >
+        {/* Only render the single button if paging is active */}
+        {showPagingButton && (
+          <View style={[styles.pagingButtonBase, styles.rightPagingButton]}>
+            <Button
+              title=">" // You can change this to a "rotate" icon
+              onPress={handlePagingPress}
+              color="#FFD700"
+            />
+          </View>
+        )}
+      </View>
+      {/* ✅ --- END PAGING BUTTONS --- */}
 
       {game && (
         <MarketPile
@@ -290,7 +343,6 @@ const WhotComputerGameScreen = () => {
           }}
         />
       )}
-
       {animatedCards.length > 0 && font && whotFont && (
         <AnimatedCardList
           ref={cardListRef}
@@ -313,6 +365,7 @@ const WhotComputerGameScreen = () => {
   );
 };
 
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#1E5E4E" },
   centerContent: { justifyContent: "center", alignItems: "center", padding: 20 },
@@ -329,27 +382,62 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.2)",
     borderRadius: 20,
     zIndex: 0,
-    height: CARD_HEIGHT + 40,
+    height: CARD_HEIGHT + 10,
+    overflow: "hidden", // ✅ hide outside cards
+    justifyContent: "center",
+    alignItems: "center",
   },
   playerHandContainerPortrait: {
-    bottom: 40,
-    left: "5%",
-    width: "90%",
+    bottom: "12%",
+    left: "3%",
+    right: "10%",
+    width: "auto"
   },
   computerHandContainerPortrait: {
     top: 40,
-    left: "10%",
-    width: "80%",
+    left: "5%",
+    right: "5%",
+    width: "auto"
   },
   playerHandContainerLandscape: {
-    bottom: 20,
-    left: "5%",
-    width: "90%",
+    bottom: 8,
+     left: "19%",
+    right: "19%",
+    width: "auto",
   },
   computerHandContainerLandscape: {
-    top: 20,
-    left: "10%",
-    width: "80%",
+    top: 8,
+    left: "19%",
+    right: "19%",
+    width: "auto",
+  },
+pagingContainer: {
+    position: "absolute",
+    zIndex: 100, // Above cards
+  },
+  pagingContainerPortrait: {
+    bottom: 40, // Match player hand
+    left: "5%", // Match player hand
+    width: "90%", // Match player hand
+    height: CARD_HEIGHT + 40, // Match player hand
+  },
+  pagingContainerLandscape: {
+    bottom: 20, // Match player hand
+    left: "5%", // Match player hand
+    width: "90%", // Match player hand
+    height: CARD_HEIGHT + 40, // Match player hand
+  },
+  pagingButtonBase: {
+    position: "absolute",
+    width: 44,
+    height: 60,
+    // Center the button vertically inside the hand container
+    top: (CARD_HEIGHT + 40 - 60) / 2,
+    justifyContent: "center",
+    pointerEvents: "auto", // Enable clicks on the button itself
+  },
+  rightPagingButton: {
+    right: 0, // Aligns to the right of pagingContainer
   },
 });
 
