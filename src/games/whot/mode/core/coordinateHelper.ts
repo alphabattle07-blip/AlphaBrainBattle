@@ -65,7 +65,7 @@ case "market":
         const visualWidth = CARD_WIDTH + spacing;
         const totalWidth = handSize * visualWidth - spacing;
         const startX = (screenWidth - totalWidth) / 2;
-        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
+        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
         return { x, y, rotation: 0 };
       } else {
         // Portrait: "Squeezing" logic
