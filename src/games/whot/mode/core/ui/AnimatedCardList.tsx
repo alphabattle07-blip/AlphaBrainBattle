@@ -23,8 +23,8 @@ interface Props {
   playerHand: Card[];
   font: SkFont | null;
   whotFont: SkFont | null;
-  width: number; // ✅ Screen width
-  height: number; // ✅ Screen height
+  width: number;
+  height: number;
   onCardPress?: (card: Card) => void;
   onReady?: () => void;
 }
@@ -33,7 +33,7 @@ interface Props {
 export interface AnimatedCardListHandle {
   dealCard: (
     card: Card,
-    target: "player" | "computer" | "pile",
+    target: "player" | "computer" | "pile" | "market", // ✅ "market" ADDED
     options: { cardIndex: number; handSize?: number },
     instant?: boolean
   ) => Promise<void>;
@@ -47,8 +47,8 @@ const AnimatedCardList = forwardRef<AnimatedCardListHandle, Props>(
       playerHand,
       font,
       whotFont,
-      width, // ✅ Get width
-      height, // ✅ Get height
+      width, 
+      height, 
       onCardPress,
       onReady,
     },
@@ -58,7 +58,6 @@ const AnimatedCardList = forwardRef<AnimatedCardListHandle, Props>(
     const cardRefs =
       useRef<Record<string, IndividualAnimatedCardHandle | null>>({});
 
-    // ✅ Get the market position dynamically
     const marketPosition = useMemo(
       () => getCoords("market", {}, width, height),
       [width, height]
@@ -86,7 +85,6 @@ const AnimatedCardList = forwardRef<AnimatedCardListHandle, Props>(
       return () => clearTimeout(timer);
     }, [cardsInPlay, onReady]);
 
-    // ✅ Implement the handle methods
     useImperativeHandle(ref, () => ({
       async dealCard(card, target, options, instant) {
         const cardRef = cardRefs.current[card.id];
@@ -120,8 +118,8 @@ const AnimatedCardList = forwardRef<AnimatedCardListHandle, Props>(
               whotFont={whotFont}
               marketPos={marketPosition}
               isPlayerCard={isPlayerCard}
-              width={width} // ✅ Pass width down
-              height={height} // ✅ Pass height down
+              width={width} 
+              height={height} 
               onPress={onCardPress}
             />
           );
@@ -131,12 +129,11 @@ const AnimatedCardList = forwardRef<AnimatedCardListHandle, Props>(
   }
 );
 
+// ✅ Add styles if they are missing
 const styles = StyleSheet.create({
   container: {
-    width: "100%",
-    height: "100%",
-    position: "relative",
-    pointerEvents: "box-none",
+    ...StyleSheet.absoluteFillObject,
+    pointerEvents: "box-none", // Allow taps to pass through
   },
 });
 
