@@ -205,19 +205,23 @@ const WhotComputerGameScreen = () => {
 
   }, [game, isAnimating, playerHandOffset, playerHandLimit]);
   // ✅ FIX 3: Paging Button Click Handler (Corrected logic)
+// ✅ FIX 3: Paging Button Click Handler (Reversed to Anti-Clockwise)
   const handlePagingPress = () => {
     // This is the max index a card can be at and still start a "full" page.
     const maxOffset = playerHand.length - playerHandLimit;
-    
+
     // If there's no paging, maxOffset will be 0 or negative. Do nothing.
     if (maxOffset <= 0) return;
 
-    const nextOffset = playerHandOffset + 1;
+    // Calculate the "previous" offset
+    const prevOffset = playerHandOffset - 1;
 
-    if (nextOffset > maxOffset) {
-      setPlayerHandOffset(0); // Loop back to start
+    if (prevOffset < 0) {
+      // We are at the beginning (index 0), so loop back to the end
+      setPlayerHandOffset(maxOffset);
     } else {
-      setPlayerHandOffset(nextOffset);
+      // Go to the previous offset (scroll "left" / anti-clockwise)
+      setPlayerHandOffset(prevOffset);
     }
   };
 
