@@ -3,14 +3,12 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Card, GameState } from '../core/types';
+import { playCard, pickCard } from "../core/game";
 
-// Mock game functions
-const playCard = (state: GameState, playerIndex: number, card: Card, rule: string): GameState => ({ ...state, currentPlayer: (state.currentPlayer + 1) % 2 });
-const pickCard = (state: GameState, playerIndex: number): GameState => ({ ...state, currentPlayer: (state.currentPlayer + 1) % 2 });
+
 const chooseComputerMove = (state: GameState, playerIndex: number, level: number): Card | null => {
-    // Mock logic: always play the first card if possible
-    if (state.players[playerIndex].hand.length > 0) return state.players[playerIndex].hand[0];
-    return null;
+  if (state.players[playerIndex].hand.length > 0) return state.players[playerIndex].hand[0];
+  return null;
 };
 // Level definitions
 export const levels = [
@@ -30,27 +28,42 @@ type Props = {
  onStateChange: (newState: GameState) => void;
 };
 const ComputerUI: React.FC<Props> = ({ state, playerIndex, level, onStateChange }) => {
- const [lastPlayed, setLastPlayed] = useState<Card | null>(null);
- useEffect(() => {
-  if (!state || state.currentPlayer !== playerIndex) return;
-  // Simulate "thinking delay"
-  const timer = setTimeout(() => {
-   const move = chooseComputerMove(state, playerIndex, level);
-   if (move) {
-    // NOTE: This is MOCK game logic
-    const newState = playCard(state, playerIndex, move, "rule2");
-    setLastPlayed(move);
-    onStateChange(newState);
-   } else {
-    // NOTE: This is MOCK game logic
-    const newState = pickCard(state, playerIndex);
-    setLastPlayed(null);
-    onStateChange(newState);
-   }
-  }, 1200); // 1.2s delay for realism
+const [lastPlayed, setLastPlayed] = useState<Card | null>(null);
 
-  return () => clearTimeout(timer);
- }, [state, playerIndex, level, onStateChange]);
+useEffect(() => {
+ if (!state || state.currentPlayer !== playerIndex) return;
+
+   // ✅ 4. GET THE RULE VERSION FROM THE GAME STATE
+   const ruleVersion = state.ruleVersion;
+
+ // Simulate "thinking delay"
+ const timer = setTimeout(() => {
+ const move = chooseComputerMove(state, playerIndex, level);
+ 
+   if (move) {
+     try {
+       // ✅ 5. USE THE REAL playCard AND THE CORRECT RULE
+       const newState = playCard(state, playerIndex, move, ruleVersion);
+     setLastPlayed(move);
+     onStateChange(newState);
+     } catch (e) {
+       // Handle invalid move (e.g., AI chose a bad card)
+       console.error("Computer tried invalid move, picking card:", e.message);
+       // ✅ 6. USE THE REAL pickCard (it returns an object)
+     const { newState } = pickCard(state, playerIndex);
+     setLastPlayed(null);
+     onStateChange(newState);
+     }
+ } else {
+  // ✅ 6. USE THE REAL pickCard (it returns an object)
+  const { newState } = pickCard(state, playerIndex);
+  setLastPlayed(null);
+  onStateChange(newState);
+ }
+ }, 1200); // 1.2s delay for realism
+
+ return () => clearTimeout(timer);
+}, [state, playerIndex, level, onStateChange]); // Dependencies are correct
  const levelInfo = levels.find((l) => l.value === level);
   if (!state) {
     return null;

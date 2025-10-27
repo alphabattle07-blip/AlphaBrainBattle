@@ -74,20 +74,28 @@ const WhotComputerGameScreen = () => {
   const showPagingButton = !!game && !isAnimating;
 
   // 🧩 Initialize new game
-  const initializeGame = useCallback((lvl: ComputerLevel) => {
-    const { gameState, allCards } = initGame(["Player", "Computer"], 6, "rule1");
-    setGame({ gameState, allCards });
+const initializeGame = useCallback((lvl: ComputerLevel) => {
+    // ✅ NEW: Determine rule version based on level
+    const ruleVersion = (lvl >= 3) ? "rule2" : "rule1";
 
-    setAnimatedCards(allCards);
-    setSelectedLevel(levels.find((l) => l.value === lvl)?.label || null);
-    setComputerLevel(lvl);
-    setPlayerHandOffset(0);
-    setIsCardListReady(false);
+  const { gameState, allCards } = initGame(
+      ["Player", "Computer"], 
+      6, 
+      ruleVersion // ✅ UPDATED: Pass the correct rule
+    );
     
-    // ✅ FIX 2: Set isAnimating to true and hasDealt to false
-    setIsAnimating(true); // This will be set to false by the deal effect
-    setHasDealt(false);  // Reset the deal tracker for the new game
-  }, []);
+  setGame({ gameState, allCards });
+
+  setAnimatedCards(allCards);
+  setSelectedLevel(levels.find((l) => l.value === lvl)?.label || null);
+  setComputerLevel(lvl);
+  setPlayerHandOffset(0);
+  setIsCardListReady(false);
+  
+  // ✅ FIX 2: Set isAnimating to true and hasDealt to false
+  setIsAnimating(true); // This will be set to false by the deal effect
+  setHasDealt(false); // Reset the deal tracker for the new game
+ }, []);
 
   // 🧩 Handle computer AI updates
   const handleComputerStateChange = useCallback(

@@ -1,3 +1,4 @@
+// whotcard.ts
 import { useSharedValue } from 'react-native-reanimated';
 import type { CardSuit } from './ui/WhotCardTypes';
 

@@ -11,7 +11,6 @@ const SUIT_CARDS: { [key in CardSuit]?: number[] } = {
   cross:    [1, 2, 3, 5, 7, 10, 11, 13, 14],
   square:   [1, 2, 3, 5, 7, 10, 11, 13, 14],
   star:     [1, 2, 3, 4, 5, 7, 8],
-  whot:     [20],
 };
 
 /**
