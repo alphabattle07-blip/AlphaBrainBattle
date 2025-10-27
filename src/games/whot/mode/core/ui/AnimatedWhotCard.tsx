@@ -2,7 +2,6 @@
 import React, { useMemo } from "react";
 import { Group, Skia, type SkFont } from "@shopify/react-native-skia";
 import { useDerivedValue } from "react-native-reanimated";
-
 import type { AnimatedCard } from "./WhotCardTypes";
 import { WhotCardFace } from "./WhotCardFace";
 import { WhotCardBack } from "./WhotCardBack";

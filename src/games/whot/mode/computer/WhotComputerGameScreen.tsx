@@ -12,7 +12,7 @@ import AnimatedCardList, {
 } from "../core/ui/AnimatedCardList";
 import { Card, GameState } from "../core/types";
 import { getCoords } from "../core/coordinateHelper";
-import { initGame, pickCard } from "../core/game";
+import { initGame, pickCard, playCard } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 import { MarketPile } from "../core/ui/MarketPile";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
@@ -212,6 +212,100 @@ const initializeGame = useCallback((lvl: ComputerLevel) => {
     setIsAnimating(false); // Finish animating
 
   }, [game, isAnimating, playerHandOffset, playerHandLimit]);
+
+   // 🧩 Handle player playing a card
+  // WhotComputerGameScreen.tsx
+
+  // 🧩 Handle player playing a card
+  const handlePlayCard = useCallback(async (card: Card) => {
+    const dealer = cardListRef.current;
+
+    // --- 1. Add Guards ---
+    if (!game || isAnimating || game.gameState.currentPlayer !== 0 || !dealer) {
+      console.log("Cannot play card now.");
+      return;
+    }
+
+    // --- DEBUGGING LINES (Good to keep) ---
+    const topPileCard = game.gameState.pile[game.gameState.pile.length - 1];
+    console.log("--- New Move Attempt ---");
+    console.log("Player wants to play:", card.id);
+    console.log("On top of card:", topPileCard.id);
+    // --- END DEBUGGING ---
+
+    setIsAnimating(true); // Lock animations
+
+    let newState: GameState; // To store the result
+    const playedCard: Card = card; // The card we are trying to play
+
+    // --- 2. Call Game Logic (✅ CORRECTED with try...catch) ---
+    try {
+      
+      // ✅ FIX: Call with the full 'card' object and 'ruleVersion'
+      newState = playCard(
+        game.gameState, 
+        0, // playerIndex
+        card, // The full card object
+        game.gameState.ruleVersion // The rule version from the state
+      );
+
+    } catch (error: any) {
+      // --- 3. Handle Invalid Move ---
+      console.log("Invalid move:", error.message); // This will log "Invalid move"
+      setIsAnimating(false); // Release lock
+      return;
+    }
+
+    // --- 4. Handle Valid Move (Animate!) ---
+    // If we get here, the move was valid and 'newState' is set
+    const animationPromises: Promise<void>[] = [];
+
+    const finalPileIndex = newState.pile.length - 1;
+    // Promise 1: Animate the played card to the pile
+    animationPromises.push(
+      dealer.dealCard(playedCard, "pile", { cardIndex: finalPileIndex }, false)
+    );
+    animationPromises.push(dealer.flipCard(playedCard, true));
+
+    // Promise 2: Animate all *remaining* visible cards to "squeeze"
+    // We check the new state to see what cards are left
+    const newHand = newState.players[0].hand;
+    
+    // Adjust playerHandOffset if we played the last card on a page
+    let newOffset = playerHandOffset;
+    const maxOffset = Math.max(0, newHand.length - playerHandLimit);
+    if (newOffset > maxOffset) {
+        // We played a card and the offset is now too high, so adjust it
+        console.log("Adjusting offset after playing card");
+        runOnJS(setPlayerHandOffset)(maxOffset);
+        newOffset = maxOffset;
+    }
+
+    const newVisibleHand = newHand.slice(
+      newOffset,
+      newOffset + playerHandLimit
+    );
+
+    newVisibleHand.forEach((handCard, index) => {
+      animationPromises.push(
+        dealer.dealCard(
+          handCard,
+          "player",
+          { cardIndex: index, handSize: newVisibleHand.length },
+          false
+        )
+      );
+    });
+
+    // --- 5. Wait for animations and update state ---
+    await Promise.all(animationPromises);
+    
+    // Now update the game state
+    setGame((prevGame) => (prevGame ? { ...prevGame, gameState: newState } : null));
+    setIsAnimating(false); // Release lock
+    
+  }, [game, isAnimating, playerHandOffset, playerHandLimit]);
+
   // ✅ FIX 3: Paging Button Click Handler (Corrected logic)
 // ✅ FIX 3: Paging Button Click Handler (Reversed to Anti-Clockwise)
   const handlePagingPress = () => {
@@ -498,9 +592,8 @@ const initializeGame = useCallback((lvl: ComputerLevel) => {
           whotFont={whotFont}
           width={width}
           height={height}
-          onCardPress={(card) => {
-            console.log("🃏 Card pressed:", card);
-          }}
+          onCardPress= {handlePlayCard}
+  
           onReady={() => {
             console.log("✅ Card list ready!");
             setIsCardListReady(true);
