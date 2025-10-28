@@ -1,4 +1,11 @@
-import React, { forwardRef, useImperativeHandle, useMemo } from "react";
+// IndividualAnimatedCard.tsx
+
+import React, {
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+  memo, // 1. Import memo
+} from "react";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useSharedValue,
@@ -15,11 +22,15 @@ import { AnimatedWhotCard } from "./AnimatedWhotCard";
 
 export interface IndividualAnimatedCardHandle {
   dealTo: (
-    target: "player" | "computer" | "pile" | "market", // ✅ Added "market"
+    target: "player" | "computer" | "pile" | "market",
     options?: any,
     instant?: boolean
   ) => Promise<void>;
   flip: (faceUp: boolean) => Promise<void>;
+  teleportTo: (
+    target: "player" | "computer" | "pile" | "market",
+    options?: any
+  ) => void;
 }
 
 interface Props {
@@ -33,52 +44,34 @@ interface Props {
   onPress?: (card: Card) => void;
 }
 
-const IndividualAnimatedCard = forwardRef<IndividualAnimatedCardHandle, Props>(
-  (
-    {
-      card,
-      font,
-      whotFont,
-      marketPos,
-      width,
-      height,
-      onPress,
-    },
-    ref
-  ) => {
-    // Shared values for the ANCHOR POINT (top-left) of the Animated.View
-    const x = useSharedValue(marketPos.x - CARD_WIDTH / 2);
-    const y = useSharedValue(marketPos.y - CARD_HEIGHT / 2);
-    const rotation = useSharedValue(0); // For fanning the hand
+// 2. Wrap the entire forwardRef in memo()
+const IndividualAnimatedCard = memo(
+  forwardRef<IndividualAnimatedCardHandle, Props>(
+    (
+      { card, font, whotFont, marketPos, width, height, onPress },
+      ref
+    ) => {
+      // ... (all the existing code inside the component remains the same)
+      const x = useSharedValue(marketPos.x - CARD_WIDTH / 2);
+      const y = useSharedValue(marketPos.y - CARD_HEIGHT / 2);
+      const rotation = useSharedValue(0); // For fanning the hand
 
-    // ✅ 1. Add a shared value for zIndex
-    const zIndex = useSharedValue(1);
+      const zIndex = useSharedValue(1);
+      const cardRotate = useSharedValue(0);
+      const internalX = useSharedValue(0);
+      const internalY = useSharedValue(0);
 
-    // Shared value for the 3D FLIP animation (0 to PI)
-    const cardRotate = useSharedValue(0);
-
-    // Internal shared values for the Skia canvas
-    const internalX = useSharedValue(0);
-    const internalY = useSharedValue(0);
-
-    // Handle for dealing and flipping
-    useImperativeHandle(ref, () => ({
-      async dealTo(target, options, instant) {
-        return new Promise((resolve) => {
+      // Handle for dealing and flipping
+      useImperativeHandle(ref, () => ({
+        // ... (teleportTo, dealTo, flip functions)
+        teleportTo(target, options) {
           const { cardIndex, handSize } = options || {};
 
-          // ✅ 2. Update the zIndex based on the target and index
-          // We add 100 to make sure player cards are always on top
           if (target === "player" || target === "computer") {
-            // Card at index 0 gets zIndex 100
-            // Card at index 1 gets zIndex 101 (and appears ON TOP of card 0)
-            // This is the stacking you want!
             zIndex.value = 100 + (cardIndex || 0);
           } else if (target === "pile") {
-            // Pile cards stack too, but below the hand
             zIndex.value = 50 + (cardIndex || 0);
           } else {
-            // Market cards are at the bottom
             zIndex.value = 1;
           }
 
@@ -88,105 +81,136 @@ const IndividualAnimatedCard = forwardRef<IndividualAnimatedCardHandle, Props>(
             rotation: targetRot,
           } = getCoords(target, { cardIndex, handSize }, width, height);
 
-          // Animate to top-left corner (center - half-size)
           const newX = targetX - CARD_WIDTH / 2;
           const newY = targetY - CARD_HEIGHT / 2;
           const newRot = targetRot || 0;
-          const duration = 500;
 
-          if (instant) {
-            x.value = newX;
-            y.value = newY;
-            rotation.value = newRot;
-            return resolve();
-          }
+          x.value = newX;
+          y.value = newY;
+          rotation.value = newRot;
+        },
 
-          x.value = withTiming(newX, { duration });
-          y.value = withTiming(newY, { duration });
-          rotation.value = withTiming(newRot, { duration }, (finished) => {
-            if (finished) {
-              runOnJS(resolve)();
+        async dealTo(target, options, instant) {
+          return new Promise((resolve) => {
+            const { cardIndex, handSize } = options || {};
+
+            if (target === "player" || target === "computer") {
+              zIndex.value = 100 + (cardIndex || 0);
+            } else if (target === "pile") {
+              zIndex.value = 200;
+            } else {
+              zIndex.value = 1;
             }
-          });
-        });
-      },
 
-      async flip(show) {
-        return new Promise((resolve) => {
-          cardRotate.value = withTiming(
-            show ? Math.PI : 0,
-            { duration: 300 },
-            (finished) => {
+            const {
+              x: targetX,
+              y: targetY,
+              rotation: targetRot,
+            } = getCoords(target, { cardIndex, handSize }, width, height);
+
+            const newX = targetX - CARD_WIDTH / 2;
+            const newY = targetY - CARD_HEIGHT / 2;
+            const newRot = targetRot || 0;
+            const duration = 500;
+
+            if (instant) {
+              x.value = newX;
+              y.value = newY;
+              rotation.value = newRot;
+              if (target === "pile") {
+                zIndex.value = 50 + (cardIndex || 0);
+              }
+              return resolve();
+            }
+
+            x.value = withTiming(newX, { duration });
+            y.value = withTiming(newY, { duration });
+            rotation.value = withTiming(newRot, { duration }, (finished) => {
               if (finished) {
+                if (target === "pile") {
+                  zIndex.value = 50 + (cardIndex || 0);
+                }
                 runOnJS(resolve)();
               }
+            });
+          });
+        },
+
+        async flip(show) {
+          return new Promise((resolve) => {
+            cardRotate.value = withTiming(
+              show ? Math.PI : 0,
+              { duration: 300 },
+              (finished) => {
+                if (finished) {
+                  runOnJS(resolve)();
+                }
+              }
+            );
+          });
+        },
+      }));
+
+      // Tap gesture
+      const tapGesture = useMemo(
+        () =>
+          Gesture.Tap().onEnd(() => {
+            if (onPress) {
+              runOnJS(onPress)(card);
             }
-          );
-        });
-      },
-    }));
+          }),
+        [card, onPress]
+      );
 
-    // Tap gesture
-    const tapGesture = useMemo(
-      () =>
-        Gesture.Tap().onEnd(() => {
-          if (onPress) {
-            runOnJS(onPress)(card);
-          }
-        }),
-      [card, onPress]
-    );
-
-    // Style for the parent Animated.View
-    const animatedStyle = useAnimatedStyle(() => ({
-      position: "absolute",
-      width: CARD_WIDTH,
-      height: CARD_HEIGHT,
-      transform: [
-        { translateX: x.value },
-        { translateY: y.value },
-        { rotate: `${rotation.value}deg` },
-      ],
-      // ✅ 3. Use the zIndex shared value
-      zIndex: zIndex.value,
-    }));
-
-    // Data for the Skia <AnimatedWhotCard>
-    const animatedCard: AnimatedCard = useMemo(
-      () => ({
-        ...card,
-        x: internalX,
-        y: internalY,
-        rotate: cardRotate,
+      // Style for the parent Animated.View
+      const animatedStyle = useAnimatedStyle(() => ({
+        position: "absolute",
         width: CARD_WIDTH,
         height: CARD_HEIGHT,
-        initialIndex: 0,
-      }),
-      [card, cardRotate, internalX, internalY]
-    );
+        transform: [
+          { translateX: x.value },
+          { translateY: y.value },
+          { rotate: `${rotation.value}deg` },
+        ],
+        zIndex: zIndex.value,
+      }));
 
-    // ✅ --- FIX: CONDITIONAL RETURN IS NOW *AFTER* ALL HOOKS ---
-    // This is safe. All hooks have run, so React is happy.
-    if (!font || !whotFont) {
-      console.warn(`Card ${card.id} is not rendering because fonts are missing.`);
-      return null;
+      // Data for the Skia <AnimatedWhotCard>
+      const animatedCard: AnimatedCard = useMemo(
+        () => ({
+          ...card,
+          x: internalX,
+          y: internalY,
+          rotate: cardRotate,
+          width: CARD_WIDTH,
+          height: CARD_HEIGHT,
+          initialIndex: 0,
+        }),
+        [card, cardRotate, internalX, internalY]
+      );
+
+      if (!font || !whotFont) {
+        console.warn(
+          `Card ${card.id} is not rendering because fonts are missing.`
+        );
+        return null;
+      }
+
+      // --- Render Logic ---
+      return (
+        <GestureDetector gesture={tapGesture}>
+          <Animated.View style={animatedStyle}>
+            <Canvas style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
+              <AnimatedWhotCard
+                card={animatedCard}
+                font={font}
+                whotFont={whotFont}
+              />
+            </Canvas>
+          </Animated.View>
+        </GestureDetector>
+      );
     }
-
-    // --- Render Logic ---
-    // If we get here, font and whotFont are guaranteed to be loaded.
-    return (
-      <GestureDetector gesture={tapGesture}>
-        <Animated.View style={animatedStyle}>
-          <Canvas style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
-            <AnimatedWhotCard
-              card={animatedCard}
-              font={font}
-              whotFont={whotFont}
-            />
-          </Canvas>
-        </Animated.View>
-      </GestureDetector>
-    );
-  }
+  )
 );
 export default IndividualAnimatedCard;

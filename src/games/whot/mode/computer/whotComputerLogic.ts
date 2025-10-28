@@ -3,11 +3,6 @@ import { Card, GameState } from "../core/types";
 import { isValidMove as isValidMoveRule1 } from "../core/rules";   // Rule 1 logic
 import { isValidMoveRule2 } from "../core/rules2";                 // Rule 2 logic
 
-/**
- * Decide which move the computer plays.
- * Apprentice (1) + Knight (2) → Rule 2
- * Warrior (3) + Master (4) + Alpha (5) → Rule 1
- */
 export const chooseComputerMove = (
   state: GameState,
   playerIndex: number,
@@ -17,7 +12,7 @@ export const chooseComputerMove = (
   const hand = player.hand;
 
   // Pick ruleset based on level
-  const isRule2 = level <= 2;
+  const isRule2 = level >= 3;
   const isValidMove = isRule2 ? isValidMoveRule2 : isValidMoveRule1;
 
   // Find valid moves
