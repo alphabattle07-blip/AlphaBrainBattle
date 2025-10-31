@@ -1,1 +1,5 @@
-Okay Now When there are many cards in the player box The scroller will take effect But now the issue is when you play a card Now The scrolling takes place but as if it's coming from the market deck of cards
+When I tap the scrollable button to scroll through the cards in the player’s card box, the scrolling itself works perfectly. However, during this action, several other parts of the game interface blink or flicker briefly — including the computer’s cards, the market deck, and the center card (the one facing up).
+
+The same issue also happens when either the player or the computer taps the market deck to draw a card. During the draw action, the player’s cards, the market deck, and the center card all blink for a split second, even though only the draw animation should occur.
+
+In addition, when the game is sharing (dealing) the cards at the beginning of the round, a similar blinking happens.

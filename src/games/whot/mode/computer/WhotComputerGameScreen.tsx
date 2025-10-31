@@ -1,8 +1,7 @@
 // whotComputerGameScreen.tsx
-import React, {useState, useEffect, useCallback,useMemo,useRef,
-} from "react";
-import { View, StyleSheet, useWindowDimensions, Text, Button,
-  ActivityIndicator, Pressable, } from "react-native";
+import React, {useState, useEffect,useCallback,useMemo,useRef, useLayoutEffect} from "react";
+import {View, StyleSheet, useWindowDimensions,Text, Button,
+  ActivityIndicator, Pressable} from "react-native";
 import { Canvas, Rect } from "@shopify/react-native-skia";
 import { runOnJS } from "react-native-reanimated";
 
@@ -27,9 +26,27 @@ const WhotComputerGameScreen = () => {
   // --- HOOKS ---
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
-  const { font, whotFont, areLoaded } = useWhotFonts();
+const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts();
 
-  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  // 2. ✅ CREATE STABLE STATE to hold the fonts
+  // We'll store the *first* loaded font instance here.
+  const [stableFont, setStableFont] = useState<SkFont | null>(null);
+  const [stableWhotFont, setStableWhotFont] = useState<SkFont | null>(null);
+
+  // 3. ✅ USE EFFECT to capture the fonts *once*
+  useEffect(() => {
+    // If fonts are loaded AND our stable state is still empty...
+    if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
+      console.log("✅ Capturing stable fonts ONCE.");
+      // ...save them to our state.
+      setStableFont(loadedFont);
+      setStableWhotFont(loadedWhotFont);
+    }
+    // This effect only re-runs if `areLoaded` or the loaded fonts change.
+    // But the `!stableFont` check ensures it only runs *one time*.
+  }, [areLoaded, loadedFont, loadedWhotFont, stableFont]);
+
+ const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [computerLevel, setComputerLevel] = useState<ComputerLevel>(
     levels[0].value
   );
@@ -46,7 +63,35 @@ const WhotComputerGameScreen = () => {
 
   const [hasDealt, setHasDealt] = useState(false);
 
-  // --- Memos ---
+// ✅ FIX: Create a stable, sorted dependency
+const stablePlayerHandIds = useMemo(() => {
+  if (!game) return "";
+
+  // Get the IDs
+  const ids = game.gameState.players[0].hand.map((c) => c.id);
+  
+  // Sort them alphabetically
+  ids.sort();
+  
+  // Join them
+  return ids.join(',');
+
+// Re-run this logic only when the hand array itself changes
+}, [game?.gameState.players[0].hand]);
+
+
+const playerHand = useMemo(
+  () => game?.gameState.players[0].hand || [],
+  [stablePlayerHandIds] // ✅ Use the new stable dependency
+);
+
+const marketCardCount = game?.gameState.market.length || 0;
+
+const marketCards = useMemo(
+    () => game?.gameState.market || [],
+    [marketCardCount] // ✅ NOW STABLE: Only changes if the number of market cards changes
+  );
+
   const playerHandStyle = useMemo(
     () => [
       styles.handContainerBase,
@@ -67,13 +112,53 @@ const WhotComputerGameScreen = () => {
     [isLandscape]
   );
 
+  // ✅ FIX: Create a stable `computerState` object for the UI
+const computerState = useMemo(() => {
+  if (!game) return null;
+
+  const computerPlayer = game.gameState.players[1];
+  if (!computerPlayer) return null;
+
+  return {
+    name: computerPlayer.name,
+    handLength: computerPlayer.hand.length,
+    isCurrentPlayer: game.gameState.currentPlayer === 1,
+  };
+
+  // Dependencies: Only re-run if these specific values change
+}, [
+  game?.gameState.players[1]?.name,
+  game?.gameState.players[1]?.hand.length,
+  game?.gameState.currentPlayer,
+]);
+
   // --- CONSTANTS ---
-  const playerHand = game?.gameState.players[0].hand || [];
   const playerHandLimit = 6; // The 6 visible slots
 
   // ✅ FIX 2: Show button if paging is active, NOT if animating
   const isPagingActive = playerHand.length > playerHandLimit;
   const showPagingButton = !!game && isPagingActive;
+
+  // ✅ ==========================================================
+  // ✅ FIX 5: Create refs to hold non-stable values
+  // This allows our useCallback functions to be stable.
+  // ==========================================================
+  const gameRef = useRef(game);
+  const isAnimatingRef = useRef(isAnimating);
+  const isPagingActiveRef = useRef(isPagingActive);
+
+  // Update refs on every render
+  useEffect(() => {
+    gameRef.current = game;
+  }, [game]);
+
+  useEffect(() => {
+    isAnimatingRef.current = isAnimating;
+  }, [isAnimating]);
+
+  useEffect(() => {
+    isPagingActiveRef.current = isPagingActive;
+  }, [isPagingActive]);
 
   // 🧩 Initialize new game
   const initializeGame = useCallback((lvl: ComputerLevel) => {
@@ -96,14 +181,18 @@ const WhotComputerGameScreen = () => {
   // 🧩 Handle computer AI updates
   const handleComputerTurn = useCallback(async () => {
     const dealer = cardListRef.current;
-    if (!game || isAnimating || game.gameState.currentPlayer !== 1 || !dealer) {
+    // ✅ Read from refs
+    const currentGame = gameRef.current;
+    const animating = isAnimatingRef.current;
+
+    if (!currentGame || animating || currentGame.gameState.currentPlayer !== 1 || !dealer) {
       return;
     }
 
     console.log("🤖 Computer's turn...");
     setIsAnimating(true);
 
-    const oldState = game.gameState;
+    const oldState = currentGame.gameState; // ✅ Use ref's value
     const { ruleVersion } = oldState;
     const computerPlayerIndex = 1;
 
@@ -208,7 +297,7 @@ const WhotComputerGameScreen = () => {
     }
 
     setIsAnimating(false);
-  }, [game, isAnimating, computerLevel]);
+  }, [computerLevel]); // ✅ 'game' and 'isAnimating' removed
 
   // 🧩 EFFECT: Trigger Computer's Turn
   useEffect(() => {
@@ -226,13 +315,17 @@ const WhotComputerGameScreen = () => {
   // 🧩 (🌀) Handle player picking from market
   const handlePickFromMarket = useCallback(async () => {
     const dealer = cardListRef.current;
-    if (!game || isAnimating || game.gameState.currentPlayer !== 0 || !dealer) {
+    // ✅ Read from refs
+    const currentGame = gameRef.current;
+    const animating = isAnimatingRef.current;
+
+    if (!currentGame || animating || currentGame.gameState.currentPlayer !== 0 || !dealer) {
       console.log("Cannot pick card now.");
       return;
     }
 
     setIsAnimating(true);
-    const oldState = game.gameState;
+    const oldState = currentGame.gameState; // ✅ Use ref's value
 
     const { newState: stateAfterPick, drawnCards } = pickCard(oldState, 0);
 
@@ -331,13 +424,17 @@ const WhotComputerGameScreen = () => {
       prevGame ? { ...prevGame, gameState: newState } : null
     );
     setIsAnimating(false);
-  }, [game, isAnimating, playerHandLimit]);
+  }, [playerHandLimit]); // ✅ 'game' and 'isAnimating' removed
 
   // 🧩 (♠️) Handle player playing a card
   const handlePlayCard = useCallback(
     async (card: Card) => {
       const dealer = cardListRef.current;
-      if (!game || isAnimating || game.gameState.currentPlayer !== 0 || !dealer) {
+      // ✅ Read from refs
+      const currentGame = gameRef.current;
+      const animating = isAnimatingRef.current;
+
+      if (!currentGame || animating || currentGame.gameState.currentPlayer !== 0 || !dealer) {
         console.log("Cannot play card now.");
         return;
       }
@@ -350,10 +447,10 @@ const WhotComputerGameScreen = () => {
       // --- 2. Call Game Logic ---
       try {
         newState = playCard(
-          game.gameState,
+          currentGame.gameState, // ✅ Use ref's value
           0, // playerIndex
           card,
-          game.gameState.ruleVersion
+          currentGame.gameState.ruleVersion // ✅ Use ref's value
         );
       } catch (error: any) {
         console.log("Invalid move:", error.message);
@@ -364,7 +461,7 @@ const WhotComputerGameScreen = () => {
       // --- 4. Handle Valid Move (Animate!) ---
 
       // 4a. Get old hand state (visible part)
-      const oldPlayerHand = game.gameState.players[0].hand;
+      const oldPlayerHand = currentGame.gameState.players[0].hand; // ✅ Use ref's value
       const oldVisibleHand = oldPlayerHand.slice(0, playerHandLimit);
       const oldVisibleHandIds = new Set(oldVisibleHand.map((c) => c.id));
 
@@ -401,9 +498,6 @@ const WhotComputerGameScreen = () => {
         dealer.dealCard(playedCard, "pile", { cardIndex: finalPileIndex }, false)
       );
       animationPromises.push(dealer.flipCard(playedCard, true));
-
-      // Promise 2: Animate all *newly* visible cards
-      // This animates "squeezed" cards (clockwise) AND "newly visible" cards (from left)
       newVisibleHand.forEach((handCard, index) => {
         animationPromises.push(
           dealer.dealCard(
@@ -424,20 +518,22 @@ const WhotComputerGameScreen = () => {
       );
       setIsAnimating(false);
     },
-    [game, isAnimating, playerHandLimit]
+    [playerHandLimit] // ✅ 'game' and 'isAnimating' removed
   );
 
-  // ✅ ==========================================================
-  // ✅ (🔄) REPLACED handlePagingPress with "Rotate Right" logic
-  // ✅ ==========================================================
   const handlePagingPress = useCallback(async () => {
     const dealer = cardListRef.current;
-    if (!dealer || isAnimating || !game || !isPagingActive) return;
+    // ✅ Read from refs
+    const currentGame = gameRef.current;
+    const animating = isAnimatingRef.current;
+    const pagingActive = isPagingActiveRef.current;
+
+    if (!dealer || animating || !currentGame || !pagingActive) return;
 
     setIsAnimating(true);
 
     // --- 1. Get Old Hand ---
-    const oldHand = game.gameState.players[0].hand;
+    const oldHand = currentGame.gameState.players[0].hand; // ✅ Use ref's value
     const oldVisibleHand = oldHand.slice(0, playerHandLimit);
 
     // --- 2. Calculate New Hand (Rotate RIGHT) ---
@@ -496,8 +592,8 @@ const WhotComputerGameScreen = () => {
 
     // Now, update the game state with the new rotated hand
     const newState = {
-      ...game.gameState,
-      players: game.gameState.players.map((p, i) =>
+      ...currentGame.gameState, // ✅ Use ref's value
+      players: currentGame.gameState.players.map((p, i) =>
         i === 0 ? { ...p, hand: newHand } : p
       ),
     };
@@ -506,17 +602,13 @@ const WhotComputerGameScreen = () => {
     );
 
     // Instantly move the "left" card to the market pile
-    if (cardLeaving) {
-      dealer.teleportCard(cardLeaving, "market", { cardIndex: 0 });
-    }
+    //  if (cardLeaving) {
+    //    dealer.teleportCard(cardLeaving, "market", { cardIndex: 0 });
+    //  }
 
     setIsAnimating(false);
-  }, [game, isAnimating, isPagingActive, playerHandLimit]);
-  // ✅ ==========================================================
-  // ✅ END OF REPLACEMENT
-  // ✅ ==========================================================
+  }, [playerHandLimit]); // ✅ 'game', 'isAnimating', 'isPagingActive' removed
 
-  // 🧩 Animate the card dealing sequence
   useEffect(() => {
     if (!isCardListReady || !cardListRef.current || !game || hasDealt) {
       return;
@@ -575,22 +667,6 @@ const WhotComputerGameScreen = () => {
         }
       }
 
-      // ✅ FIX 3: Remove redundant loops that cause blinking
-      // "Deal" hidden cards to the market pile (instantly)
-      /*
-      for (const hiddenCard of hiddenPlayerHand) {
-        if (!isMounted) return;
-        await dealer.dealCard(hiddenCard, "market", { cardIndex: 0 }, true);
-      }
-      */
-      // "Deal" market cards to the market pile (instantly)
-      /*
-      for (const marketCard of market) {
-        if (!isMounted) return;
-        await dealer.dealCard(marketCard, "market", { cardIndex: 0 }, true);
-      }
-      */
-      // --- END OF FIX 3 ---
 
       for (const pileCard of pile) {
         if (pileCard) {
@@ -626,7 +702,7 @@ const WhotComputerGameScreen = () => {
 
   // ✅ FIX 4: Replaced this entire effect to *only* run on actual rotation
   // --- EFFECT TO HANDLE ROTATION (INSTANT) ---
-  useEffect(() => {
+  useLayoutEffect(() => { // ✅ CHANGED from useEffect
     if (
       !isCardListReady ||
       !cardListRef.current ||
@@ -709,14 +785,20 @@ const WhotComputerGameScreen = () => {
   ]);
   // --- END OF FIX 4 ---
 
-  if (!areLoaded) {
-    return (
-      <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={styles.title}>Loading Game...</Text>
-      </View>
-    );
-  }
+  // ✅ FIX 6: Stabilize the onReady callback
+  const onCardListReady = useCallback(() => {
+    console.log("✅ Card list ready!");
+    setIsCardListReady(true);
+  }, []); // Empty array means it will never be recreated
+
+if (!areLoaded || !stableFont || !stableWhotFont) { // Wait for our stable state
+  return (
+   <View style={[styles.container, styles.centerContent]}>
+    <ActivityIndicator size="large" color="#FFFFFF" />
+    <Text style={styles.title}>Loading Game...</Text>
+   </View>
+  );
+ }
   if (!selectedLevel) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -742,8 +824,8 @@ const WhotComputerGameScreen = () => {
           style={[styles.computerUIContainer, { pointerEvents: "box-none" }]}
         >
           <ComputerUI
-            state={game.gameState}
-            playerIndex={1}
+
+            computerState={computerState}
             level={computerLevel}
           />
         </View>
@@ -765,7 +847,7 @@ const WhotComputerGameScreen = () => {
       >
         {showPagingButton && (
           <Pressable
-            onPress={handlePagingPress}
+            onPress={handlePagingPress} // ✅ Now stable
             style={({ pressed }) => [
               styles.pagingButtonBase,
               styles.rightPagingButton,
@@ -779,28 +861,25 @@ const WhotComputerGameScreen = () => {
 
       {game && (
         <MarketPile
-          cards={game.gameState.market}
-          font={whotFont}
-          smallFont={font}
+          cards={marketCards} // ✅ USE STABLE PROP
+          font={stableWhotFont} // 6. ✅ PASS THE STABLE STATE PROP
+          smallFont={stableFont} // 6. ✅ PASS THE STABLE STATE PROP
           width={width}
           height={height}
-          onPress={handlePickFromMarket} // ✅ (🌀)
+          onPress={handlePickFromMarket} // ✅ Now stable
         />
       )}
-      {animatedCards.length > 0 && font && whotFont && (
+      {animatedCards.length > 0 && stableFont && stableWhotFont && (
         <AnimatedCardList
           ref={cardListRef}
           cardsInPlay={animatedCards}
-          playerHand={game?.gameState.players[0].hand || []}
-          font={font}
-          whotFont={whotFont}
+          playerHand={playerHand} // ✅ USE STABLE PROP
+          font={stableFont} // 8. ✅ PASS THE STABLE STATE PROP
+          whotFont={stableWhotFont} // 8. ✅ PASS THE STABLE STATE PROP
           width={width}
           height={height}
-          onCardPress={handlePlayCard} // ✅ (♠️)
-          onReady={() => {
-            console.log("✅ Card list ready!");
-            setIsCardListReady(true);
-          }}
+          onCardPress={handlePlayCard} // ✅ Now stable
+          onReady={onCardListReady} // ✅ Now stable
         />
       )}
     </View>

@@ -8,6 +8,7 @@ import React, {
   useEffect,
   useMemo,
   memo, // 1. Import memo
+  useCallback, // 2. Import useCallback
 } from "react";
 import { StyleSheet, View } from "react-native";
 import { SkFont } from "@shopify/react-native-skia";
@@ -19,7 +20,6 @@ import IndividualAnimatedCard, {
 import { Card } from "../types";
 import { getCoords } from "../coordinateHelper";
 
-// ... (interfaces remain the same)
 interface Props {
   cardsInPlay: Card[];
   playerHand: Card[];
@@ -46,7 +46,6 @@ export interface AnimatedCardListHandle {
   flipCard: (card: Card, faceUp: boolean) => Promise<void>;
 }
 
-// 2. Wrap the entire forwardRef in memo()
 const AnimatedCardList = memo(
   forwardRef<AnimatedCardListHandle, Props>(
     (
@@ -62,6 +61,7 @@ const AnimatedCardList = memo(
       },
       ref
     ) => {
+      console.log("LOG: 🔴 AnimatedCardList re-rendered."); // As seen in your logs
       const [uniqueCards, setUniqueCards] = useState<Card[]>([]);
       const cardRefs = useRef<
         Record<string, IndividualAnimatedCardHandle | null>
@@ -95,7 +95,6 @@ const AnimatedCardList = memo(
       }, [cardsInPlay, onReady]);
 
       useImperativeHandle(ref, () => ({
-        // ... (dealCard, teleportCard, flipCard functions)
         async dealCard(card, target, options, instant) {
           const cardRef = cardRefs.current[card.id];
           if (cardRef) {
@@ -123,6 +122,15 @@ const AnimatedCardList = memo(
         },
       }));
 
+      const handleCardPress = useCallback(
+        (card: Card) => {
+          if (onCardPress) {
+            onCardPress(card);
+          }
+        },
+        [onCardPress] // Dependency is stable
+      );
+
       return (
         <View style={styles.container}>
           {uniqueCards.map((card) => {
@@ -139,7 +147,8 @@ const AnimatedCardList = memo(
                 isPlayerCard={isPlayerCard}
                 width={width}
                 height={height}
-                onPress={onCardPress}
+                // 4. ✅ PASS THE STABLE FUNCTION
+                onPress={handleCardPress}
               />
             );
           })}

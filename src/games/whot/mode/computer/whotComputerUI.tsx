@@ -1,46 +1,53 @@
 // games/whot/computer/ComputerUI.tsx 
-
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Card, GameState } from '../core/types';
 
 // Level definitions
 export const levels = [
- { label: "Apprentice (Easy)", value: 1, rating: 1200, reward: 10 },
- { label: "Knight (Normal)", value: 2, rating: 1400, reward: 15 },
- { label: "Warrior (Hard)", value: 3, rating: 1600, reward: 20 },
- { label: "Master (Expert)", value: 4, rating: 1800, reward: 25 },
- { label: "Alpha (Legend)", value: 5, rating: 2000, reward: 30 },
+{ label: "Apprentice (Easy)", value: 1, rating: 1200, reward: 10 },
+{ label: "Knight (Normal)", value: 2, rating: 1400, reward: 15 },
+{ label: "Warrior (Hard)", value: 3, rating: 1600, reward: 20 },
+{ label: "Master (Expert)", value: 4, rating: 1800, reward: 25 },
+{ label: "Alpha (Legend)", value: 5, rating: 2000, reward: 30 },
 ] as const;
 
 export type ComputerLevel = 1 | 2 | 3 | 4 | 5;
 
 type Props = {
- state: GameState | null;
- playerIndex: number; // index of computer in players[]
- level: ComputerLevel;
+state: GameState | null;
+playerIndex: number; // index of computer in players[]
+level: ComputerLevel;
 };
-const ComputerUI: React.FC<Props> = ({ state, playerIndex, level,  }) => {
-
-
-  // Dependencies are correct
+// ✅ Wrap the component definition in React.memo()
+const ComputerUI: React.FC<Props> = ({ state, playerIndex, level }) => {
+  console.log("LOG: 🔵 ComputerUI re-rendered.");
  const levelInfo = levels.find((l) => l.value === level);
-  if (!state) {
-    return null;
-  }
- return (
+
+ if (!state) {
+  return null;
+ }
+ const computerPlayer = state.players[playerIndex];
+ if (!computerPlayer) {
+  return null;
+ }
+return (
   <View style={styles.container}>
    <Text style={styles.name}>
-    {state.players[playerIndex].name} 🤖
+    {computerPlayer.name} 🤖
    </Text>
    <Text style={styles.hand}>
-    Cards: {state.players[playerIndex].hand.length}
+    Cards: {computerPlayer.hand.length}
    </Text>
-  
+ 
    {levelInfo && (
     <Text style={styles.level}>
      {levelInfo.label} • Rating {levelInfo.rating}
     </Text>
-   )}
+   )}      
+      {state.currentPlayer === playerIndex && (
+        <Text style={styles.thinking}>Thinking...</Text>
+      )}
   </View>
  );
 };
@@ -76,4 +83,4 @@ const styles = StyleSheet.create({
  },
 });
 
-export default ComputerUI;
+export default memo(ComputerUI);

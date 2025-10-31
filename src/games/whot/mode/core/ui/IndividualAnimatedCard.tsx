@@ -1,18 +1,8 @@
 // IndividualAnimatedCard.tsx
-
-import React, {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  memo, // 1. Import memo
-} from "react";
+import React, {forwardRef,useImperativeHandle,useMemo,memo} from "react";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  runOnJS,
-} from "react-native-reanimated";
+import Animated, {useSharedValue,useAnimatedStyle,withTiming,
+  runOnJS,} from "react-native-reanimated";
 import { Canvas, SkFont } from "@shopify/react-native-skia";
 import { Card } from "../types";
 import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig";
@@ -51,6 +41,7 @@ const IndividualAnimatedCard = memo(
       { card, font, whotFont, marketPos, width, height, onPress },
       ref
     ) => {
+      console.log(`LOG: 🔴 Card ${card.id} re-rendered.`);
       // ... (all the existing code inside the component remains the same)
       const x = useSharedValue(marketPos.x - CARD_WIDTH / 2);
       const y = useSharedValue(marketPos.y - CARD_HEIGHT / 2);

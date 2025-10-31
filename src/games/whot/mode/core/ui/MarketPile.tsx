@@ -1,5 +1,4 @@
 // core/ui/MarketPile.tsx
-
 import React, { useMemo, memo } from "react"; // 1. Import memo
 import { StyleSheet, View, Text } from "react-native";
 import { Canvas, Group } from "@shopify/react-native-skia";
@@ -32,6 +31,7 @@ export const MarketPile = memo(
     width,
     height,
   }: MarketPileProps) => {
+    console.log("LOG: 🟡 MarketPile re-rendered.");
     const marketPos = useMemo(
       () => getCoords("market", {}, width, height),
       [width, height]
