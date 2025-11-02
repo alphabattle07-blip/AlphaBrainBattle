@@ -28,23 +28,17 @@ const WhotComputerGameScreen = () => {
   const isLandscape = width > height;
 const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts();
 
-  // 2. ✅ CREATE STABLE STATE to hold the fonts
-  // We'll store the *first* loaded font instance here.
   const [stableFont, setStableFont] = useState<SkFont | null>(null);
   const [stableWhotFont, setStableWhotFont] = useState<SkFont | null>(null);
 
-  // 3. ✅ USE EFFECT to capture the fonts *once*
   useEffect(() => {
-    // If fonts are loaded AND our stable state is still empty...
     if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
       console.log("✅ Capturing stable fonts ONCE.");
       // ...save them to our state.
       setStableFont(loadedFont);
       setStableWhotFont(loadedWhotFont);
     }
-    // This effect only re-runs if `areLoaded` or the loaded fonts change.
-    // But the `!stableFont` check ensures it only runs *one time*.
-  }, [areLoaded, loadedFont, loadedWhotFont, stableFont]);
+}, [areLoaded, loadedFont, loadedWhotFont, stableFont]);
 
  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [computerLevel, setComputerLevel] = useState<ComputerLevel>(
@@ -52,31 +46,19 @@ const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts()
   );
   const [game, setGame] = useState<GameData | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [animatedCards, setAnimatedCards] = useState<Card[]>([]);
+  const allCardsStable = useMemo(() => game?.allCards || [], [game?.allCards]);
   const [isCardListReady, setIsCardListReady] = useState(false);
 
   const cardListRef = useRef<AnimatedCardListHandle>(null);
-
-  // ✅ FIX 1: Add refs to track screen dimensions for rotation
   const prevWidth = useRef(width);
   const prevHeight = useRef(height);
 
   const [hasDealt, setHasDealt] = useState(false);
-
-// ✅ FIX: Create a stable, sorted dependency
-const stablePlayerHandIds = useMemo(() => {
+  const stablePlayerHandIds = useMemo(() => {
   if (!game) return "";
-
-  // Get the IDs
-  const ids = game.gameState.players[0].hand.map((c) => c.id);
-  
-  // Sort them alphabetically
-  ids.sort();
-  
-  // Join them
-  return ids.join(',');
-
-// Re-run this logic only when the hand array itself changes
+const ids = game.gameState.players[0].hand.map((c) => c.id);
+ids.sort();
+return ids.join(',');
 }, [game?.gameState.players[0].hand]);
 
 
@@ -89,7 +71,7 @@ const marketCardCount = game?.gameState.market.length || 0;
 
 const marketCards = useMemo(
     () => game?.gameState.market || [],
-    [marketCardCount] // ✅ NOW STABLE: Only changes if the number of market cards changes
+    [marketCardCount] // ✅ NOW STABLE: Only changes if the number of 
   );
 
   const playerHandStyle = useMemo(
@@ -124,8 +106,6 @@ const computerState = useMemo(() => {
     handLength: computerPlayer.hand.length,
     isCurrentPlayer: game.gameState.currentPlayer === 1,
   };
-
-  // Dependencies: Only re-run if these specific values change
 }, [
   game?.gameState.players[1]?.name,
   game?.gameState.players[1]?.hand.length,
@@ -133,21 +113,16 @@ const computerState = useMemo(() => {
 ]);
 
   // --- CONSTANTS ---
-  const playerHandLimit = 6; // The 6 visible slots
+  const playerHandLimit = 5; // The 6 visible slots
+  const layoutHandSize = 6;
 
   // ✅ FIX 2: Show button if paging is active, NOT if animating
   const isPagingActive = playerHand.length > playerHandLimit;
   const showPagingButton = !!game && isPagingActive;
-
-  // ✅ ==========================================================
-  // ✅ FIX 5: Create refs to hold non-stable values
-  // This allows our useCallback functions to be stable.
-  // ==========================================================
   const gameRef = useRef(game);
   const isAnimatingRef = useRef(isAnimating);
   const isPagingActiveRef = useRef(isPagingActive);
 
-  // Update refs on every render
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
@@ -165,12 +140,11 @@ const computerState = useMemo(() => {
     const ruleVersion = lvl >= 3 ? "rule2" : "rule1";
     const { gameState, allCards } = initGame(
       ["Player", "Computer"],
-      6,
+      5,
       ruleVersion
     );
 
     setGame({ gameState, allCards });
-    setAnimatedCards(allCards);
     setSelectedLevel(levels.find((l) => l.value === lvl)?.label || null);
     setComputerLevel(lvl);
     setIsCardListReady(false);
@@ -355,32 +329,23 @@ const computerState = useMemo(() => {
         return player;
       }),
     };
-    // --- End of re-ordering logic ---
-
-    // 3. Get the *visible* part of the *new, re-ordered* hand
+    
     const newVisibleHand = newHandOrder.slice(0, playerHandLimit);
     const newVisibleHandSize = newVisibleHand.length;
-
-    // 4. Find cards that are moving OFF screen (to the left)
     const oldVisibleHand = oldState.players[0].hand.slice(0, playerHandLimit);
     const newVisibleHandIds = new Set(newVisibleHand.map((c) => c.id));
     const cardsLeaving = oldVisibleHand.filter(
       (c) => !newVisibleHandIds.has(c.id)
     );
-
-    // 5. Teleport "entering" cards (the new ones) to an off-screen-RIGHT
-    drawnCards.forEach((card, index) => {
+      drawnCards.forEach((card, index) => {
       dealer.teleportCard(card, "player", {
         cardIndex: -1 - index,
-        handSize: newVisibleHandSize,
+        handSize: layoutHandSize,
       });
     });
-
-    // 6. Animate ALL visible cards in parallel
     const animationPromises: Promise<void>[] = [];
-
-    newVisibleHand.forEach((card, index) => {
-      const options = { cardIndex: index, handSize: newVisibleHandSize };
+      newVisibleHand.forEach((card, index) => {
+      const options = { cardIndex: index, handSize: layoutHandSize };
       animationPromises.push(dealer.dealCard(card, "player", options, false));
 
       if (drawnCardIds.has(card.id)) {
@@ -394,7 +359,7 @@ const computerState = useMemo(() => {
         dealer.dealCard(
           card,
           "player",
-          { cardIndex: playerHandLimit + index, handSize: newVisibleHandSize },
+          { cardIndex: playerHandLimit + index, handSize: layoutHandSize },
           false
         )
       );
@@ -414,12 +379,6 @@ const computerState = useMemo(() => {
     // 9. Wait for ALL animations to finish
     await Promise.all(animationPromises);
 
-    // 10. Teleport "left" cards to market now they're off-screen
-    cardsLeaving.forEach((card) => {
-      dealer.teleportCard(card, "market", { cardIndex: 0 });
-    });
-
-    // 11. Update the game state
     setGame((prevGame) =>
       prevGame ? { ...prevGame, gameState: newState } : null
     );
@@ -457,10 +416,6 @@ const computerState = useMemo(() => {
         setIsAnimating(false);
         return;
       }
-
-      // --- 4. Handle Valid Move (Animate!) ---
-
-      // 4a. Get old hand state (visible part)
       const oldPlayerHand = currentGame.gameState.players[0].hand; // ✅ Use ref's value
       const oldVisibleHand = oldPlayerHand.slice(0, playerHandLimit);
       const oldVisibleHandIds = new Set(oldVisibleHand.map((c) => c.id));
@@ -484,7 +439,7 @@ const computerState = useMemo(() => {
           const offscreenIndex = playerHandLimit + index;
           dealer.teleportCard(newCard, "player", {
             cardIndex: offscreenIndex,
-            handSize: newVisibleHandSize + newlyVisibleCards.length,
+            handSize: layoutHandSize
           });
         });
       }
@@ -504,7 +459,7 @@ const computerState = useMemo(() => {
             handCard,
             "player",
             // ✅ FIX: Always use the MAX hand size for positioning
-            { cardIndex: index, handSize: playerHandLimit }, // ✅ This anchors the cards to the right
+            { cardIndex: index, handSize: layoutHandSize }, // ✅ This anchors the cards to the right
             false // Animate!
           )
         );
@@ -556,7 +511,7 @@ const computerState = useMemo(() => {
       // Teleport to the "off-screen-RIGHT" position (index -1)
       dealer.teleportCard(cardEntering, "player", {
         cardIndex: -1,
-        handSize: newVisibleHandSize,
+        handSize: layoutHandSize,
       });
     }
 
@@ -569,7 +524,7 @@ const computerState = useMemo(() => {
         dealer.dealCard(
           card,
           "player",
-          { cardIndex: index, handSize: newVisibleHandSize },
+          { cardIndex: index, handSize: layoutHandSize },
           false // Animate
         )
       );
@@ -581,7 +536,7 @@ const computerState = useMemo(() => {
         dealer.dealCard(
           cardLeaving,
           "player",
-          { cardIndex: playerHandLimit, handSize: newVisibleHandSize },
+          { cardIndex: playerHandLimit, handSize: layoutHandSize },
           false // Animate
         )
       );
@@ -601,10 +556,6 @@ const computerState = useMemo(() => {
       prevGame ? { ...prevGame, gameState: newState } : null
     );
 
-    // Instantly move the "left" card to the market pile
-    //  if (cardLeaving) {
-    //    dealer.teleportCard(cardLeaving, "market", { cardIndex: 0 });
-    //  }
 
     setIsAnimating(false);
   }, [playerHandLimit]); // ✅ 'game', 'isAnimating', 'isPagingActive' removed
@@ -660,7 +611,7 @@ const computerState = useMemo(() => {
           await dealer.dealCard(
             playerCard,
             "player",
-            { cardIndex: i, handSize: visiblePlayerHand.length },
+            { cardIndex: i, handSize: layoutHandSize },
             false
           );
           await delay(dealDelay);
@@ -699,90 +650,89 @@ const computerState = useMemo(() => {
       clearTimeout(timerId);
     };
   }, [isCardListReady, game, hasDealt, isAnimating, playerHandLimit]);
+  useLayoutEffect(() => {
+  if (
+    !isCardListReady ||
+    !cardListRef.current ||
+    !game ||
+    isAnimating ||
+    !hasDealt
+  ) {
+    return;
+  }
 
-  // ✅ FIX 4: Replaced this entire effect to *only* run on actual rotation
-  // --- EFFECT TO HANDLE ROTATION (INSTANT) ---
-  useLayoutEffect(() => { // ✅ CHANGED from useEffect
-    if (
-      !isCardListReady ||
-      !cardListRef.current ||
-      !game ||
-      isAnimating || // Don't run during other animations
-      !hasDealt
-    ) {
-      return;
-    }
+  // ✅ 1. CHECK if the screen dimensions *actually* changed
+  const hasRotated =
+    prevWidth.current !== width || prevHeight.current !== height;
 
-    // Check if the screen dimensions *actually* changed
-    const hasRotated =
-      prevWidth.current !== width || prevHeight.current !== height;
+  // ✅ 2. WRAP all logic inside this "if" statement
+  if (hasRotated) {
+    console.log("🔄 Screen rotated, instantly moving cards...");
+    const dealer = cardListRef.current;
+    const { players, pile, market } = game.gameState;
+    const playerHand = players[0].hand;
 
-    if (hasRotated) {
-      console.log("🔄 Screen rotated, instantly moving cards...");
-      const dealer = cardListRef.current;
-      const { players, pile, market } = game.gameState;
-      const playerHand = players[0].hand;
+    const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
+    const hiddenPlayerHand = playerHand.slice(playerHandLimit);
 
-      const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
-      const hiddenPlayerHand = playerHand.slice(playerHandLimit);
-      const visibleHandSize = visiblePlayerHand.length;
+    // This logic will now ONLY run on rotation
+    visiblePlayerHand.forEach((card, index) => {
+      if (card) {
+        dealer.dealCard(
+          card,
+          "player",
+          { cardIndex: index, handSize: layoutHandSize }, // Use 7-card layout
+          true // Instant
+        );
+      }
+    });
+    hiddenPlayerHand.forEach((card) => {
+      if (card) {
+        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+      }
+    });
+    market.forEach((card) => {
+      if (card) {
+        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+      }
+    });
+    const computerHand = players[1].hand;
+    const computerHandSize = computerHand.length;
+    computerHand.forEach((card, index) => {
+      if (card) {
+        dealer.dealCard(
+          card,
+          "computer",
+          { cardIndex: index, handSize: computerHandSize },
+          true
+        );
+      }
+    });
+    pile.forEach((card, index) => {
+      if (card) {
+        dealer.dealCard(
+          card,
+          "pile",
+          { cardIndex: index, handSize: pile.length },
+          true
+        );
+      }
+    });
 
-      visiblePlayerHand.forEach((card, index) => {
-        if (card) {
-          dealer.dealCard(
-            card,
-            "player",
-            { cardIndex: index, handSize: visibleHandSize },
-            true // Instant
-          );
-        }
-      });
-      hiddenPlayerHand.forEach((card) => {
-        if (card) {
-          dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-        }
-      });
-      market.forEach((card) => {
-        if (card) {
-          dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-        }
-      });
-      const computerHand = players[1].hand;
-      const computerHandSize = computerHand.length;
-      computerHand.forEach((card, index) => {
-        if (card) {
-          dealer.dealCard(
-            card,
-            "computer",
-            { cardIndex: index, handSize: computerHandSize },
-            true
-          );
-        }
-      });
-      pile.forEach((card, index) => {
-        if (card) {
-          dealer.dealCard(
-            card,
-            "pile",
-            { cardIndex: index, handSize: pile.length },
-            true
-          );
-        }
-      });
-
-      // Update the refs
-      prevWidth.current = width;
-      prevHeight.current = height;
-    }
-  }, [
-    width, // Trigger
-    height, // Trigger
-    isCardListReady,
-    game, // Needed to re-run and get latest state
-    isAnimating, // Needed for the guard
-    playerHandLimit,
-    hasDealt,
-  ]);
+    // ✅ 3. Update the refs so this doesn't run again
+    prevWidth.current = width;
+    prevHeight.current = height;
+  }
+}, [
+  width,
+  height,
+  isCardListReady,
+  game,
+  isAnimating,
+  playerHandLimit,
+  layoutHandSize, // Make sure this is in the array
+  hasDealt,
+]);
   // --- END OF FIX 4 ---
 
   // ✅ FIX 6: Stabilize the onReady callback
@@ -869,10 +819,10 @@ if (!areLoaded || !stableFont || !stableWhotFont) { // Wait for our stable state
           onPress={handlePickFromMarket} // ✅ Now stable
         />
       )}
-      {animatedCards.length > 0 && stableFont && stableWhotFont && (
+      {allCardsStable.length > 0 && stableFont && stableWhotFont && (
         <AnimatedCardList
           ref={cardListRef}
-          cardsInPlay={animatedCards}
+          cardsInPlay={allCardsStable}
           playerHand={playerHand} // ✅ USE STABLE PROP
           font={stableFont} // 8. ✅ PASS THE STABLE STATE PROP
           whotFont={stableWhotFont} // 8. ✅ PASS THE STABLE STATE PROP
@@ -885,6 +835,7 @@ if (!areLoaded || !stableFont || !stableWhotFont) { // Wait for our stable state
     </View>
   );
 };
+export default WhotComputerGameScreen;
 
 // Using the styles you provided
 const styles = StyleSheet.create({
@@ -980,4 +931,3 @@ const styles = StyleSheet.create({
     marginRight: "3%",
   },
 });
-export default WhotComputerGameScreen;
