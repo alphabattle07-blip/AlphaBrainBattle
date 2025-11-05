@@ -15,10 +15,10 @@ import Animated, {
   SharedValue,
 } from "react-native-reanimated";
 import { Canvas, SkFont } from "@shopify/react-native-skia";
-import { Card } from "../types";
+import { Card } from "../types"; // Make sure this path is correct
 import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig";
 import { AnimatedCard } from "./WhotCardTypes";
-import { getCoords } from "../coordinateHelper";
+import { getCoords } from "../coordinateHelper"; // Make sure this path is correct
 import { AnimatedWhotCard } from "./AnimatedWhotCard";
 
 export interface IndividualAnimatedCardHandle {
@@ -34,6 +34,22 @@ export interface IndividualAnimatedCardHandle {
   ) => void;
 }
 
+interface Props {
+  card: Card;
+  font: SkFont | null;
+  whotFont: SkFont | null;
+  marketPos: { x: number; y: number };
+  playerHandIdsSV: SharedValue<string[]>; // From AnimatedCardList
+  width: number;
+  height: number;
+  onPress: (card: Card) => void;
+}
+
+// =================================================================
+// 1. The "Firewall" Component
+// This component is memoized and ONLY receives stable props.
+// It will not re-render when playerHandIdsSV changes.
+// =================================================================
 interface CardRendererProps {
   card: AnimatedCard;
   font: SkFont;
@@ -60,6 +76,10 @@ const MemoizedCardRenderer = memo(
   }
 );
 
+// =================================================================
+// 2. The Main Component
+// This component holds all the animation logic.
+// =================================================================
 const IndividualAnimatedCard = memo(
   forwardRef<IndividualAnimatedCardHandle, Props>(
     (
@@ -68,27 +88,29 @@ const IndividualAnimatedCard = memo(
         font,
         whotFont,
         marketPos,
-        playerHandIdsSV, 
+        playerHandIdsSV,
         width,
         height,
         onPress,
       },
       ref
     ) => {
-      // console.log(`LOG: 🔴 Card ${card.id} re-rendered.`); // Optional: remove for cleaner logs
+      // --- Animated Values ---
       const x = useSharedValue(marketPos.x - CARD_WIDTH / 2);
       const y = useSharedValue(marketPos.y - CARD_HEIGHT / 2);
       const rotation = useSharedValue(0); // For fanning the hand
-
       const zIndex = useSharedValue(1);
-      const cardRotate = useSharedValue(0);
-      const internalX = useSharedValue(0);
-      const internalY = useSharedValue(0);
+      const cardRotate = useSharedValue(0); // For the flip
+      const internalX = useSharedValue(0); // For Skia (can be 0)
+      const internalY = useSharedValue(0); // For Skia (can be 0)
 
+      // --- Stable Shared Value Props ---
+      // We store the 'card' and 'onPress' props (which can change)
+      // in shared values. This makes our gesture stable.
       const cardSV = useSharedValue(card);
       const onPressSV = useSharedValue(onPress);
 
-       useEffect(() => {
+      useEffect(() => {
         cardSV.value = card;
       }, [card, cardSV]);
 
@@ -96,7 +118,7 @@ const IndividualAnimatedCard = memo(
         onPressSV.value = onPress;
       }, [onPress, onPressSV]);
 
-      // Handle for dealing and flipping
+      // --- Imperative Handle (for parent control) ---
       useImperativeHandle(ref, () => ({
         teleportTo(target, options) {
           const { cardIndex, handSize } = options || {};
@@ -131,7 +153,7 @@ const IndividualAnimatedCard = memo(
             if (target === "player" || target === "computer") {
               zIndex.value = 100 + (cardIndex || 0);
             } else if (target === "pile") {
-              zIndex.value = 200;
+              zIndex.value = 200; // High zIndex during animation
             } else {
               zIndex.value = 1;
             }
@@ -152,7 +174,7 @@ const IndividualAnimatedCard = memo(
               y.value = newY;
               rotation.value = newRot;
               if (target === "pile") {
-                zIndex.value = 50 + (cardIndex || 0);
+                zIndex.value = 50 + (cardIndex || 0); // Settle in pile
               }
               return resolve();
             }
@@ -162,7 +184,7 @@ const IndividualAnimatedCard = memo(
             rotation.value = withTiming(newRot, { duration }, (finished) => {
               if (finished) {
                 if (target === "pile") {
-                  zIndex.value = 50 + (cardIndex || 0);
+                  zIndex.value = 50 + (cardIndex || 0); // Settle in pile
                 }
                 runOnJS(resolve)();
               }
@@ -173,7 +195,7 @@ const IndividualAnimatedCard = memo(
         async flip(show) {
           return new Promise((resolve) => {
             cardRotate.value = withTiming(
-              show ? Math.PI : 0,
+              show ? Math.PI : 0, // 0 = back, PI = front
               { duration: 300 },
               (finished) => {
                 if (finished) {
@@ -185,18 +207,17 @@ const IndividualAnimatedCard = memo(
         },
       }));
 
-// Tap gesture
-// IndividualAnimatedCard.tsx
-
-const tapGesture = useMemo(
+      // --- Tap Gesture ---
+      // !! THIS IS THE CRITICAL FIX !!
+      const tapGesture = useMemo(
         () =>
           Gesture.Tap().onEnd(() => {
-            "worklet"; 
+            "worklet";
 
-            // 5. ✅ Read from the new shared values
+            // We read all values from shared values *at the moment of the tap*.
             const handIds = playerHandIdsSV.value;
-            const currentCard = cardSV.value; // Read from SV
-            const currentOnPress = onPressSV.value; // Read from SV
+            const currentCard = cardSV.value;
+            const currentOnPress = onPressSV.value;
 
             let isPlayerCard = false;
             for (let i = 0; i < handIds.length; i++) {
@@ -210,9 +231,13 @@ const tapGesture = useMemo(
               runOnJS(currentOnPress)(currentCard);
             }
           }),
-        [ cardSV, onPressSV] // 6. ✅ Use the STABLE shared value objects as dependencies
+        // The dependency array ONLY includes the stable SVs.
+        // It does NOT include `playerHandIdsSV`, which stops the
+        // gesture from being re-created when paging!
+        [cardSV, onPressSV, playerHandIdsSV] // This is correct now, as playerHandIdsSV is a stable SV object.
       );
-      // Style for the parent Animated.View
+
+      // --- Animated Style ---
       const animatedStyle = useAnimatedStyle(() => ({
         position: "absolute",
         width: CARD_WIDTH,
@@ -225,7 +250,7 @@ const tapGesture = useMemo(
         zIndex: zIndex.value,
       }));
 
-      // Data for the Skia <AnimatedWhotCard>
+      // --- Skia Data ---
       const animatedCard: AnimatedCard = useMemo(
         () => ({
           ...card,
@@ -239,24 +264,22 @@ const tapGesture = useMemo(
         [card, cardRotate, internalX, internalY]
       );
 
+      // --- Render ---
       if (!font || !whotFont) {
-        console.warn(
-          `Card ${card.id} is not rendering because fonts are missing.`
-        );
+        // console.warn(`Card ${card.id} missing fonts.`);
         return null;
       }
 
-      // --- Render Logic ---
-return (
-    <MemoizedCardRenderer
-     card={animatedCard}
-     font={font}
-     whotFont={whotFont}
-     style={animatedStyle}
-     gesture={tapGesture}
-    />
-   );
-  }
- )
+      return (
+        <MemoizedCardRenderer
+          card={animatedCard}
+          font={font}
+          whotFont={whotFont}
+          style={animatedStyle}
+          gesture={tapGesture}
+        />
+      );
+    }
+  )
 );
 export default IndividualAnimatedCard;

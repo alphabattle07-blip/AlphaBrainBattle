@@ -1,51 +1,46 @@
-// core/ui/AnimatedCardList.tsx
-
+// AnimatedCardList.tsx
 import React, {
+  memo,
   forwardRef,
-  useImperativeHandle,
   useRef,
-  useState,
-  useEffect,
+  useImperativeHandle,
   useMemo,
-  memo, // 1. Import memo
-  useCallback,
-  MutableRefObject, // 2. Import useCallback
+  useEffect,
 } from "react";
-import { StyleSheet, View } from "react-native";
 import { SkFont } from "@shopify/react-native-skia";
 import { SharedValue } from "react-native-reanimated";
-
+import { Card } from "../types"; // Make sure this path is correct
+import { getCoords } from "../coordinateHelper"; // Make sure this path is correct
 import IndividualAnimatedCard, {
   IndividualAnimatedCardHandle,
 } from "./IndividualAnimatedCard";
 
-import { Card } from "../types";
-import { getCoords } from "../coordinateHelper";
-
+// Props from WhotComputerGameScreen
 interface Props {
   cardsInPlay: Card[];
-  playerHandIdsSV: SharedValue<string[]>; // 2. ✅ NEW
+  playerHandIdsSV: SharedValue<string[]>;
   font: SkFont | null;
   whotFont: SkFont | null;
   width: number;
   height: number;
-  onCardPress?: (card: Card) => void;
-  onReady?: () => void;
+  onCardPress: (card: Card) => void;
+  onReady: () => void;
 }
+
+// Public handle for WhotComputerGameScreen
 export interface AnimatedCardListHandle {
   dealCard: (
     card: Card,
     target: "player" | "computer" | "pile" | "market",
-    options: { cardIndex: number; handSize?: number },
+    options?: any,
     instant?: boolean
   ) => Promise<void>;
+  flipCard: (card: Card, show: boolean) => Promise<void>;
   teleportCard: (
     card: Card,
     target: "player" | "computer" | "pile" | "market",
-    options: { cardIndex: number; handSize?: number }
+    options?: any
   ) => void;
-
-  flipCard: (card: Card, faceUp: boolean) => Promise<void>;
 }
 
 const AnimatedCardList = memo(
@@ -63,111 +58,85 @@ const AnimatedCardList = memo(
       },
       ref
     ) => {
-      console.log("LOG: 🔴 AnimatedCardList re-rendered."); // As seen in your logs
-      // const [uniqueCards, setUniqueCards] = useState<Card[]>([]);
-      const cardRefs = useRef<
-        Record<string, IndividualAnimatedCardHandle | null>
-      >({});
+      // A Map to hold refs for all 54 cards
+      const cardRefs = useRef<Map<string, IndividualAnimatedCardHandle>>(
+        new Map()
+      );
 
-      const marketPosition = useMemo(
+      // Stable position for the market
+      const marketPos = useMemo(
         () => getCoords("market", {}, width, height),
         [width, height]
       );
 
-      const uniqueCards = useMemo(() => {
-    console.log("LOG: 🧬 Recalculating uniqueCards list (should only be once)");
-    if (!cardsInPlay) return [];
+      // Call onReady when fonts are loaded
+      useEffect(() => {
+        if (font && whotFont) {
+          console.log("LOG ✅ Card list is ready, calling onReady().");
+          onReady();
+        }
+      }, [font, whotFont, onReady]);
 
-    const seen = new Set<string>();
-    return cardsInPlay.filter((c) => {
-     if (seen.has(c.id)) return false;
-     seen.add(c.id);
-     return true;
-    });
-   }, [cardsInPlay]);
-
-useEffect(() => {
-    // We are "ready" as soon as we have cards to render
-    if (uniqueCards.length > 0 && onReady) {
-     const timer = setTimeout(() => {
-      console.log("LOG ✅ Card list is ready, calling onReady().");
-      onReady();
-     }, 0);
-     return () => clearTimeout(timer);
-    }
-    // Depend on the memoized list and the stable onReady callback
-   }, [uniqueCards, onReady]);
-
+      // --- Public API for the parent component ---
       useImperativeHandle(ref, () => ({
-        async dealCard(card, target, options, instant) {
-          const cardRef = cardRefs.current[card.id];
+        dealCard: async (card, target, options, instant) => {
+          const cardRef = cardRefs.current.get(card.id);
           if (cardRef) {
             await cardRef.dealTo(target, options, instant);
           } else {
-            console.warn(`No ref found for card ${card.id} to deal.`);
+            console.warn(`No ref found for card ${card.id} during deal.`);
           }
         },
-
-        teleportCard(card, target, options) {
-          const cardRef = cardRefs.current[card.id];
+        flipCard: async (card, show) => {
+          const cardRef = cardRefs.current.get(card.id);
           if (cardRef) {
-            cardRef.teleportTo(target, options); // Changed to teleportTo
+            await cardRef.flip(show);
           } else {
-            console.warn(`No ref found for card ${card.id} to teleport.`);
+            console.warn(`No ref found for card ${card.id} during flip.`);
           }
         },
-        async flipCard(card, faceUp) {
-          const cardRef = cardRefs.current[card.id];
+        teleportCard: (card, target, options) => {
+          const cardRef = cardRefs.current.get(card.id);
           if (cardRef) {
-            await cardRef.flip(faceUp);
+            cardRef.teleportTo(target, options);
           } else {
-            console.warn(`No ref found for card ${card.id} to flip.`);
+            console.warn(`No ref found for card ${card.id} during teleport.`);
           }
         },
       }));
 
-      const handleCardPress = useCallback(
-        (card: Card) => {
-          if (onCardPress) {
-            onCardPress(card);
-          }
-        },
-        [onCardPress] // Dependency is stable
-      );
-
+      // --- Render All Cards ---
+      // We render all 54 cards. They are invisible and stacked
+      // at the market position by default.
       return (
-        <View style={styles.container}>
-         {uniqueCards.map((card) => {
-            // ✅ READ FROM THE REF
-            
-
-            return (
-              <IndividualAnimatedCard
-                key={card.id}
-                ref={(el) => (cardRefs.current[card.id] = el)}
-                card={card}
-                font={font}
-                whotFont={whotFont}
-                marketPos={marketPosition}
-                playerHandIdsSV={playerHandIdsSV}
-                width={width}
-                height={height}
-                // 4. ✅ PASS THE STABLE FUNCTION
-                onPress={handleCardPress}
-              />
-            );
-          })}
-        </View>
+        <>
+          {cardsInPlay.map((card) => (
+            <IndividualAnimatedCard
+              key={card.id}
+              ref={(node) => {
+                // Keep the ref map updated
+                if (node) {
+                  cardRefs.current.set(card.id, node);
+                } else {
+                  cardRefs.current.delete(card.id);
+                }
+              }}
+              card={card}
+              font={font}
+              whotFont={whotFont}
+              marketPos={marketPos}
+              playerHandIdsSV={playerHandIdsSV}
+              width={width}
+              height={height}
+              onPress={onCardPress}
+            />
+          ))}
+        </>
       );
     }
   )
 );
 
-const styles = StyleSheet.create({
-  container: {
-    ...StyleSheet.absoluteFillObject,
-    pointerEvents: "box-none", // Allow taps to pass through
-  },
-});
-
 export default AnimatedCardList;
+
+

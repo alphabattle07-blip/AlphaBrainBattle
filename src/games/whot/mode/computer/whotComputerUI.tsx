@@ -28,7 +28,7 @@ type Props = {
 
 // Component definition
 const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
-  // console.log("LOG: 🔵 ComputerUI re-rendered."); // You can remove this log now
+  console.log("LOG: 🔵 ComputerUI re-rendered."); // You can remove this log now
   const levelInfo = levels.find((l) => l.value === level);
 
   if (!computerState) { // ✅ CHECK new prop

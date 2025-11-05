@@ -2,6 +2,7 @@
 import React, {useState, useEffect,useCallback,useMemo,useRef, useLayoutEffect} from "react";
 import {View, StyleSheet, useWindowDimensions,Text, Button,
   ActivityIndicator, Pressable} from "react-native";
+import { SkFont } from "@shopify/react-native-skia";
 import MemoizedBackground from "../core/ui/MemoizedBackground";
 
 
@@ -88,22 +89,33 @@ const marketCardCount = game?.gameState.market.length || 0;
   );
 
   // ✅ FIX: Create a stable `computerState` object for the UI
-const computerState = useMemo(() => {
-  if (!game) return null;
+const [computerState, setComputerState] = useState({
+    name: "Computer",
+    handLength: 0,
+    isCurrentPlayer: false,
+  });
 
-  const computerPlayer = game.gameState.players[1];
-  if (!computerPlayer) return null;
-
-  return {
-    name: computerPlayer.name,
-    handLength: computerPlayer.hand.length,
-    isCurrentPlayer: game.gameState.currentPlayer === 1,
-  };
-}, [
-  game?.gameState.players[1]?.name,
-  game?.gameState.players[1]?.hand.length,
-  game?.gameState.currentPlayer,
-]);
+  useEffect(() => {
+    if (game) {
+      const computerPlayer = game.gameState.players[1];
+      const isComputerTurn = game.gameState.currentPlayer === 1;
+      // ✅ Only update state if there's an actual change
+      if (
+        computerPlayer.hand.length !== computerState.handLength ||
+        isComputerTurn !== computerState.isCurrentPlayer
+      ) {
+        setComputerState({
+          name: computerPlayer.name,
+          handLength: computerPlayer.hand.length,
+          isCurrentPlayer: isComputerTurn,
+        });
+      }
+    }
+  }, [
+    game?.gameState.players[1]?.hand.length,
+    game?.gameState.currentPlayer,
+    game?.gameState.players[1]?.name,
+  ]); // Precise dependencies
 
   // --- CONSTANTS ---
   const playerHandLimit = 5; // The 6 visible slots
