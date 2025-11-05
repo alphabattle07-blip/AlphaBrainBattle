@@ -95,9 +95,6 @@ export const playCard = (
   return newState;
 };
 
-/**
- * Handle a player picking from the market.
- */
 export const pickCard = (
   state: GameState,
   playerIndex: number
@@ -136,9 +133,6 @@ export const pickCard = (
   return { newState, drawnCards }; // ✅ RETURN MODIFIED
 };
 
-/**
- * Check winner.
- */
 export const checkWinner = (state: GameState): Player | null => {
   return state.players.find((p) => p.hand.length === 0) || null;
 };

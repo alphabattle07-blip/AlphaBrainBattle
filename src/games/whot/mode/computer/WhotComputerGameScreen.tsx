@@ -2,8 +2,8 @@
 import React, {useState, useEffect,useCallback,useMemo,useRef, useLayoutEffect} from "react";
 import {View, StyleSheet, useWindowDimensions,Text, Button,
   ActivityIndicator, Pressable} from "react-native";
-import { Canvas, Rect } from "@shopify/react-native-skia";
-import { runOnJS } from "react-native-reanimated";
+import MemoizedBackground from "../core/ui/MemoizedBackground";
+
 
 import AnimatedCardList, {
   AnimatedCardListHandle,
@@ -16,6 +16,7 @@ import { MarketPile } from "../core/ui/MarketPile";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
 import { CARD_HEIGHT } from "../core/ui/whotConfig";
 import { chooseComputerMove } from "./whotComputerLogic";
+import { runOnJS, useSharedValue } from "react-native-reanimated";
 
 type GameData = {
   gameState: GameState;
@@ -31,14 +32,17 @@ const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts()
   const [stableFont, setStableFont] = useState<SkFont | null>(null);
   const [stableWhotFont, setStableWhotFont] = useState<SkFont | null>(null);
 
-  useEffect(() => {
-    if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
-      console.log("✅ Capturing stable fonts ONCE.");
-      // ...save them to our state.
-      setStableFont(loadedFont);
-      setStableWhotFont(loadedWhotFont);
-    }
-}, [areLoaded, loadedFont, loadedWhotFont, stableFont]);
+useEffect(() => {
+ // This guard ensures we only set the state *once*
+ if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
+ console.log("✅ Capturing stable fonts ONCE.");
+ setStableFont(loadedFont);
+ setStableWhotFont(loadedWhotFont);
+ }
+ // ✅ FIX: Remove loadedFont and loadedWhotFont.
+ // We only care about *when* they are loaded (areLoaded)
+ // and whether we have *already* saved them (stableFont).
+}, [areLoaded, stableFont]);
 
  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [computerLevel, setComputerLevel] = useState<ComputerLevel>(
@@ -46,7 +50,7 @@ const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts()
   );
   const [game, setGame] = useState<GameData | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const allCardsStable = useMemo(() => game?.allCards || [], [game?.allCards]);
+  const [allCards, setAllCards] = useState<Card[]>([]);
   const [isCardListReady, setIsCardListReady] = useState(false);
 
   const cardListRef = useRef<AnimatedCardListHandle>(null);
@@ -54,25 +58,14 @@ const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts()
   const prevHeight = useRef(height);
 
   const [hasDealt, setHasDealt] = useState(false);
-  const stablePlayerHandIds = useMemo(() => {
-  if (!game) return "";
-const ids = game.gameState.players[0].hand.map((c) => c.id);
-ids.sort();
-return ids.join(',');
-}, [game?.gameState.players[0].hand]);
 
 
 const playerHand = useMemo(
   () => game?.gameState.players[0].hand || [],
-  [stablePlayerHandIds] // ✅ Use the new stable dependency
+  [game?.gameState.players[0].hand] // <-- Depend directly on the hand array
 );
 
 const marketCardCount = game?.gameState.market.length || 0;
-
-const marketCards = useMemo(
-    () => game?.gameState.market || [],
-    [marketCardCount] // ✅ NOW STABLE: Only changes if the number of 
-  );
 
   const playerHandStyle = useMemo(
     () => [
@@ -123,6 +116,15 @@ const computerState = useMemo(() => {
   const isAnimatingRef = useRef(isAnimating);
   const isPagingActiveRef = useRef(isPagingActive);
 
+  const playerHandIdsSV = useSharedValue<string[]>([]);
+
+useEffect(() => {
+    // This safely updates the shared value for the UI thread.
+    const newHandIds = playerHand.map(c => c.id);
+    console.log("Updating playerHandIdsSV.value:", newHandIds.join(','));
+    playerHandIdsSV.value = newHandIds;
+  }, [playerHand, playerHandIdsSV]);
+
   useEffect(() => {
     gameRef.current = game;
   }, [game]);
@@ -145,6 +147,7 @@ const computerState = useMemo(() => {
     );
 
     setGame({ gameState, allCards });
+    setAllCards(allCards);
     setSelectedLevel(levels.find((l) => l.value === lvl)?.label || null);
     setComputerLevel(lvl);
     setIsCardListReady(false);
@@ -560,179 +563,181 @@ const computerState = useMemo(() => {
     setIsAnimating(false);
   }, [playerHandLimit]); // ✅ 'game', 'isAnimating', 'isPagingActive' removed
 
-  useEffect(() => {
-    if (!isCardListReady || !cardListRef.current || !game || hasDealt) {
-      return;
+  // In whotComputerGameScreen.tsx
+
+ useEffect(() => {
+  if (!isCardListReady || !cardListRef.current || !game || hasDealt) {
+   return;
+  }
+  if (!isAnimating) {
+   return;
+  }
+
+  const dealer = cardListRef.current;
+  let isMounted = true;
+
+  const dealSmoothly = async () => {
+   console.log("🎴 Starting smooth deal... (This should only run once)");
+   const { players, pile, market } = game.gameState;
+   const playerHand = players[0].hand;
+   const computerHand = players[1].hand;
+   const computerHandSize = computerHand.length;
+
+   const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
+   const hiddenPlayerHand = playerHand.slice(playerHandLimit); // We'll use this
+
+   const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+   const dealDelay = 150;
+   for (let i = 0; i < computerHandSize; i++) {
+    if (!isMounted) return;
+    const computerCard = computerHand[i];
+    if (computerCard) {
+     await dealer.dealCard(
+      computerCard,
+      "computer",
+      { cardIndex: i, handSize: computerHandSize },
+      false
+     );
+     await delay(dealDelay);
     }
-    if (!isAnimating) {
+  }
+   for (let i = 0; i < visiblePlayerHand.length; i++) {
+    if (!isMounted) return;
+    const playerCard = visiblePlayerHand[i];
+    if (playerCard) {
+     await dealer.dealCard(
+      playerCard,
+      "player",
+      { cardIndex: i, handSize: layoutHandSize },
+      false
+     );
+     await delay(dealDelay);
+    }
+   }
+  for (const card of hiddenPlayerHand) {
+        if (!isMounted) return;
+        if (card) {
+          dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+        }
+      }
+   for (const pileCard of pile) {
+    if (pileCard) {
+     await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
+    }
+   }
+   await delay(500);
+   if (!isMounted) return;
+
+   const flipPromises: Promise<void>[] = [];
+   // ✅ OPTIMIZATION: Only flip the visible cards
+   visiblePlayerHand.forEach((card) => {
+    if (card) flipPromises.push(dealer.flipCard(card, true));
+   });
+   // (The hidden cards will be flipped when/if they are paged into view)
+
+   const topPileCard = pile[pile.length - 1];
+   if (topPileCard) {
+    flipPromises.push(dealer.flipCard(topPileCard, true));
+   }
+   await Promise.all(flipPromises);
+   console.log("✅ Deal complete.");
+   if (isMounted) {
+    runOnJS(setHasDealt)(true);
+    runOnJS(setIsAnimating)(false);
+   }
+  };
+
+  const timerId = setTimeout(dealSmoothly, 0);
+
+  return () => {
+   isMounted = false;
+   clearTimeout(timerId);
+  };
+ }, [isCardListReady, game, hasDealt, isAnimating, playerHandLimit]);
+
+ useLayoutEffect(() => {
+    // ✅ 1. Read from refs, not state
+    const currentGame = gameRef.current;
+    const animating = isAnimatingRef.current;
+
+    // ✅ 2. Use refs in the guard
+    if (
+      !isCardListReady ||
+      !cardListRef.current ||
+      !currentGame || // <-- Use ref's value
+      animating ||     // <-- Use ref's value
+      !hasDealt
+    ) {
       return;
     }
 
-    const dealer = cardListRef.current;
-    let isMounted = true;
+    // ✅ 3. The rest of your logic is perfect
+    const hasRotated =
+      prevWidth.current !== width || prevHeight.current !== height;
 
-    const dealSmoothly = async () => {
-      console.log("🎴 Starting smooth deal... (This should only run once)");
-      const { players, pile, market } = game.gameState;
+    if (hasRotated) {
+      console.log("🔄 Screen rotated, instantly moving cards...");
+      const dealer = cardListRef.current;
+      const { players, pile, market } = currentGame.gameState; // <-- Use ref's value
       const playerHand = players[0].hand;
-      const computerHand = players[1].hand;
-      const computerHandSize = computerHand.length;
 
       const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
       const hiddenPlayerHand = playerHand.slice(playerHandLimit);
 
-      const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-      const dealDelay = 150;
-
-      // Move all cards to market instantly
-      for (const card of game.allCards) {
-        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-      }
-      await delay(50);
-
-      // --- Deal out with animation ---
-      for (let i = 0; i < computerHandSize; i++) {
-        if (!isMounted) return;
-        const computerCard = computerHand[i];
-        if (computerCard) {
-          await dealer.dealCard(
-            computerCard,
-            "computer",
-            { cardIndex: i, handSize: computerHandSize },
-            false
-          );
-          await delay(dealDelay);
-        }
-      }
-      for (let i = 0; i < visiblePlayerHand.length; i++) {
-        if (!isMounted) return;
-        const playerCard = visiblePlayerHand[i];
-        if (playerCard) {
-          await dealer.dealCard(
-            playerCard,
+      visiblePlayerHand.forEach((card, index) => {
+        if (card) {
+          dealer.dealCard(
+            card,
             "player",
-            { cardIndex: i, handSize: layoutHandSize },
-            false
+            { cardIndex: index, handSize: layoutHandSize },
+            true // Instant
           );
-          await delay(dealDelay);
         }
-      }
-
-
-      for (const pileCard of pile) {
-        if (pileCard) {
-          await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
-        }
-      }
-      await delay(500);
-      if (!isMounted) return;
-
-      const flipPromises: Promise<void>[] = [];
-      players[0].hand.forEach((card) => {
-        if (card) flipPromises.push(dealer.flipCard(card, true));
       });
-      const topPileCard = pile[pile.length - 1];
-      if (topPileCard) {
-        flipPromises.push(dealer.flipCard(topPileCard, true));
-      }
-      await Promise.all(flipPromises);
-      console.log("✅ Deal complete.");
-      if (isMounted) {
-        runOnJS(setHasDealt)(true);
-        runOnJS(setIsAnimating)(false);
-      }
-    };
-
-    const timerId = setTimeout(dealSmoothly, 0);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timerId);
-    };
-  }, [isCardListReady, game, hasDealt, isAnimating, playerHandLimit]);
-  useLayoutEffect(() => {
-  if (
-    !isCardListReady ||
-    !cardListRef.current ||
-    !game ||
-    isAnimating ||
-    !hasDealt
-  ) {
-    return;
-  }
-
-  // ✅ 1. CHECK if the screen dimensions *actually* changed
-  const hasRotated =
-    prevWidth.current !== width || prevHeight.current !== height;
-
-  // ✅ 2. WRAP all logic inside this "if" statement
-  if (hasRotated) {
-    console.log("🔄 Screen rotated, instantly moving cards...");
-    const dealer = cardListRef.current;
-    const { players, pile, market } = game.gameState;
-    const playerHand = players[0].hand;
-
-    const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
-    const hiddenPlayerHand = playerHand.slice(playerHandLimit);
-
-    // This logic will now ONLY run on rotation
-    visiblePlayerHand.forEach((card, index) => {
-      if (card) {
-        dealer.dealCard(
-          card,
-          "player",
-          { cardIndex: index, handSize: layoutHandSize }, // Use 7-card layout
-          true // Instant
-        );
-      }
-    });
-    hiddenPlayerHand.forEach((card) => {
-      if (card) {
-        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-      }
-    });
-    market.forEach((card) => {
-      if (card) {
-        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-      }
-    });
-    const computerHand = players[1].hand;
-    const computerHandSize = computerHand.length;
-    computerHand.forEach((card, index) => {
-      if (card) {
-        dealer.dealCard(
-          card,
-          "computer",
-          { cardIndex: index, handSize: computerHandSize },
-          true
-        );
-      }
-    });
-    pile.forEach((card, index) => {
-      if (card) {
-        dealer.dealCard(
-          card,
-          "pile",
-          { cardIndex: index, handSize: pile.length },
-          true
-        );
-      }
-    });
-
-    // ✅ 3. Update the refs so this doesn't run again
-    prevWidth.current = width;
-    prevHeight.current = height;
-  }
-}, [
-  width,
-  height,
-  isCardListReady,
-  game,
-  isAnimating,
-  playerHandLimit,
-  layoutHandSize, // Make sure this is in the array
-  hasDealt,
-]);
+      hiddenPlayerHand.forEach((card) => {
+        if (card) {
+          dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+        }
+      });
+      market.forEach((card) => {
+        if (card) {
+          dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+        }
+      });
+      const computerHand = players[1].hand;
+      const computerHandSize = computerHand.length;
+      computerHand.forEach((card, index) => {
+        if (card) {
+          dealer.dealCard(
+            card,
+            "computer",
+            { cardIndex: index, handSize: computerHandSize },
+            true
+          );
+        }
+      });
+      pile.forEach((card, index) => {
+        if (card) {
+          dealer.dealCard(
+            card,
+            "pile",
+            { cardIndex: index, handSize: pile.length },
+            true
+          );
+        }
+      });
+      // Update the refs so this doesn't run again
+      prevWidth.current = width;
+      prevHeight.current = height;
+    }
+  }, [
+    width,
+    height,
+    isCardListReady,
+    hasDealt,
+    playerHandLimit, // These are all fine
+    layoutHandSize,
+  ]);
   // --- END OF FIX 4 ---
 
   // ✅ FIX 6: Stabilize the onReady callback
@@ -780,9 +785,7 @@ if (!areLoaded || !stableFont || !stableWhotFont) { // Wait for our stable state
           />
         </View>
       )}
-      <Canvas style={StyleSheet.absoluteFill}>
-        <Rect x={0} y={0} width={width} height={height} color="#1E5E4E" />
-      </Canvas>
+      <MemoizedBackground width={width} height={height} />
       <View style={computerHandStyle} />
       <View style={playerHandStyle} />
 
@@ -811,7 +814,7 @@ if (!areLoaded || !stableFont || !stableWhotFont) { // Wait for our stable state
 
       {game && (
         <MarketPile
-          cards={marketCards} // ✅ USE STABLE PROP
+          count={marketCardCount} // ✅ USE STABLE PROP
           font={stableWhotFont} // 6. ✅ PASS THE STABLE STATE PROP
           smallFont={stableFont} // 6. ✅ PASS THE STABLE STATE PROP
           width={width}
@@ -819,11 +822,11 @@ if (!areLoaded || !stableFont || !stableWhotFont) { // Wait for our stable state
           onPress={handlePickFromMarket} // ✅ Now stable
         />
       )}
-      {allCardsStable.length > 0 && stableFont && stableWhotFont && (
+      {allCards.length > 0 && stableFont && stableWhotFont && (
         <AnimatedCardList
           ref={cardListRef}
-          cardsInPlay={allCardsStable}
-          playerHand={playerHand} // ✅ USE STABLE PROP
+          cardsInPlay={allCards}
+          playerHandIdsSV={playerHandIdsSV} // ✅ NEW
           font={stableFont} // 8. ✅ PASS THE STABLE STATE PROP
           whotFont={stableWhotFont} // 8. ✅ PASS THE STABLE STATE PROP
           width={width}

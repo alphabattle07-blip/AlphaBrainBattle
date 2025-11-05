@@ -8,10 +8,12 @@ import React, {
   useEffect,
   useMemo,
   memo, // 1. Import memo
-  useCallback, // 2. Import useCallback
+  useCallback,
+  MutableRefObject, // 2. Import useCallback
 } from "react";
 import { StyleSheet, View } from "react-native";
 import { SkFont } from "@shopify/react-native-skia";
+import { SharedValue } from "react-native-reanimated";
 
 import IndividualAnimatedCard, {
   IndividualAnimatedCardHandle,
@@ -22,7 +24,7 @@ import { getCoords } from "../coordinateHelper";
 
 interface Props {
   cardsInPlay: Card[];
-  playerHand: Card[];
+  playerHandIdsSV: SharedValue<string[]>; // 2. ✅ NEW
   font: SkFont | null;
   whotFont: SkFont | null;
   width: number;
@@ -51,7 +53,7 @@ const AnimatedCardList = memo(
     (
       {
         cardsInPlay,
-        playerHand,
+        playerHandIdsSV,
         font,
         whotFont,
         width,
@@ -62,7 +64,7 @@ const AnimatedCardList = memo(
       ref
     ) => {
       console.log("LOG: 🔴 AnimatedCardList re-rendered."); // As seen in your logs
-      const [uniqueCards, setUniqueCards] = useState<Card[]>([]);
+      // const [uniqueCards, setUniqueCards] = useState<Card[]>([]);
       const cardRefs = useRef<
         Record<string, IndividualAnimatedCardHandle | null>
       >({});
@@ -72,27 +74,29 @@ const AnimatedCardList = memo(
         [width, height]
       );
 
-      useEffect(() => {
-        if (!cardsInPlay) return;
+      const uniqueCards = useMemo(() => {
+    console.log("LOG: 🧬 Recalculating uniqueCards list (should only be once)");
+    if (!cardsInPlay) return [];
 
-        const seen = new Set<string>();
-        const filtered = cardsInPlay.filter((c) => {
-          if (seen.has(c.id)) return false;
-          seen.add(c.id);
-          return true;
-        });
+    const seen = new Set<string>();
+    return cardsInPlay.filter((c) => {
+     if (seen.has(c.id)) return false;
+     seen.add(c.id);
+     return true;
+    });
+   }, [cardsInPlay]);
 
-        setUniqueCards(filtered);
-
-        const timer = setTimeout(() => {
-          if (onReady) {
-            console.log("LOG ✅ Card list is ready, calling onReady().");
-            onReady();
-          }
-        }, 0);
-
-        return () => clearTimeout(timer);
-      }, [cardsInPlay, onReady]);
+useEffect(() => {
+    // We are "ready" as soon as we have cards to render
+    if (uniqueCards.length > 0 && onReady) {
+     const timer = setTimeout(() => {
+      console.log("LOG ✅ Card list is ready, calling onReady().");
+      onReady();
+     }, 0);
+     return () => clearTimeout(timer);
+    }
+    // Depend on the memoized list and the stable onReady callback
+   }, [uniqueCards, onReady]);
 
       useImperativeHandle(ref, () => ({
         async dealCard(card, target, options, instant) {
@@ -133,8 +137,9 @@ const AnimatedCardList = memo(
 
       return (
         <View style={styles.container}>
-          {uniqueCards.map((card) => {
-            const isPlayerCard = playerHand.some((c) => c.id === card.id);
+         {uniqueCards.map((card) => {
+            // ✅ READ FROM THE REF
+            
 
             return (
               <IndividualAnimatedCard
@@ -144,7 +149,7 @@ const AnimatedCardList = memo(
                 font={font}
                 whotFont={whotFont}
                 marketPos={marketPosition}
-                isPlayerCard={isPlayerCard}
+                playerHandIdsSV={playerHandIdsSV}
                 width={width}
                 height={height}
                 // 4. ✅ PASS THE STABLE FUNCTION

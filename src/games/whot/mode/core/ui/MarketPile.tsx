@@ -1,16 +1,15 @@
 // core/ui/MarketPile.tsx
-import React, { useMemo, memo } from "react"; // 1. Import memo
+import React, { useMemo, memo } from "react"; 
 import { StyleSheet, View, Text } from "react-native";
 import { Canvas, Group } from "@shopify/react-native-skia";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS } from "react-native-reanimated";
 import { WhotCardBack } from "./WhotCardBack";
-import { Card } from "../types";
 import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig";
 import { getCoords } from "../coordinateHelper";
 
 interface MarketPileProps {
-  cards: Card[];
+  count: number;
   font: any;
   smallFont: any;
   onPress?: () => void;
@@ -21,10 +20,41 @@ interface MarketPileProps {
 const MAX_STACK_CARDS = 15;
 const STACK_OFFSET = 0.4;
 
+// ✅ 1. CREATE THE NEW INNER, MEMOIZED CANVAS
+interface MemoizedMarketCanvasProps {
+  visualStackCount: number;
+  font: any;
+  smallFont: any;
+}
+
+const MemoizedMarketCanvas = memo(
+  ({ visualStackCount, font, smallFont }: MemoizedMarketCanvasProps) => {
+    // This component will *only* re-render when visualStackCount
+    // actually changes (e.g., from 15 to 14).
+    return (
+      <Canvas style={StyleSheet.absoluteFill}>
+        {Array.from({ length: visualStackCount }).map((_, index) => (
+          <Group
+            key={index}
+            transform={[{ translateY: index * STACK_OFFSET }]}
+          >
+            <WhotCardBack
+              width={CARD_WIDTH}
+              height={CARD_HEIGHT}
+              font={font}
+              smallFont={smallFont}
+            />
+          </Group>
+        ))}
+      </Canvas>
+    );
+  }
+);
+
 // 2. Wrap the component in memo()
 export const MarketPile = memo(
   ({
-    cards,
+    count,
     font,
     smallFont,
     onPress,
@@ -50,10 +80,10 @@ export const MarketPile = memo(
       [marketPos]
     );
 
-    const visualStack = useMemo(
-      () => cards.slice(0, Math.min(cards.length, MAX_STACK_CARDS)),
-      [cards]
-    );
+    const visualStackCount = useMemo(
+   () => Math.min(count, MAX_STACK_CARDS),
+   [count]
+  );
 
     const tapGesture = useMemo(
       () =>
@@ -65,38 +95,29 @@ export const MarketPile = memo(
       [onPress]
     );
 
-    if (cards.length === 0 || !font || !smallFont) {
+    if ( !font || !smallFont) {
       return null;
     }
 
-    return (
-      <GestureDetector gesture={tapGesture}>
-        <Animated.View style={style}>
-          {/* Canvas showing the stacked cards */}
-          <Canvas style={StyleSheet.absoluteFill}>
-            {visualStack.map((card, index) => (
-              <Group
-                key={card.id}
-                transform={[{ translateY: index * STACK_OFFSET }]}
-              >
-                <WhotCardBack
-                  width={CARD_WIDTH}
-                  height={CARD_HEIGHT}
-                  font={font}
-                  smallFont={smallFont}
-                />
-              </Group>
-            ))}
-          </Canvas>
+return (
+   <GestureDetector gesture={tapGesture}>
+    <Animated.View style={style}>
 
-          {/* Card count badge */}
-          <View style={styles.badgeContainer}>
-            <Text style={styles.badgeText}>{cards.length}</Text>
-          </View>
-        </Animated.View>
-      </GestureDetector>
-    );
-  }
+          <MemoizedMarketCanvas 
+            visualStackCount={visualStackCount}
+            font={font}
+            smallFont={smallFont}
+          />
+
+    {count > 0 && (
+   <View style={styles.badgeContainer}>
+   <Text style={styles.badgeText}>{count}</Text>
+   </View>
+  )}
+  </Animated.View>
+   </GestureDetector>
+  );
+ }
 );
 
 const styles = StyleSheet.create({

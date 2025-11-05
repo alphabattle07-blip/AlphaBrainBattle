@@ -1,8 +1,19 @@
 // IndividualAnimatedCard.tsx
-import React, {forwardRef,useImperativeHandle,useMemo,memo} from "react";
+import React, {
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+  memo,
+  useEffect,
+} from "react";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {useSharedValue,useAnimatedStyle,withTiming,
-  runOnJS,} from "react-native-reanimated";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+  SharedValue,
+} from "react-native-reanimated";
 import { Canvas, SkFont } from "@shopify/react-native-skia";
 import { Card } from "../types";
 import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig";
@@ -23,26 +34,48 @@ export interface IndividualAnimatedCardHandle {
   ) => void;
 }
 
-interface Props {
-  card: Card;
-  font: SkFont | null;
-  whotFont: SkFont | null;
-  marketPos: { x: number; y: number };
-  isPlayerCard: boolean;
-  width: number; // Screen width
-  height: number; // Screen height
-  onPress?: (card: Card) => void;
+interface CardRendererProps {
+  card: AnimatedCard;
+  font: SkFont;
+  whotFont: SkFont;
+  style: any; // The animated style
+  gesture: any; // The tap gesture
 }
 
-// 2. Wrap the entire forwardRef in memo()
+const MemoizedCardRenderer = memo(
+  ({ card, font, whotFont, style, gesture }: CardRendererProps) => {
+    return (
+      <GestureDetector gesture={gesture}>
+        <Animated.View style={style}>
+          <Canvas style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
+            <AnimatedWhotCard
+              card={card}
+              font={font}
+              whotFont={whotFont}
+            />
+          </Canvas>
+        </Animated.View>
+      </GestureDetector>
+    );
+  }
+);
+
 const IndividualAnimatedCard = memo(
   forwardRef<IndividualAnimatedCardHandle, Props>(
     (
-      { card, font, whotFont, marketPos, width, height, onPress },
+      {
+        card,
+        font,
+        whotFont,
+        marketPos,
+        playerHandIdsSV, 
+        width,
+        height,
+        onPress,
+      },
       ref
     ) => {
-      console.log(`LOG: 🔴 Card ${card.id} re-rendered.`);
-      // ... (all the existing code inside the component remains the same)
+      // console.log(`LOG: 🔴 Card ${card.id} re-rendered.`); // Optional: remove for cleaner logs
       const x = useSharedValue(marketPos.x - CARD_WIDTH / 2);
       const y = useSharedValue(marketPos.y - CARD_HEIGHT / 2);
       const rotation = useSharedValue(0); // For fanning the hand
@@ -52,9 +85,19 @@ const IndividualAnimatedCard = memo(
       const internalX = useSharedValue(0);
       const internalY = useSharedValue(0);
 
+      const cardSV = useSharedValue(card);
+      const onPressSV = useSharedValue(onPress);
+
+       useEffect(() => {
+        cardSV.value = card;
+      }, [card, cardSV]);
+
+      useEffect(() => {
+        onPressSV.value = onPress;
+      }, [onPress, onPressSV]);
+
       // Handle for dealing and flipping
       useImperativeHandle(ref, () => ({
-        // ... (teleportTo, dealTo, flip functions)
         teleportTo(target, options) {
           const { cardIndex, handSize } = options || {};
 
@@ -142,17 +185,33 @@ const IndividualAnimatedCard = memo(
         },
       }));
 
-      // Tap gesture
-      const tapGesture = useMemo(
+// Tap gesture
+// IndividualAnimatedCard.tsx
+
+const tapGesture = useMemo(
         () =>
           Gesture.Tap().onEnd(() => {
-            if (onPress) {
-              runOnJS(onPress)(card);
+            "worklet"; 
+
+            // 5. ✅ Read from the new shared values
+            const handIds = playerHandIdsSV.value;
+            const currentCard = cardSV.value; // Read from SV
+            const currentOnPress = onPressSV.value; // Read from SV
+
+            let isPlayerCard = false;
+            for (let i = 0; i < handIds.length; i++) {
+              if (handIds[i] === currentCard.id) {
+                isPlayerCard = true;
+                break;
+              }
+            }
+
+            if (isPlayerCard && currentOnPress) {
+              runOnJS(currentOnPress)(currentCard);
             }
           }),
-        [card, onPress]
+        [ cardSV, onPressSV] // 6. ✅ Use the STABLE shared value objects as dependencies
       );
-
       // Style for the parent Animated.View
       const animatedStyle = useAnimatedStyle(() => ({
         position: "absolute",
@@ -188,20 +247,16 @@ const IndividualAnimatedCard = memo(
       }
 
       // --- Render Logic ---
-      return (
-        <GestureDetector gesture={tapGesture}>
-          <Animated.View style={animatedStyle}>
-            <Canvas style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
-              <AnimatedWhotCard
-                card={animatedCard}
-                font={font}
-                whotFont={whotFont}
-              />
-            </Canvas>
-          </Animated.View>
-        </GestureDetector>
-      );
-    }
-  )
+return (
+    <MemoizedCardRenderer
+     card={animatedCard}
+     font={font}
+     whotFont={whotFont}
+     style={animatedStyle}
+     gesture={tapGesture}
+    />
+   );
+  }
+ )
 );
 export default IndividualAnimatedCard;
