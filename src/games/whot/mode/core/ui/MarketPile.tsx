@@ -98,7 +98,6 @@ export const MarketPile = memo(
     if ( !font || !smallFont) {
       return null;
     }
-
 return (
    <GestureDetector gesture={tapGesture}>
     <Animated.View style={style}>

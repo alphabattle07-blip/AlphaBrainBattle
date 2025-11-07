@@ -16,7 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Canvas, SkFont } from "@shopify/react-native-skia";
 import { Card } from "../types"; // Make sure this path is correct
-import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig";
+import { CARD_WIDTH, CARD_HEIGHT } from "./whotConfig"; // ✅ FIX IS HERE
 import { AnimatedCard } from "./WhotCardTypes";
 import { getCoords } from "../coordinateHelper"; // Make sure this path is correct
 import { AnimatedWhotCard } from "./AnimatedWhotCard";
@@ -47,8 +47,6 @@ interface Props {
 
 // =================================================================
 // 1. The "Firewall" Component
-// This component is memoized and ONLY receives stable props.
-// It will not re-render when playerHandIdsSV changes.
 // =================================================================
 interface CardRendererProps {
   card: AnimatedCard;
@@ -78,7 +76,6 @@ const MemoizedCardRenderer = memo(
 
 // =================================================================
 // 2. The Main Component
-// This component holds all the animation logic.
 // =================================================================
 const IndividualAnimatedCard = memo(
   forwardRef<IndividualAnimatedCardHandle, Props>(
@@ -105,8 +102,6 @@ const IndividualAnimatedCard = memo(
       const internalY = useSharedValue(0); // For Skia (can be 0)
 
       // --- Stable Shared Value Props ---
-      // We store the 'card' and 'onPress' props (which can change)
-      // in shared values. This makes our gesture stable.
       const cardSV = useSharedValue(card);
       const onPressSV = useSharedValue(onPress);
 
@@ -123,8 +118,11 @@ const IndividualAnimatedCard = memo(
         teleportTo(target, options) {
           const { cardIndex, handSize } = options || {};
 
-          if (target === "player" || target === "computer") {
+          // ✅ This is for teleport, so INSTANT zIndex is correct
+          if (target === "player") {
             zIndex.value = 100 + (cardIndex || 0);
+          } else if (target === "computer") {
+            zIndex.value = 200 + (cardIndex || 0); // <-- 200+
           } else if (target === "pile") {
             zIndex.value = 50 + (cardIndex || 0);
           } else {
@@ -150,13 +148,23 @@ const IndividualAnimatedCard = memo(
           return new Promise((resolve) => {
             const { cardIndex, handSize } = options || {};
 
-            if (target === "player" || target === "computer") {
-              zIndex.value = 100 + (cardIndex || 0);
-            } else if (target === "pile") {
-              zIndex.value = 200; // High zIndex during animation
-            } else {
-              zIndex.value = 1;
-            }
+            // ✅ --- START OF Z-INDEX FIX --- ✅
+           if (instant) {
+              // If instant, set the final z-index immediately
+              if (target === "player") {
+                zIndex.value = 100 + (cardIndex || 0);
+              } else if (target === "computer") {
+                zIndex.value = 200 + (cardIndex || 0); // <-- 200+
+              } else if (target === "pile") {
+                zIndex.value = 50 + (cardIndex || 0);
+              } else {
+                zIndex.value = 1;
+              }
+            } else {
+              // If ANIMATING, do NOT change zIndex here.
+              // Let it animate from its current layer.
+            }
+            // ✅ --- END OF Z-INDEX FIX --- ✅
 
             const {
               x: targetX,
@@ -173,24 +181,29 @@ const IndividualAnimatedCard = memo(
               x.value = newX;
               y.value = newY;
               rotation.value = newRot;
-              if (target === "pile") {
-                zIndex.value = 50 + (cardIndex || 0); // Settle in pile
-              }
+              // (The z-index was already set above)
               return resolve();
             }
 
             x.value = withTiming(newX, { duration });
-            y.value = withTiming(newY, { duration });
-            rotation.value = withTiming(newRot, { duration }, (finished) => {
-              if (finished) {
-                if (target === "pile") {
-                  zIndex.value = 50 + (cardIndex || 0); // Settle in pile
-                }
-                runOnJS(resolve)();
-              }
-            });
-          });
-        },
+            y.value = withTiming(newY, { duration });
+            rotation.value = withTiming(newRot, { duration }, (finished) => {
+              if (finished) {
+                // ✅ --- START OF Z-INDEX FIX 2 --- ✅
+                // Animation is done, now "settle" the card
+                if (target === "player") {
+                 zIndex.value = 100 + (cardIndex || 0);
+                } else if (target === "computer") {
+                  zIndex.value = 200 + (cardIndex || 0); // <-- 200+
+                } else if (target === "pile") {
+                  zIndex.value = 50 + (cardIndex || 0); // <-- THIS WAS MISSING IN YOURS
+                }
+                // ✅ --- END OF Z-INDEX FIX 2 --- ✅
+                runOnJS(resolve)();
+              }
+            });
+          });
+        },
 
         async flip(show) {
           return new Promise((resolve) => {
@@ -208,13 +221,11 @@ const IndividualAnimatedCard = memo(
       }));
 
       // --- Tap Gesture ---
-      // !! THIS IS THE CRITICAL FIX !!
       const tapGesture = useMemo(
         () =>
           Gesture.Tap().onEnd(() => {
             "worklet";
 
-            // We read all values from shared values *at the moment of the tap*.
             const handIds = playerHandIdsSV.value;
             const currentCard = cardSV.value;
             const currentOnPress = onPressSV.value;
@@ -231,10 +242,7 @@ const IndividualAnimatedCard = memo(
               runOnJS(currentOnPress)(currentCard);
             }
           }),
-        // The dependency array ONLY includes the stable SVs.
-        // It does NOT include `playerHandIdsSV`, which stops the
-        // gesture from being re-created when paging!
-        [cardSV, onPressSV, playerHandIdsSV] // This is correct now, as playerHandIdsSV is a stable SV object.
+        [cardSV, onPressSV, playerHandIdsSV]
       );
 
       // --- Animated Style ---
@@ -266,7 +274,6 @@ const IndividualAnimatedCard = memo(
 
       // --- Render ---
       if (!font || !whotFont) {
-        // console.warn(`Card ${card.id} missing fonts.`);
         return null;
       }
 

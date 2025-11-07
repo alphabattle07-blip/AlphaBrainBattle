@@ -1,5 +1,673 @@
-When I tap the scrollable button to scroll through the cards in the player’s card box, the scrolling itself works perfectly. However, during this action, several other parts of the game interface blink or flicker briefly — including the computer’s cards, the market deck, and the center card (the one facing up).
+// whotComputerGameScreen.tsx
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+} from "react";
+import {
+  View,
+  StyleSheet,
+  useWindowDimensions,
+  Text,
+  Button,
+  ActivityIndicator,
+  Pressable,
+} from "react-native";
+import MemoizedBackground from "../core/ui/MemoizedBackground";
+import AnimatedCardList, {
+  AnimatedCardListHandle,
+} from "../core/ui/AnimatedCardList";
+import { Card, GameState } from "../core/types";
+import { getCoords } from "../core/coordinateHelper";
+import { initGame as coreInitGame, pickCard, playCard } from "../core/game";
+import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
+import { MarketPile } from "../core/ui/MarketPile";
+import { useWhotFonts } from "../core/ui/useWhotFonts";
+import { CARD_HEIGHT } from "../core/ui/whotConfig";
+import { chooseComputerMove } from "./whotComputerLogic";
+import { runOnJS, useSharedValue } from "react-native-reanimated";
+import type { SkFont } from "@shopify/react-native-skia";
 
-The same issue also happens when either the player or the computer taps the market deck to draw a card. During the draw action, the player’s cards, the market deck, and the center card all blink for a split second, even though only the draw animation should occur.
+// This is the bridge function you sent earlier
+const initGame = (
+  players: string[],
+  handSize: number,
+  ruleVersion: "rule1" | "rule2"
+) => {
+  const { gameState, allCards: fullDeck } = coreInitGame(
+    players,
+    handSize,
+    ruleVersion
+  );
+  return { gameState, allCards: fullDeck }; // Return the full deck
+};
 
-In addition, when the game is sharing (dealing) the cards at the beginning of the round, a similar blinking happens.
+type GameData = {
+  gameState: GameState;
+  allCards: Card[];
+};
+type OwnerMap = Map<string, "player" | "computer" | "other">;
+
+const WhotComputerGameScreen = () => {
+  // --- HOOKS ---
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+  const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts();
+
+  const [stableFont, setStableFont] = useState<SkFont | null>(null);
+  const [stableWhotFont, setStableWhotFont] = useState<SkFont | null>(null);
+const [isAnimating, setIsAnimating] = useState(false);
+  useEffect(() => {
+    if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
+      console.log("✅ Capturing stable fonts ONCE.");
+      setStableFont(loadedFont);
+      setStableWhotFont(loadedWhotFont);
+    }
+  }, [areLoaded, stableFont, loadedFont, loadedWhotFont]);
+
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [computerLevel, setComputerLevel] = useState<ComputerLevel>(
+    levels[0].value
+  );
+  const [game, setGame] = useState<GameData | null>(null);
+  const [allCards, setAllCards] = useState<Card[]>([]);
+  
+  // ✅ 1. ADD NEW STATE FOR THE STABLE MAP
+  const [initialOwners, setInitialOwners] = useState<OwnerMap>(new Map());
+
+  const [isCardListReady, setIsCardListReady] = useState(false);
+  const cardListRef = useRef<AnimatedCardListHandle>(null);
+  const prevWidth = useRef(width);
+  const prevHeight = useRef(height);
+  const [hasDealt, setHasDealt] = useState(false);
+  const gameRef = useRef(game);
+ const isAnimatingRef = useRef(isAnimating);
+  const isPagingActiveRef = useRef(isPagingActive);
+
+  // --- Memos (unchanged) ---
+  const playerHand = useMemo(
+    () => game?.gameState.players[0].hand || [],
+    [game?.gameState.players[0].hand]
+  );
+  const marketCardCount = game?.gameState.market.length || 0;
+  const playerHandStyle = useMemo(
+    () => [
+      styles.handContainerBase,
+      isLandscape
+        ? styles.playerHandContainerLandscape
+        : styles.playerHandContainerPortrait,
+    ],
+    [isLandscape]
+  );
+  const computerHandStyle = useMemo(
+    () => [
+      styles.handContainerBase,
+      isLandscape
+        ? styles.computerHandContainerLandscape
+        : styles.computerHandContainerPortrait,
+    ],
+    [isLandscape]
+  );
+  const computerState = useMemo(() => {
+    if (!game) return null;
+    const computerPlayer = game.gameState.players[1];
+    if (!computerPlayer) return null;
+    return {
+      name: computerPlayer.name,
+      handLength: computerPlayer.hand.length,
+      isCurrentPlayer: game.gameState.currentPlayer === 1,
+    };
+  }, [
+    game?.gameState.players[1]?.name,
+    game?.gameState.players[1]?.hand.length,
+    game?.gameState.currentPlayer,
+  ]);
+
+  const playerHandLimit = 5;
+  const layoutHandSize = 6;
+
+  const isPagingActive = playerHand.length > playerHandLimit;
+  const showPagingButton = !!game && isPagingActive;
+  const playerHandIdsSV = useSharedValue<string[]>([]);
+  const isAnimatingSV = useSharedValue(false);
+
+  useEffect(() => {
+    isAnimatingSV.value = isAnimating;
+  }, [isAnimating, isAnimatingSV]);
+
+  useEffect(() => {
+  gameRef.current = game;
+ }, [game]);
+
+ useEffect(() => {
+  isAnimatingRef.current = isAnimating;
+ }, [isAnimating]);
+
+ useEffect(() => {
+  isPagingActiveRef.current = isPagingActive;
+ }, [isPagingActive]);
+
+  useEffect(() => {
+    const newHandIds = playerHand.map((c) => c.id);
+    playerHandIdsSV.value = newHandIds;
+  }, [playerHand, playerHandIdsSV]);
+
+  
+  // 🧩 Initialize new game
+  const initializeGame = useCallback((lvl: ComputerLevel) => {
+    const ruleVersion = lvl >= 3 ? "rule2" : "rule1";
+    
+    // ✅ 2. GET INITIAL DATA
+    const { gameState, allCards } = initGame(
+      ["Player", "Computer"],
+      5,
+      ruleVersion
+    );
+
+    // ✅ 3. BUILD THE OWNERS MAP *ONCE*
+    const owners = new Map<string, "player" | "computer" | "other">();
+    gameState.players[0].hand.forEach((card) => {
+      owners.set(card.id, "player");
+    });
+    gameState.players[1].hand.forEach((card) => {
+      owners.set(card.id, "computer");
+    });
+
+    // ✅ 4. SET ALL STATE
+    setGame({ gameState, allCards });
+    setAllCards(allCards);
+    setInitialOwners(owners); // Set the stable map
+    setSelectedLevel(levels.find((l) => l.value === lvl)?.label || null);
+    setComputerLevel(lvl);
+    setIsCardListReady(false);
+    setIsAnimating(true);
+    setHasDealt(false);
+  }, []); // Empty dependency array is correct
+
+  // 🧩 (🌀) Handle player picking from market
+  const handlePickFromMarket = useCallback(async () => {
+    const dealer = cardListRef.current;
+    const currentGame = gameRef.current;
+    const animating = isAnimatingRef.current;
+    if (!currentGame || animating || currentGame.gameState.currentPlayer !== 0 || !dealer) {
+      console.log("Cannot pick card now.");
+      return;
+      }
+    setIsAnimating(true);
+    const oldState = currentGame.gameState;
+    const { newState: stateAfterPick, drawnCards } = pickCard(oldState, 0);
+    if (drawnCards.length === 0) {
+      setGame((prevGame) => prevGame ? { ...prevGame, gameState: stateAfterPick } : null);
+      setIsAnimating(false);
+      return;
+    }
+    const currentHand = stateAfterPick.players[0].hand;
+    const drawnCardIds = new Set(drawnCards.map((c) => c.id));
+    const oldHandCards = currentHand.filter((card) => !drawnCardIds.has(card.id));
+    const newHandOrder = [...drawnCards, ...oldHandCards];
+    const newState = {
+      ...stateAfterPick,
+      players: stateAfterPick.players.map((player, index) => {
+        if (index === 0) return { ...player, hand: newHandOrder };
+        return player;
+      }),
+    };
+    const newVisibleHand = newHandOrder.slice(0, playerHandLimit);
+    const oldVisibleHand = oldState.players[0].hand.slice(0, playerHandLimit);
+    const newVisibleHandIds = new Set(newVisibleHand.map((c) => c.id));
+    const cardsLeaving = oldVisibleHand.filter((c) => !newVisibleHandIds.has(c.id));
+    drawnCards.forEach((card, index) => {
+      dealer.teleportCard(card, "player", { cardIndex: -1 - index, handSize: layoutHandSize });
+    });
+    const animationPromises: Promise<void>[] = [];
+    newVisibleHand.forEach((card, index) => {
+      const options = { cardIndex: index, handSize: layoutHandSize };
+      animationPromises.push(dealer.dealCard(card, "player", options, false));
+      if (drawnCardIds.has(card.id)) {
+        animationPromises.push(dealer.flipCard(card, true));
+      }
+    });
+    cardsLeaving.forEach((card, index) => {
+      animationPromises.push(dealer.dealCard(card, "player", { cardIndex: playerHandLimit + index, handSize: layoutHandSize }, false));
+    });
+    for (const card of drawnCards) {
+      const isVisible = newVisibleHand.some((c) => c.id === card.id);
+      if (!isVisible) {
+        animationPromises.push(dealer.dealCard(card, "market", { cardIndex: 0 }, false));
+        animationPromises.push(dealer.flipCard(card, true));
+      }
+    }
+    await Promise.all(animationPromises);
+    setGame((prevGame) => prevGame ? { ...prevGame, gameState: newState } : null);
+    setIsAnimating(false);
+  }, [ layoutHandSize, playerHandLimit]);
+
+  // 🧩 (♠️) Handle player playing a card
+  const handlePlayCard = useCallback(async (card: Card) => {
+    const dealer = cardListRef.current;
+    const currentGame = gameRef.current;
+    const animating = isAnimatingRef.current;
+    if (
+      !currentGame ||
+      animating ||
+      currentGame.gameState.currentPlayer !== 0 ||
+      !dealer
+    ) {
+      return;
+    }
+    setIsAnimating(true);
+    console.log("🤖 Computer's turn...");
+    setIsAnimating(true);
+    let newState: GameState;
+    try {
+      newState = playCard(currentGame.gameState, 0, card, currentGame.gameState.ruleVersion);
+    } catch (error: any) {
+      console.log("Invalid move:", error.message);
+      setIsAnimating(false);
+      return;
+    }
+    const oldPlayerHand = currentGame.gameState.players[0].hand;
+    const oldVisibleHand = oldPlayerHand.slice(0, playerHandLimit);
+    const oldVisibleHandIds = new Set(oldVisibleHand.map((c) => c.id));
+    const newHand = newState.players[0].hand;
+    const newVisibleHand = newHand.slice(0, playerHandLimit);
+    const newlyVisibleCards: Card[] = [];
+    newVisibleHand.forEach((handCard) => {
+      if (!oldVisibleHandIds.has(handCard.id)) {
+        newlyVisibleCards.push(handCard);
+      }
+    });
+    if (newlyVisibleCards.length > 0) {
+      newlyVisibleCards.forEach((newCard, index) => {
+        const offscreenIndex = playerHandLimit + index;
+        dealer.teleportCard(newCard, "player", { cardIndex: offscreenIndex, handSize: layoutHandSize });
+      });
+    }
+    const animationPromises: Promise<void>[] = [];
+    const finalPileIndex = newState.pile.length - 1;
+    animationPromises.push(dealer.dealCard(card, "pile", { cardIndex: finalPileIndex }, false));
+    animationPromises.push(dealer.flipCard(card, true));
+    newVisibleHand.forEach((handCard, index) => {
+      animationPromises.push(dealer.dealCard(handCard, "player", { cardIndex: index, handSize: layoutHandSize }, false));
+    });
+    await Promise.all(animationPromises);
+    setGame((prevGame) => prevGame ? { ...prevGame, gameState: newState } : null);
+    setIsAnimating(false);
+  }, [playerHandLimit, layoutHandSize]);
+
+  // 🧩 Handle paging
+  const handlePagingPress = useCallback(async () => {
+    const dealer = cardListRef.current;
+    if (!dealer || isAnimating || !game || !isPagingActive) return;
+    setIsAnimating(true);
+    const oldHand = game.gameState.players[0].hand;
+    const oldVisibleHand = oldHand.slice(0, playerHandLimit);
+    const cardToMove = oldHand[oldHand.length - 1];
+    const remainingCards = oldHand.slice(0, oldHand.length - 1);
+    const newHand = [cardToMove, ...remainingCards];
+    const newVisibleHand = newHand.slice(0, playerHandLimit);
+    const cardEntering = cardToMove;
+    const cardLeaving = oldVisibleHand[playerHandLimit - 1];
+    if (cardEntering) {
+      dealer.teleportCard(cardEntering, "player", { cardIndex: -1, handSize: layoutHandSize });
+    }
+    const animationPromises: Promise<void>[] = [];
+    newVisibleHand.forEach((card, index) => {
+      animationPromises.push(dealer.dealCard(card, "player", { cardIndex: index, handSize: layoutHandSize }, false));
+    });
+    if (cardLeaving) {
+      animationPromises.push(dealer.dealCard(cardLeaving, "player", { cardIndex: playerHandLimit, handSize: layoutHandSize }, false));
+    }
+    await Promise.all(animationPromises);
+    const newState = {
+      ...game.gameState,
+      players: game.gameState.players.map((p, i) => i === 0 ? { ...p, hand: newHand } : p),
+    };
+    setGame((prevGame) => prevGame ? { ...prevGame, gameState: newState } : null);
+    setIsAnimating(false);
+  }, [layoutHandSize, playerHandLimit]);
+
+  // 🧩 Handle computer
+  const handleComputerTurn = useCallback(async () => {
+    const dealer = cardListRef.current;
+    if (!game || isAnimating || game.gameState.currentPlayer !== 1 || !dealer) {
+      return;
+    }
+    console.log("🤖 Computer's turn...");
+    setIsAnimating(true);
+    const oldState = game.gameState;
+    const { ruleVersion } = oldState;
+    const computerPlayerIndex = 1;
+    const move = chooseComputerMove(oldState, computerPlayerIndex, computerLevel);
+    if (move) {
+      console.log("🤖 Computer chose to PLAY:", move.id);
+      let newState: GameState;
+      try {
+        newState = playCard(oldState, computerPlayerIndex, move, ruleVersion);
+      } catch (e: any) {
+        console.error("🤖 Computer AI chose invalid card, forcing pick.", e.message);
+        const { newState: pickState, drawnCards } = pickCard(oldState, computerPlayerIndex);
+        if (drawnCards.length > 0) {
+          const newHand = pickState.players[computerPlayerIndex].hand;
+          const newHandSize = newHand.length;
+          await Promise.all(newHand.map((card, index) => dealer.dealCard(card, "computer", { cardIndex: index, handSize: newHandSize }, false)));
+        }
+        setGame((prevGame) => prevGame ? { ...prevGame, gameState: pickState } : null);
+        setIsAnimating(false);
+        return;
+      }
+      const finalPileIndex = newState.pile.length - 1;
+      await dealer.dealCard(move, "pile", { cardIndex: finalPileIndex }, false);
+      await dealer.flipCard(move, true);
+      const newHand = newState.players[computerPlayerIndex].hand;
+      const newHandSize = newHand.length;
+      await Promise.all(newHand.map((card, index) => dealer.dealCard(card, "computer", { cardIndex: index, handSize: newHandSize }, false)));
+      setGame((prevGame) => prevGame ? { ...prevGame, gameState: newState } : null);
+    } else {
+      console.log("🤖 Computer chose to PICK");
+      const { newState, drawnCards } = pickCard(oldState, computerPlayerIndex);
+      if (drawnCards.length === 0) {
+        console.warn("🤖 Computer tried to pick, but market is empty.");
+        setGame((prevGame) => prevGame ? { ...prevGame, gameState: newState } : null);
+        setIsAnimating(false);
+        return;
+      }
+      console.log(`🤖 Computer drew ${drawnCards.length} card(s).`);
+      const newHand = newState.players[computerPlayerIndex].hand;
+      const newHandSize = newHand.length;
+      await Promise.all(newHand.map((card, index) => dealer.dealCard(card, "computer", { cardIndex: index, handSize: newHandSize }, false)));
+      setGame((prevGame) => prevGame ? { ...prevGame, gameState: newState } : null);
+    }
+    setIsAnimating(false);
+  }, [computerLevel, game, isAnimating,]);
+  // 🧩 EFFECT: Trigger Computer's Turn
+  useEffect(() => {
+    if (!game || isAnimating || !hasDealt) return;
+    if (game.gameState.currentPlayer === 1) {
+      const timer = setTimeout(() => { runOnJS(handleComputerTurn)(); }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [game?.gameState.currentPlayer, isAnimating, hasDealt, handleComputerTurn]);
+
+  // 🧩 EFFECT: Smooth Deal
+  useEffect(() => {
+    if (!isCardListReady || !cardListRef.current || !game || hasDealt) return;
+    if (!isAnimating) return;
+    const dealer = cardListRef.current;
+    let isMounted = true;
+    const dealSmoothly = async () => {
+      console.log("🎴 Starting smooth deal... (This should only run once)");
+      const { players, pile } = game.gameState;
+      const playerHand = players[0].hand;
+      const computerHand = players[1].hand;
+      const computerHandSize = computerHand.length;
+      const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
+      const hiddenPlayerHand = playerHand.slice(playerHandLimit);
+      const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+      const dealDelay = 150;
+      for (let i = 0; i < computerHandSize; i++) {
+        if (!isMounted) return;
+        const computerCard = computerHand[i];
+        if (computerCard) {
+          await dealer.dealCard(computerCard, "computer", { cardIndex: i, handSize: computerHandSize }, false);
+          await delay(dealDelay);
+        }
+      }
+      for (let i = 0; i < visiblePlayerHand.length; i++) {
+        if (!isMounted) return;
+        const playerCard = visiblePlayerHand[i];
+        if (playerCard) {
+          await dealer.dealCard(playerCard, "player", { cardIndex: i, handSize: layoutHandSize }, false);
+          await delay(dealDelay);
+        }
+      }
+      for (const card of hiddenPlayerHand) {
+        if (!isMounted) return;
+        if (card) dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+      }
+      for (const pileCard of pile) {
+        if (pileCard) await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
+      }
+      await delay(500);
+      if (!isMounted) return;
+      const flipPromises: Promise<void>[] = [];
+      visiblePlayerHand.forEach((card) => {
+        if (card) flipPromises.push(dealer.flipCard(card, true));
+      });
+      const topPileCard = pile[pile.length - 1];
+      if (topPileCard) {
+        flipPromises.push(dealer.flipCard(topPileCard, true));
+      }
+      await Promise.all(flipPromises);
+      console.log("✅ Deal complete.");
+      if (isMounted) {
+        runOnJS(setHasDealt)(true);
+        runOnJS(setIsAnimating)(false);
+      }
+    };
+    const timerId = setTimeout(dealSmoothly, 0);
+    return () => { isMounted = false; clearTimeout(timerId); };
+  }, [isCardListReady, game, hasDealt, isAnimating, playerHandLimit, layoutHandSize]);
+
+  // 🧩 EFFECT: Handle Rotation
+  useLayoutEffect(() => {
+    if (
+      !isCardListReady ||
+      !cardListRef.current ||
+      !game || // ✅ Read from state
+      isAnimating || // ✅ Read from state
+      !hasDealt
+    ) {
+      return;
+    }
+    const hasRotated = prevWidth.current !== width || prevHeight.current !== height;
+    if (hasRotated) {
+      console.log("🔄 Screen rotated, instantly moving cards...");
+      const dealer = cardListRef.current;
+      const { players, pile, market } = game.gameState;
+      const playerHand = players[0].hand;
+      const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
+      const hiddenPlayerHand = playerHand.slice(playerHandLimit);
+      visiblePlayerHand.forEach((card, index) => {
+        if (card) dealer.dealCard(card, "player", { cardIndex: index, handSize: layoutHandSize }, true);
+      });
+      hiddenPlayerHand.forEach((card) => {
+        if (card) dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+      });
+      market.forEach((card) => {
+        if (card) dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+      });
+      const computerHand = players[1].hand;
+      const computerHandSize = computerHand.length;
+      computerHand.forEach((card, index) => {
+        if (card) dealer.dealCard(card, "computer", { cardIndex: index, handSize: computerHandSize }, true);
+      });
+      pile.forEach((card, index) => {
+        if (card) dealer.dealCard(card, "pile", { cardIndex: index, handSize: pile.length }, true);
+      });
+      prevWidth.current = width;
+      prevHeight.current = height;
+    }
+  }, [width, height, isCardListReady, hasDealt, playerHandLimit, game, isAnimating, layoutHandSize]);
+  
+  // ✅ Stable onReady callback
+  const onCardListReady = useCallback(() => {
+    console.log("✅ Card list ready!");
+    setIsCardListReady(true);
+  }, []);
+
+  // --- RENDER STATES ---
+  if (!areLoaded || !stableFont || !stableWhotFont) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+        <Text style={styles.title}>Loading Game...</Text>
+      </View>
+    );
+  }
+  if (!selectedLevel) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.title}>Select Computer Level</Text>
+        {levels.map((level) => (
+          <View key={level.value} style={styles.levelButtonContainer}>
+            <Button
+              title={`${level.label}`}
+              onPress={() => initializeGame(level.value)}
+              color="#1E5E4E"
+            />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  // --- MAIN RENDER ---
+  return (
+    <View style={styles.container}>
+      {game && (
+        <View style={[styles.computerUIContainer, { pointerEvents: "box-none" }]}>
+          <ComputerUI computerState={computerState} level={computerLevel} />
+        </View>
+      )}
+      <MemoizedBackground width={width} height={height} />
+      <View style={computerHandStyle} />
+      <View style={playerHandStyle} />
+
+      <View style={[ styles.pagingContainer, isLandscape ? styles.pagingContainerLandscape : styles.pagingContainerPortrait, ]} pointerEvents="box-none">
+        {showPagingButton && (
+          <Pressable onPress={handlePagingPress} style={({ pressed }) => [ styles.pagingButtonBase, styles.rightPagingButton, pressed && { backgroundColor: "#e6c200" }, ]}>
+            <Text style={styles.pagingIcon}>{">"}</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {game && (
+        <MarketPile
+          count={marketCardCount}
+          font={stableWhotFont}
+          smallFont={stableFont}
+          width={width}
+          height={height}
+          onPress={handlePickFromMarket}
+          isAnimatingSV={isAnimatingSV}
+        />
+      )}
+
+      {/* ✅ 6. PASS THE STABLE MAP PROP */}
+      {allCards.length > 0 && stableFont && stableWhotFont && (
+        <AnimatedCardList
+          ref={cardListRef}
+          allCards={allCards}
+          initialOwners={initialOwners} 
+          playerHandIdsSV={playerHandIdsSV}
+          font={stableFont}
+          whotFont={stableWhotFont}
+          width={width}
+          height={height}
+          onCardPress={handlePlayCard}
+          onReady={onCardListReady}
+        />
+      )}
+    </View>
+  );
+};
+export default WhotComputerGameScreen;
+
+// Using the styles you provided
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#1E5E4E" },
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  title: { fontSize: 24, color: "#FFF", margin: 20, textAlign: "center" },
+  levelButtonContainer: { marginBottom: 15, width: 200 },
+  computerUIContainer: {
+    position: "absolute",
+    top: 50,
+    alignSelf: "center",
+    zIndex: 10,
+  },
+  handContainerBase: {
+    position: "absolute",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    borderTopLeftRadius: 20,
+    zIndex: 0,
+    height: CARD_HEIGHT + 10,
+    overflow: "hidden", // ✅ hide outside cards
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playerHandContainerPortrait: {
+    bottom: "12%",
+    left: "3%",
+    right: "15%",
+    width: "auto",
+  },
+  computerHandContainerPortrait: {
+    top: 40,
+    left: "5%",
+    right: "5%",
+    width: "auto",
+  },
+  playerHandContainerLandscape: {
+    bottom: 8,
+    left: "19%",
+    right: "19%",
+    width: "auto",
+  },
+  computerHandContainerLandscape: {
+    top: 8,
+    left: "19%",
+    right: "19%",
+    width: "auto",
+  },
+  pagingContainer: {
+    position: "absolute",
+    zIndex: 100,
+    left: 0,
+    right: 0,
+    height: CARD_HEIGHT + 10,
+    pointerEvents: "box-none",
+  },
+
+  pagingContainerPortrait: {
+    bottom: "12%",
+  },
+
+  pagingContainerLandscape: {
+    bottom: 8,
+  },
+
+  pagingButtonBase: {
+    position: "absolute",
+    right: 0,
+    width: "12%", // takes up the right 15%
+    height: CARD_HEIGHT + 10, // same height as box
+    backgroundColor: "#FFD700", // solid gold yellow
+    borderTopRightRadius: 20,
+    borderBottomRightRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 5, // shadow for Android
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+
+  pagingIcon: {
+    fontSize: 36, // big bold arrow
+    fontWeight: "bold",
+    color: "#000",
+  },
+
+  rightPagingButton: {
+    marginRight: "3%",
+  },
+});

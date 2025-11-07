@@ -37,21 +37,7 @@ const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.name}>
-        {computerState.name} 🤖 {/* ✅ USE new prop */}
-      </Text>
-      <Text style={styles.hand}>
-        Cards: {computerState.handLength} {/* ✅ USE new prop */}
-      </Text>
 
-      {levelInfo && (
-        <Text style={styles.level}>
-          {levelInfo.label} • Rating {levelInfo.rating}
-        </Text>
-      )}
-      {computerState.isCurrentPlayer && ( 
-        <Text style={styles.thinking}>Thinking...</Text>
-      )}
     </View>
   );
 };
