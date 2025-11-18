@@ -37,7 +37,7 @@ const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
 
   return (
     <View style={styles.container}>
-
+        <Text></Text>
     </View>
   );
 };

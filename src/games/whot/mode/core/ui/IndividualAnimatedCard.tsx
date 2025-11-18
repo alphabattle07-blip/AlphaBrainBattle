@@ -150,20 +150,20 @@ const IndividualAnimatedCard = memo(
 
             // ✅ --- START OF Z-INDEX FIX --- ✅
            if (instant) {
-              // If instant, set the final z-index immediately
-              if (target === "player") {
-                zIndex.value = 100 + (cardIndex || 0);
-              } else if (target === "computer") {
-                zIndex.value = 200 + (cardIndex || 0); // <-- 200+
-              } else if (target === "pile") {
-                zIndex.value = 50 + (cardIndex || 0);
-              } else {
-                zIndex.value = 1;
-              }
-            } else {
-              // If ANIMATING, do NOT change zIndex here.
-              // Let it animate from its current layer.
-            }
+       // If instant, set the final z-index immediately
+       if (target === "player") {
+        zIndex.value = 100 + (cardIndex || 0);
+       } else if (target === "computer") {
+        zIndex.value = 200 + (cardIndex || 0); // <-- 200+
+       } else if (target === "pile") {
+        zIndex.value = 50 + (cardIndex || 0);
+       } else {
+        zIndex.value = 1;
+       }
+      } else {
+       // If ANIMATING, do NOT change zIndex here.
+       // Let it animate from its current layer.
+      }
             // ✅ --- END OF Z-INDEX FIX --- ✅
 
             const {
@@ -186,24 +186,24 @@ const IndividualAnimatedCard = memo(
             }
 
             x.value = withTiming(newX, { duration });
-            y.value = withTiming(newY, { duration });
-            rotation.value = withTiming(newRot, { duration }, (finished) => {
-              if (finished) {
-                // ✅ --- START OF Z-INDEX FIX 2 --- ✅
-                // Animation is done, now "settle" the card
-                if (target === "player") {
-                 zIndex.value = 100 + (cardIndex || 0);
-                } else if (target === "computer") {
-                  zIndex.value = 200 + (cardIndex || 0); // <-- 200+
-                } else if (target === "pile") {
-                  zIndex.value = 50 + (cardIndex || 0); // <-- THIS WAS MISSING IN YOURS
-                }
-                // ✅ --- END OF Z-INDEX FIX 2 --- ✅
-                runOnJS(resolve)();
-              }
-            });
-          });
-        },
+      y.value = withTiming(newY, { duration });
+      rotation.value = withTiming(newRot, { duration }, (finished) => {
+       if (finished) {
+        // ✅ --- START OF Z-INDEX FIX 2 --- ✅
+        // Animation is done, now "settle" the card
+        if (target === "player") {
+         zIndex.value = 100 + (cardIndex || 0);
+        } else if (target === "computer") {
+         zIndex.value = 200 + (cardIndex || 0); // <-- 200+
+        } else if (target === "pile") {
+         zIndex.value = 50 + (cardIndex || 0); // <-- THIS WAS MISSING IN YOURS
+        }
+        // ✅ --- END OF Z-INDEX FIX 2 --- ✅
+        runOnJS(resolve)();
+       }
+      });
+     });
+    },
 
         async flip(show) {
           return new Promise((resolve) => {

@@ -104,10 +104,6 @@ const AnimatedCardList = memo(
           }
         },
       }));
-
-      // --- Render All Cards ---
-      // We render all 54 cards. They are invisible and stacked
-      // at the market position by default.
       return (
         <>
           {cardsInPlay.map((card) => (
@@ -136,7 +132,6 @@ const AnimatedCardList = memo(
     }
   )
 );
-
 export default AnimatedCardList;
 
 

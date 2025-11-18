@@ -1,94 +1,146 @@
-// games/whot/core/rules.ts
-import { Card, GameState } from "./types";
-import { CardSuit } from "./ui/WhotCardTypes";
+import { Card, GameState, PendingAction, CardSuit } from "./types";
+
 
 /**
- * Check if a move is valid based on current pile + rules.
+ * Check if a move is valid in "Rule 1".
+ * This logic is now complex and context-dependent.
  */
-export const isValidMove = (card: Card, state: GameState): boolean => {
-    const topCard = state.pile[state.pile.length - 1];
-    const calledSuit = state.calledSuit;
+export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
+  const { pile, pendingAction, lastPlayedCard, calledSuit } = state;
+  if (pile.length === 0) return true;
 
-    // If Whot was played and a suit was called → must follow that
-    if (calledSuit && topCard.suit === "whot") {
-        return card.suit === calledSuit || card.suit === "whot";
+  const topCard = pile[pile.length - 1];
+  const cardToMatch = lastPlayedCard || topCard;
+
+  // --- 1. Defend State (Pick 2 / Pick 5 battle) ---
+  if (pendingAction?.type === "defend") {
+    // Can only play a Pick 2, Pick 5, or WHOT
+    return [2, 5, 20].includes(card.number);
+  }
+
+  // --- 2. Continuation State (after 1, 8, 14, or failed defense) ---
+  if (pendingAction?.type === "continue") {
+    // WHOT is always allowed
+    if (card.number === 20) return true;
+    
+    // If a suit was just called by WHOT, must follow that suit
+    if (cardToMatch.number === 20 && calledSuit) {
+      return card.suit === calledSuit;
     }
+    
+    // Otherwise, must match the SHAPE (suit) of the card that started this
+    return card.suit === cardToMatch.suit;
+  }
 
-    // Otherwise → must match suit or number or be a Whot
+  // --- 3. Normal Turn ---
+  if (!pendingAction) {
+    // If WHOT was just played, must follow called suit
+    if (topCard.number === 20 && calledSuit) {
+      return card.suit === calledSuit || card.number === 20;
+    }
+    
+    // Standard rule: match suit or number
     return (
-        card.suit === topCard.suit ||
-        card.number === topCard.number ||
-        card.suit === "whot"
+      card.suit === topCard.suit ||
+      card.number === topCard.number ||
+      card.number === 20
     );
+  }
+
+  // If in any other state (like 'draw' or 'call_suit'), no moves are valid
+  return false;
 };
 
 /**
- * Apply special card effects to the game state.
+ * Apply "Rule 1" effects and set the *next* pending action.
  */
-export const applyCardEffect = (
-    card: Card,
-    state: GameState,
-    playerIndex: number
+export const applyCardEffectRule1 = (
+  card: Card,
+  state: GameState,
+  playerIndex: number
 ): GameState => {
-    const newState: GameState = { ...state };
-    
-    // --- Determine Next Player Index (Base) ---
-    const getNextPlayerIndex = (currentIdx: number, steps: number = 1) => {
-        return (currentIdx + newState.direction * steps + newState.players.length) % newState.players.length;
-    };
+  const newState: GameState = {
+    ...state,
+    pile: [...state.pile, card],
+    lastPlayedCard: card, // Always update this
+    // Remove card from player's hand
+    players: state.players.map((p, idx) =>
+      idx === playerIndex
+        ? { ...p, hand: p.hand.filter((c) => c.id !== card.id) }
+        : p
+    ),
+  };
 
-    switch (card.number) {
-        case 1: // Hold On → skip next player
-        case 8: // Suspension (skip next player)
-            newState.currentPlayer = getNextPlayerIndex(playerIndex, 2);
-            break;
+  const getNextPlayerIndex = (steps = 1) => {
+    return (
+      (playerIndex + newState.direction * steps + newState.players.length) %
+      newState.players.length
+    );
+  };
 
-        case 2: // Pick Two
-            newState.pendingPick = (newState.pendingPick || 0) + 2;
-            newState.currentPlayer = getNextPlayerIndex(playerIndex, 1);
-            break;
+  const opponentIndex = getNextPlayerIndex(1);
+  const wasInBattle = state.pendingAction?.type === "defend";
 
-        case 5: // Pick Three
-            newState.pendingPick = (newState.pendingPick || 0) + 3;
-            newState.currentPlayer = getNextPlayerIndex(playerIndex, 1);
-            break;
+  switch (card.number) {
+    // --- Group 1: Hold On, Suspension, General Market ---
+    case 1: // Hold On
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = { type: "continue", playerIndex: playerIndex };
+      break;
+    case 8: // Suspension
+      // Skips next player, but player who played it continues
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = { type: "continue", playerIndex: playerIndex };
+      // Note: The "skip" is implicit because the turn doesn't pass to opponent
+      break;
+    case 14: // General Market
+      newState.currentPlayer = playerIndex; // Same player
+      // Set 'draw' action for opponent, then 'continue' for current player
+      newState.pendingAction = {
+        type: "draw",
+        playerIndex: opponentIndex,
+        count: 1,
+        returnTurnTo: playerIndex, // Turn returns to this player
+      };
+      break;
 
-        case 14: // General Market → all other players draw 1
-            let marketRemaining = [...newState.market];
-            newState.players = newState.players.map((p, idx) => {
-                if (idx === playerIndex || marketRemaining.length === 0) return p; 
-                const drawn = marketRemaining.shift()!;
-                return { ...p, hand: [...p.hand, drawn] };
-            });
-            newState.market = marketRemaining;
-            newState.currentPlayer = getNextPlayerIndex(playerIndex, 1);
-            break;
+    // --- Group 2: Pick 2, Pick 5 ---
+    case 2:
+    case 5:
+      const pickCount = card.number === 2 ? 2 : 3;
+      // Stack the pick count
+      const totalPicks = (state.pendingPick || 0) + pickCount;
+      newState.pendingPick = totalPicks;
+      // Set 'defend' action for the opponent
+      newState.currentPlayer = opponentIndex;
+      newState.pendingAction = {
+        type: "defend",
+        playerIndex: opponentIndex,
+        count: totalPicks,
+      };
+      break;
 
-        case 20: // Whot → Call Shape
-            // UI must set newState.calledSuit after this
-            newState.calledSuit = undefined; 
-            newState.currentPlayer = getNextPlayerIndex(playerIndex, 1);
-            break;
+    // --- Group 3: WHOT ---
+    case 20:
+      newState.calledSuit = undefined; // Clear old suit
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = {
+        type: "call_suit",
+        playerIndex: playerIndex,
+        // If in a battle, continue battle. Otherwise, pass turn.
+        nextAction: wasInBattle ? "continue" : "pass",
+      };
+      break;
 
-        default:
-            // Normal card → just pass turn
-            newState.currentPlayer = getNextPlayerIndex(playerIndex, 1);
-            break;
-    }
+    // --- Normal Card ---
+    default:
+      // Playing a normal card *ends* a sequence
+      newState.currentPlayer = getNextPlayerIndex(1);
+      newState.pendingAction = null;
+      newState.pendingPick = 0;
+      newState.lastPlayedCard = null; // Clear last card
+      break;
+  }
 
-    // --- Update State ---
-    
-    // Push the card to pile
-    newState.pile = [...newState.pile, card];
-
-    // Remove from player's hand
-    newState.players = newState.players.map((p, idx) => {
-        if (idx !== playerIndex) return p;
-        return { ...p, hand: p.hand.filter((c) => c.id !== card.id) };
-    });
-    
-    // Reset mustPlayNormal
-    newState.mustPlayNormal = false; 
-
-    return newState;
+  return newState;
 };

@@ -29,8 +29,6 @@ interface MemoizedMarketCanvasProps {
 
 const MemoizedMarketCanvas = memo(
   ({ visualStackCount, font, smallFont }: MemoizedMarketCanvasProps) => {
-    // This component will *only* re-render when visualStackCount
-    // actually changes (e.g., from 15 to 14).
     return (
       <Canvas style={StyleSheet.absoluteFill}>
         {Array.from({ length: visualStackCount }).map((_, index) => (

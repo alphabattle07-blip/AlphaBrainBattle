@@ -1,24 +1,16 @@
-// WhotCardTypes.ts
-import type { SkFont } from '@shopify/react-native-skia';
-import type { SharedValue } from 'react-native-reanimated';
+import type { SkFont } from "@shopify/react-native-skia";
+import type { SharedValue } from "react-native-reanimated";
+import { Card } from "../types"; // Import the base Card type
 
-export type CardSuit = "circle" | "triangle" | "cross" | "square" | "star" | "whot";
-
-export interface Card {
-    id: string;
-    suit: string;
-    number?: number;
-    rank: string;
-}
-
-// Animated Card structure used by Skia/Reanimated
+// This is the Skia/Reanimated version of a Card
 export interface AnimatedCard extends Card {
-    x: SharedValue<number>;
-    y: SharedValue<number>;
-    rotate: SharedValue<number>; // 0 to 1 (0 to 180 
-    width: number;
-    height: number;
-    initialIndex: number;
+  x: SharedValue<number>;
+  y: SharedValue<number>;
+  rotate: SharedValue<number>; // 0 to Math.PI (for flip)
+  width: number;
+  height: number;
+  initialIndex: number; // Not used in whotCard.ts, but good to have
 }
+
 export const CARD_WIDTH = 80;
 export const CARD_HEIGHT = 120;
