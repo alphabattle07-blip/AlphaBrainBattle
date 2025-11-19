@@ -967,7 +967,7 @@ const styles = StyleSheet.create({
   },
   computerHandContainerPortrait: {
     top: 40,
-    left: "5%",
+    left: "26%",
     right: "5%",
     width: "auto",
   },

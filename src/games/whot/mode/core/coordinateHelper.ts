@@ -1,6 +1,5 @@
-// core/coordinateHelper.ts (FIXED)
+// core/coordinateHelper.ts
 
-// ✅ FIX 1: Import from the correct config file
 import { CARD_WIDTH, CARD_HEIGHT } from "../core/ui/whotConfig";
 
 type Target = "player" | "computer" | "pile" | "market";
@@ -9,10 +8,6 @@ interface CoordsOptions {
   handSize?: number;
 }
 
-/**
- * Calculates the target x, y (center) and rotation for a card
- * based on the current screen dimensions.
- */
 export const getCoords = (
   target: Target,
   options: CoordsOptions = {},
@@ -28,36 +23,33 @@ export const getCoords = (
   switch (target) {
     // --- PILE (Played Cards) ---
     case "pile":
-      // ✅ FIX 2: This is the new layout.
-      // It's ALWAYS in the center, just offset to the right.
       return {
         x: deckCenterX + CARD_WIDTH * 0.7,
-        y: isLandscape ? deckCenterY : screenHeight * 0.45, // Use 45% Y in portrait
+        y: isLandscape ? deckCenterY : screenHeight * 0.45,
         rotation: 0,
       };
 
     // --- MARKET (Draw Pile) ---
-case "market":
-  if (isLandscape) {
-    return {
-      x: deckCenterX - CARD_WIDTH * 2,
-      y: deckCenterY + 8,
-      rotation: 0,
-    };
-  }
-  // ✅ FIXED: Center the market in portrait mode too
-  return {
-    x: deckCenterX - CARD_WIDTH * 0.7,
-    y: deckCenterY, // perfectly centered vertically
-    rotation: 0,
-  };
-
+    case "market":
+      if (isLandscape) {
+        return {
+          x: deckCenterX - CARD_WIDTH * 2,
+          y: deckCenterY + 8,
+          rotation: 0,
+        };
+      }
+      return {
+        x: deckCenterX - CARD_WIDTH * 0.7,
+        y: deckCenterY,
+        rotation: 0,
+      };
 
     // --- COMPUTER (Top Hand) ---
     case "computer": {
       const boxTopMargin = isLandscape ? 10 : 20;
       const boxHeight = CARD_HEIGHT + 10;
-      const y = boxTopMargin + boxHeight / 2;
+      // kept your specific Y adjustment
+      const y = boxTopMargin + boxHeight / 1.5; 
 
       if (isLandscape) {
         // Landscape: No overlap
@@ -68,18 +60,30 @@ case "market":
         const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
         return { x, y, rotation: 0 };
       } else {
-        // Portrait: "Squeezing" logic
-        const maxComputerWidth = screenWidth * 0.7;
-        const defaultVisualWidth = CARD_WIDTH * 0.4;
-        let totalWidth = CARD_WIDTH + (handSize - 1) * defaultVisualWidth;
-        let visualWidth = defaultVisualWidth;
+        // ✅ PORTRAIT: FIXED 7-CARD WIDTH LIMIT
+        
+        const defaultSpacing = CARD_WIDTH * 0.4; // Normal spacing
+        const maxCardsBeforeSqueeze = 7; // The limit you requested
 
-        if (totalWidth > maxComputerWidth && handSize > 1) {
-          visualWidth = (maxComputerWidth - CARD_WIDTH) / (handSize - 1);
-          totalWidth = maxComputerWidth;
+        // 1. Calculate the Maximum Allowed Width (Width of exactly 7 cards)
+        const maxAllowedWidth = CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * defaultSpacing;
+
+        let visualWidth = defaultSpacing;
+        let totalWidth = CARD_WIDTH + (handSize - 1) * defaultSpacing;
+
+        // 2. If handSize > 7, force total width to stay at maxAllowedWidth
+        //    and shrink the spacing (visualWidth) to fit.
+        if (handSize > maxCardsBeforeSqueeze) {
+           totalWidth = maxAllowedWidth;
+           visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
         }
-        const startX = (screenWidth - totalWidth) / 2;
+
+        // 3. Calculate Start Position (Centered + Your Offset)
+        // I kept your (screenWidth * 0.07) offset
+        const startX = (screenWidth - totalWidth) / 2 + (screenWidth * 0.07);
+
         const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
+        
         return { x, y, rotation: 0 };
       }
     }
@@ -87,13 +91,10 @@ case "market":
     // --- PLAYER (Bottom Hand) ---
     case "player": {
       const boxBottomMargin = isLandscape ? 10 : 20;
-      // ✅ FIX 3: Typo fix (was CARD_HEIGHT + 4)
       const boxHeight = CARD_HEIGHT + 10;
-      // ✅ FIX 3: Typo fix (was boxHeight / 16)
       const y = screenHeight - boxBottomMargin - boxHeight / 2;
 
       if (isLandscape) {
-        // Landscape: No overlap
         const spacing = 10;
         const visualWidth = CARD_WIDTH + spacing;
         const totalWidth = handSize * visualWidth - spacing;
@@ -101,7 +102,7 @@ case "market":
         const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
         return { x, y, rotation: 0 };
       } else {
-        // Portrait: "Squeezing" logic
+        // Player Squeezing logic (unchanged)
         const maxPlayerWidth = screenWidth * 0.9;
         const defaultVisualWidth = CARD_WIDTH * 0.6;
         let totalWidth = CARD_WIDTH + (handSize - 1) * defaultVisualWidth;

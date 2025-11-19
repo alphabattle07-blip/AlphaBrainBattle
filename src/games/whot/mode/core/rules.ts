@@ -1,4 +1,4 @@
-import { Card, GameState, PendingAction, CardSuit } from "./types";
+import { Card, GameState } from "./types";
 
 
 /**
