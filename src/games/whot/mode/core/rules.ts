@@ -12,11 +12,14 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
   const topCard = pile[pile.length - 1];
   const cardToMatch = lastPlayedCard || topCard;
 
-  // --- 1. Defend State (Pick 2 / Pick 5 battle) ---
-  if (pendingAction?.type === "defend") {
-    // Can only play a Pick 2, Pick 5, or WHOT
-    return [2, 5, 20].includes(card.number);
+  // --- 1. Defense State (Draw pending for current player) ---
+  if (pendingAction?.type === "draw" && pendingAction.playerIndex === state.currentPlayer) {
+    // Can only play the same number as the pick card to defend
+    const pickNumber = lastPlayedCard?.number || topCard.number;
+    return card.number === pickNumber && (pickNumber === 2 || pickNumber === 5);
   }
+
+
 
   // --- 2. Continuation State (after 1, 8, 14, or failed defense) ---
   if (pendingAction?.type === "continue") {
@@ -47,7 +50,7 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
     );
   }
 
-  // If in any other state (like 'draw' or 'call_suit'), no moves are valid
+  // If in any other state (like 'call_suit'), no moves are valid
   return false;
 };
 
@@ -79,7 +82,7 @@ export const applyCardEffectRule1 = (
   };
 
   const opponentIndex = getNextPlayerIndex(1);
-  const wasInBattle = state.pendingAction?.type === "defend";
+  const wasInBattle = state.pendingAction?.type === "draw" && state.pendingAction.playerIndex === opponentIndex;
 
   switch (card.number) {
     // --- Group 1: Hold On, Suspension, General Market ---
@@ -107,17 +110,24 @@ export const applyCardEffectRule1 = (
     // --- Group 2: Pick 2, Pick 5 ---
     case 2:
     case 5:
-      const pickCount = card.number === 2 ? 2 : 3;
-      // Stack the pick count
-      const totalPicks = (state.pendingPick || 0) + pickCount;
-      newState.pendingPick = totalPicks;
-      // Set 'defend' action for the opponent
-      newState.currentPlayer = opponentIndex;
-      newState.pendingAction = {
-        type: "defend",
-        playerIndex: opponentIndex,
-        count: totalPicks,
-      };
+      // Check if this is a defense move
+      const isDefense = state.pendingAction?.type === "draw" && state.pendingAction.playerIndex !== playerIndex;
+      if (isDefense) {
+        // Defense successful: Clear pending action and return turn to original player
+        const drawAction = state.pendingAction as { type: "draw"; playerIndex: number; count: number; returnTurnTo: number };
+        newState.currentPlayer = drawAction.returnTurnTo;
+        newState.pendingAction = null;
+      } else {
+        // Attack: Set 'draw' action for the opponent
+        const pickCount = card.number === 2 ? 2 : 3;
+        newState.currentPlayer = opponentIndex;
+        newState.pendingAction = {
+          type: "draw",
+          playerIndex: opponentIndex,
+          count: pickCount,
+          returnTurnTo: playerIndex, // Turn returns to original player after draw or defense
+        };
+      }
       break;
 
     // --- Group 3: WHOT ---
@@ -137,7 +147,6 @@ export const applyCardEffectRule1 = (
       // Playing a normal card *ends* a sequence
       newState.currentPlayer = getNextPlayerIndex(1);
       newState.pendingAction = null;
-      newState.pendingPick = 0;
       newState.lastPlayedCard = null; // Clear last card
       break;
   }

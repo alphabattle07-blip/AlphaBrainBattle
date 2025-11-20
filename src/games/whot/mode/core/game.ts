@@ -1,13 +1,14 @@
+import { generateDeck, shuffleDeck } from "./deck";
+import { applyCardEffectRule1, isValidMoveRule1 } from "./rules";
+import { applyCardEffectRule2, isValidMoveRule2 } from "./rules2";
 import {
   Card,
+  CardSuit,
   GameState,
+  PendingAction,
   Player,
   RuleVersion,
-  PendingAction,
-  CardSuit,
 } from "./types";
-import { generateDeck, shuffleDeck } from "./deck";
-import { isValidMoveRule1, applyCardEffectRule1, isValidMoveRule2, applyCardEffectRule2 } from "./rules";
 
 /**
  * Initialize a new game.
@@ -75,170 +76,12 @@ export const initGame = (
   return { gameState, allCards: fullDeck };
 };
 
-/**
- * Check if a move is valid in Rule 2.
- */
-export const isValidMoveRule2 = (card: Card, state: GameState): boolean => {
-  if (state.pile.length === 0) return true;
-  const topCard = state.pile[state.pile.length - 1];
-  const activeCard = state.lastPlayedCard || topCard;
 
-  // --- 1. Defense Scenario (Player is under attack) ---
-  if (
-    state.pendingAction?.type === "draw" &&
-    state.pendingAction.playerIndex === state.currentPlayer
-  ) {
-    // You are under attack! You can only play Defense cards (2 or 14).
-    // We allow switching between 2 and 14 during defense.
-    if (card.number === 2 || card.number === 14) {
-      // Strictly, you usually need to match the number to stack (2 on 2).
-      // However, to allow "switching", we can allow 2 on 14 or 14 on 2 if suits match,
-      // OR purely based on them being defensive cards.
-      // Implementation: Allow if Number matches OR Suit matches.
-      return (
-        card.number === activeCard.number ||
-        card.suit === activeCard.suit ||
-        // Allow cross-stacking 2 and 14 regardless of suit if it's a "defensive" move?
-        // Based on "I should be able to stack them... switch to another special number",
-        // we allow playing 2 or 14 on a 2 or 14.
-        ((activeCard.number === 2 || activeCard.number === 14) &&
-          (card.number === 2 || card.number === 14))
-      );
-    }
-    return false; // Cannot play normal cards while under attack
-  }
-
-  // --- 2. Normal / Combo Scenario ---
-  
-  // If the previous card was a special card played by THIS player (retained turn),
-  // they must follow standard matching rules (Suit or Number).
-  // Note: "Hold On" (1) allows playing anything that matches suit/number.
-  
-  return card.suit === activeCard.suit || card.number === activeCard.number;
-};
-
-/**
- * Apply Rule 2 effects.
- * Implements "Retain Turn" logic for 1, 2, and 14.
- */
-export const applyCardEffectRule2 = (
-  card: Card,
-  state: GameState,
-  playerIndex: number
-): GameState => {
-  const newState: GameState = { ...state };
-
-  const getNextPlayerIndex = (currentIdx: number, steps: number = 1) => {
-    return (
-      (currentIdx + newState.direction * steps + newState.players.length) %
-      newState.players.length
-    );
-  };
-
-  const opponentIndex = getNextPlayerIndex(playerIndex, 1);
-
-  // Determine current accumulated penalty (if any)
-  // If the player was defending, they are taking the existing penalty and ADDING to it.
-  // If the player is starting a combo, penalty starts at 0.
-  let currentPenalty = 0;
-  if (
-    state.pendingAction?.type === "draw" &&
-    state.pendingAction.playerIndex === playerIndex // Was targeting me
-  ) {
-    currentPenalty = state.pendingAction.count;
-  } else if (
-    state.pendingAction?.type === "draw" &&
-    state.pendingAction.playerIndex === opponentIndex // I'm already building a stack
-  ) {
-    currentPenalty = state.pendingAction.count;
-  }
-
-  // --- Apply Card Effect ---
-  switch (card.number) {
-    case 1: // Hold On
-      // Retain Turn. No penalty added.
-      newState.currentPlayer = playerIndex;
-      // If there was an existing penalty targeting the opponent (e.g. I played 2 then 1), preserve it.
-      // If I was under attack (defending) and played 1... wait, 1 isn't a defensive card usually.
-      // But assuming standard flow, 1 just pauses.
-      // We ensure pendingAction targets the opponent if we have a stack.
-      if (currentPenalty > 0) {
-        newState.pendingAction = {
-            type: "draw",
-            playerIndex: opponentIndex,
-            count: currentPenalty,
-            returnTurnTo: playerIndex
-        }
-      } else {
-          // Just a normal Hold On
-          newState.pendingAction = { type: 'continue', playerIndex };
-      }
-      break;
-
-    case 2: // Pick Two
-      // Retain Turn (Combo!).
-      newState.currentPlayer = playerIndex; 
-      // Add to penalty targeting NEXT player.
-      newState.pendingAction = {
-        type: "draw",
-        playerIndex: opponentIndex,
-        count: currentPenalty + 2,
-        returnTurnTo: playerIndex,
-      };
-      break;
-
-    case 14: // General Market
-      // Retain Turn (Combo!).
-      newState.currentPlayer = playerIndex;
-      // Add to penalty targeting NEXT player.
-      newState.pendingAction = {
-        type: "draw",
-        playerIndex: opponentIndex,
-        count: currentPenalty + 1,
-        returnTurnTo: playerIndex,
-      };
-      break;
-
-    default: // Normal card
-      // Play Normal -> ENDS TURN.
-      newState.currentPlayer = opponentIndex;
-      
-      // If we had built up a penalty (e.g. 2 -> 2 -> 5), that penalty is now LIVE for the opponent.
-      if (currentPenalty > 0) {
-         // The pending action already exists (targeting opponent) from the previous card.
-         // We just need to ensure it stays.
-         // However, 'lastPlayedCard' logic in isValidMove might need to know the 'attack' source.
-         // The state updates below will handle the pile.
-         newState.pendingAction = {
-            type: "draw",
-            playerIndex: opponentIndex,
-            count: currentPenalty,
-            returnTurnTo: playerIndex // irrelevant now as turn passed
-         }
-      } else {
-         newState.pendingAction = null;
-      }
-      break;
-  }
-
-  // --- Update State ---
-  newState.pile = [...newState.pile, card];
-  newState.lastPlayedCard = card; 
-
-  // Remove card from player's hand
-  newState.players = newState.players.map((p, idx) =>
-    idx === playerIndex
-      ? { ...p, hand: p.hand.filter((c) => c.id !== card.id) }
-      : p
-  );
-
-  return newState;
-};
 
 /**
  * Select ruleset dynamically.
  */
-const useRuleSet = (ruleVersion: RuleVersion) => {
+const selectRuleSet = (ruleVersion: RuleVersion) => {
   return ruleVersion === "rule1"
     ? { isValidMove: isValidMoveRule1, applyCardEffect: applyCardEffectRule1 }
     : { isValidMove: isValidMoveRule2, applyCardEffect: applyCardEffectRule2 };
@@ -252,7 +95,7 @@ export const playCard = (
   playerIndex: number,
   card: Card
 ): GameState => {
-  const { isValidMove, applyCardEffect } = useRuleSet(state.ruleVersion);
+  const { isValidMove, applyCardEffect } = selectRuleSet(state.ruleVersion);
 
   if (!isValidMove(card, state)) {
     console.log("Invalid move based on state:", state.pendingAction);
@@ -313,26 +156,13 @@ export const pickCard = (
     return { newState, drawnCards };
   }
 
-  // --- Rule 1 Logic (Unchanged) ---
+  // --- Rule 1 Logic ---
   if (
-    pendingAction?.type === "defend" &&
+    pendingAction?.type === "draw" &&
     pendingAction.playerIndex === playerIndex
   ) {
-    const opponentIndex =
-      (playerIndex - state.direction + state.players.length) %
-      state.players.length;
-
-    const newState: GameState = {
-      ...state,
-      pendingAction: {
-        type: "draw",
-        playerIndex: playerIndex,
-        count: pendingPick,
-        returnTurnTo: opponentIndex,
-      },
-      pendingPick: 0,
-    };
-    return { newState, drawnCards: [] };
+    // Trigger forced draw for rule1
+    return { newState: state, drawnCards: [] };
   }
 
   if (
