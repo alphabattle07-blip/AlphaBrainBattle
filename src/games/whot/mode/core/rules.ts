@@ -21,16 +21,26 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
 
 
 
-  // --- 2. Continuation State (after 1, 8, 14, or failed defense) ---
+  // --- 2. Continuation State (after 1, 8, 14, or successful defense) ---
   if (pendingAction?.type === "continue") {
     // WHOT is always allowed
     if (card.number === 20) return true;
-    
+
+    // If continuing after Hold-On (card 1), allow another Hold-On
+    if (cardToMatch.number === 1) {
+      return card.number === 1 || card.suit === cardToMatch.suit;
+    }
+
+    // If continuing after successful defense with pick card (2 or 5), allow another pick card of same number OR same suit
+    if (cardToMatch.number === 2 || cardToMatch.number === 5) {
+      return card.number === cardToMatch.number || card.suit === cardToMatch.suit;
+    }
+
     // If a suit was just called by WHOT, must follow that suit
     if (cardToMatch.number === 20 && calledSuit) {
       return card.suit === calledSuit;
     }
-    
+
     // Otherwise, must match the SHAPE (suit) of the card that started this
     return card.suit === cardToMatch.suit;
   }
@@ -41,8 +51,8 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
     if (topCard.number === 20 && calledSuit) {
       return card.suit === calledSuit || card.number === 20;
     }
-    
-    // Standard rule: match suit or number
+
+    // Standard rule: match suit or number (always applies in normal turn)
     return (
       card.suit === topCard.suit ||
       card.number === topCard.number ||
@@ -111,12 +121,13 @@ export const applyCardEffectRule1 = (
     case 2:
     case 5:
       // Check if this is a defense move
-      const isDefense = state.pendingAction?.type === "defend" && state.pendingAction.playerIndex !== playerIndex;
+      const isDefense = state.pendingAction?.type === "defend" && state.pendingAction.playerIndex === playerIndex;
       if (isDefense) {
-        // Defense successful: Clear pending action and return turn to original player
+        // Defense successful: Turn returns to original attacker, who can play any valid card
         const defendAction = state.pendingAction as { type: "defend"; playerIndex: number; count: number; returnTurnTo: number };
-        newState.currentPlayer = defendAction.returnTurnTo;
-        newState.pendingAction = null;
+        newState.currentPlayer = defendAction.returnTurnTo; // Return turn to attacker
+        newState.pendingAction = null; // Clear pending action for normal play
+        newState.lastPlayedCard = null; // Reset so attacker can play any valid card
       } else {
         // Attack: Set 'defend' action for the opponent
         const pickCount = card.number === 2 ? 2 : 3;
