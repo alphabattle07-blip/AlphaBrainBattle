@@ -1,6 +1,6 @@
 // whot-core/computer.ts
 import { Card, GameState } from "../core/types";
-import { isValidMove as isValidMoveRule1 } from "../core/rules";   // Rule 1 logic
+import { isValidMoveRule1 } from "../core/rules";   // Rule 1 logic
 import { isValidMoveRule2 } from "../core/rules2";                 // Rule 2 logic
 
 export const chooseComputerMove = (

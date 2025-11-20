@@ -7,11 +7,13 @@ import {
   CardSuit,
 } from "./types";
 import { generateDeck, shuffleDeck } from "./deck";
-import { isValidMoveRule1, applyCardEffectRule1 } from "./rules";
+import { isValidMoveRule1, applyCardEffectRule1, isValidMoveRule2, applyCardEffectRule2 } from "./rules";
 
 /**
  * Initialize a new game.
  */
+
+
 export const initGame = (
   playerNames: string[],
   startingHand: number = 5,
@@ -424,15 +426,16 @@ export const executeForcedDraw = (
     return { newState: state, drawnCard: null };
   }
 
-  const { playerIndex, count } = state.pendingAction;
+  const { playerIndex, count, returnTurnTo } = state.pendingAction;
 
+  // If market is empty, we must abort correctly
   if (state.market.length === 0) {
+    // If we can't draw, return turn to the Attacker immediately
+    const nextPlayer = returnTurnTo !== undefined ? returnTurnTo : state.currentPlayer;
     const newState = {
       ...state,
-      pendingAction: {
-        type: "continue",
-        playerIndex: state.currentPlayer,
-      },
+      currentPlayer: nextPlayer,
+      pendingAction: null, // Clear action so game resumes
     };
     return { newState, drawnCard: null };
   }
@@ -440,36 +443,50 @@ export const executeForcedDraw = (
   const market = [...state.market];
   const drawnCard = market.splice(0, 1)[0];
   
-  // ✅ FIX: Prepend drawn card (Add to start) instead of appending (Add to end)
-  // This ensures it conceptually sits at Index 0
+  // Add card to start of hand (visual preference)
   const newHand = [drawnCard, ...state.players[playerIndex].hand];
-
   const remainingCount = count - 1;
 
   let newPendingAction: PendingAction | null;
 
   if (remainingCount > 0) {
+    // Continue drawing...
     newPendingAction = {
       ...state.pendingAction,
       count: remainingCount,
     };
-  } else {
-    newPendingAction = {
-      type: "continue",
-      playerIndex: playerIndex,
+    
+    // State update for the INTERMEDIATE draw
+    const newState: GameState = {
+      ...state,
+      market,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex ? { ...p, hand: newHand } : p
+      ),
+      pendingAction: newPendingAction,
     };
+    return { newState, drawnCard };
+
+  } else {
+    // ✅ FINAL DRAW COMPLETE
+    // This is where the "Seize" happened. We must return the turn to the attacker.
+    
+    const nextPlayer = returnTurnTo !== undefined ? returnTurnTo : playerIndex;
+    
+    console.log(`✅ Forced draw done. Returning turn to Player ${nextPlayer}`);
+
+    const newState: GameState = {
+      ...state,
+      market,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex ? { ...p, hand: newHand } : p
+      ),
+      currentPlayer: nextPlayer, // <--- CRITICAL FIX: Switch player back
+      pendingAction: null,       // <--- Clear action so Attacker can play again
+      lastPlayedCard: null,      // <--- Reset this so Attacker can play ANY valid card (optional, depending on strictness)
+    };
+    return { newState, drawnCard };
   }
-
-  const newState: GameState = {
-    ...state,
-    market,
-    players: state.players.map((p, idx) =>
-      idx === playerIndex ? { ...p, hand: newHand } : p
-    ),
-    pendingAction: newPendingAction,
-  };
-
-  return { newState, drawnCard };
 };
 
 export const checkWinner = (state: GameState): Player | null => {
