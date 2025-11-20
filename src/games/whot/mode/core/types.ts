@@ -38,10 +38,11 @@ export type PendingAction =
       playerIndex: number;
     }
   | {
-      // Waiting for a player to defend against a Pick 2/5
+      // Waiting for a player to defend against a Pick 2/5 (Rule 1)
       type: "defend";
       playerIndex: number;
       count: number; // The total number of cards to be picked
+      returnTurnTo: number; // The player whose turn it is after defense or draw
     }
   | {
       // Forcing a player to draw cards one-by-one (after failing to defend or 14)

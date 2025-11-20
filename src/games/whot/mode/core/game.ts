@@ -158,11 +158,40 @@ export const pickCard = (
 
   // --- Rule 1 Logic ---
   if (
-    pendingAction?.type === "draw" &&
+    pendingAction?.type === "defend" &&
     pendingAction.playerIndex === playerIndex
   ) {
-    // Trigger forced draw for rule1
-    return { newState: state, drawnCards: [] };
+    // Handle drawing directly when player chooses to pick from market (unable to defend)
+    const market = [...state.market];
+    if (market.length === 0) {
+      // If no cards, turn passes back to attacker
+      const attacker = pendingAction.returnTurnTo;
+      const newState = {
+        ...state,
+        currentPlayer: attacker,
+        pendingAction: null,
+        lastPlayedCard: null,
+      };
+      return { newState, drawnCards: [] };
+    }
+
+    const count = pendingAction.count;
+    const drawnCards = market.splice(0, count);
+    const newHand = [...state.players[playerIndex].hand, ...drawnCards];
+
+    // Turn back to attacker
+    const attacker = pendingAction.returnTurnTo;
+    const newState: GameState = {
+      ...state,
+      market,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex ? { ...p, hand: newHand } : p
+      ),
+      currentPlayer: attacker,
+      pendingAction: null,
+      lastPlayedCard: null,
+    };
+    return { newState, drawnCards };
   }
 
   if (

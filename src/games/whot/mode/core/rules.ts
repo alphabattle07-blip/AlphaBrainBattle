@@ -12,8 +12,8 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
   const topCard = pile[pile.length - 1];
   const cardToMatch = lastPlayedCard || topCard;
 
-  // --- 1. Defense State (Draw pending for current player) ---
-  if (pendingAction?.type === "draw" && pendingAction.playerIndex === state.currentPlayer) {
+  // --- 1. Defense State (Defend pending for current player) ---
+  if (pendingAction?.type === "defend" && pendingAction.playerIndex === state.currentPlayer) {
     // Can only play the same number as the pick card to defend
     const pickNumber = lastPlayedCard?.number || topCard.number;
     return card.number === pickNumber && (pickNumber === 2 || pickNumber === 5);
@@ -111,18 +111,18 @@ export const applyCardEffectRule1 = (
     case 2:
     case 5:
       // Check if this is a defense move
-      const isDefense = state.pendingAction?.type === "draw" && state.pendingAction.playerIndex !== playerIndex;
+      const isDefense = state.pendingAction?.type === "defend" && state.pendingAction.playerIndex !== playerIndex;
       if (isDefense) {
         // Defense successful: Clear pending action and return turn to original player
-        const drawAction = state.pendingAction as { type: "draw"; playerIndex: number; count: number; returnTurnTo: number };
-        newState.currentPlayer = drawAction.returnTurnTo;
+        const defendAction = state.pendingAction as { type: "defend"; playerIndex: number; count: number; returnTurnTo: number };
+        newState.currentPlayer = defendAction.returnTurnTo;
         newState.pendingAction = null;
       } else {
-        // Attack: Set 'draw' action for the opponent
+        // Attack: Set 'defend' action for the opponent
         const pickCount = card.number === 2 ? 2 : 3;
         newState.currentPlayer = opponentIndex;
         newState.pendingAction = {
-          type: "draw",
+          type: "defend",
           playerIndex: opponentIndex,
           count: pickCount,
           returnTurnTo: playerIndex, // Turn returns to original player after draw or defense
