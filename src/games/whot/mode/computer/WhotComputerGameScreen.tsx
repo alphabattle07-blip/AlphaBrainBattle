@@ -18,7 +18,8 @@ import {
 } from "react-native";
 import { SkFont } from "@shopify/react-native-skia";
 import MemoizedBackground from "../core/ui/MemoizedBackground";
-
+import WhotSuitSelector from "../core/ui/WhotSuitSelector"; // <--- ADD THIS
+import { CardSuit } from "../core/types"; // <--- ADD THIS
 import AnimatedCardList, {
   AnimatedCardListHandle,
 } from "../core/ui/AnimatedCardList";
@@ -268,6 +269,40 @@ const WhotComputerGameScreen = () => {
     [layoutHandSize]
   );
 
+  const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
+      const currentGame = gameRef.current;
+      if (!currentGame) return;
+
+      const { gameState } = currentGame;
+      const { pendingAction } = gameState;
+
+      // Ensure we are in the correct state
+      if (
+        !pendingAction ||
+        pendingAction.type !== "call_suit" ||
+        pendingAction.playerIndex !== 0 // Ensure it's human player
+      ) {
+        return;
+      }
+
+      console.log(`🎨 Player selected suit: ${selectedSuit}`);
+
+      // Create new state
+      const newState: GameState = {
+        ...gameState,
+        calledSuit: selectedSuit, // Set the active shape
+        pendingAction: null, // Clear the pending action
+        // Handle turn passing logic:
+        currentPlayer:
+          pendingAction.nextAction === "pass"
+            ? (gameState.currentPlayer + 1) % gameState.players.length
+            : gameState.currentPlayer,
+      };
+      
+      // Update React State
+      setGame((prev) => (prev ? { ...prev, gameState: newState } : null));
+    }, []);
+  
   const SPECIAL_CARD_DELAY = 500;
   // 🧩 Handle computer AI updates
   const handleComputerTurn = useCallback(async () => {
@@ -655,6 +690,16 @@ const WhotComputerGameScreen = () => {
     [runForcedDrawSequence, layoutHandSize, playerHandLimit]
   );
 
+  const showSuitSelector = useMemo(() => {
+        if (!game) return false;
+        const { pendingAction, currentPlayer } = game.gameState;
+        // Show if waiting for suit call AND it is Player 0 (Human)
+        return (
+            pendingAction?.type === "call_suit" && 
+            pendingAction.playerIndex === 0
+        );
+    }, [game?.gameState.pendingAction, game?.gameState.currentPlayer]);
+  
   // ✅ FIX 2: THIS 'useEffect' WAS MISSING
   // 🧩 EFFECT: Trigger Computer's Turn
   useEffect(() => {
@@ -928,6 +973,13 @@ const WhotComputerGameScreen = () => {
           onReady={onCardListReady} // ✅ Pass stable prop
         />
       )}
+      <WhotSuitSelector
+          isVisible={showSuitSelector}
+          onSelectSuit={handleSuitSelection}
+          width={stableWidth}
+          height={stableHeight}
+          font={stableFont}
+        />
     </View>
   );
 };

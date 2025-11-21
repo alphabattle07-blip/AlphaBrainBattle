@@ -1,20 +1,16 @@
-# TODO: Fix Pick 2 and Pick 5 Logic in rules.ts (Rule1)
+# TODO: Implement WHOT Card Behavior for Number 20
 
-## Steps to Complete
+## Pending Tasks
+- [ ] Update src/games/whot/mode/core/types.ts: Add calledSuit?: CardSuit; to the Card interface.
+- [ ] Update src/games/whot/mode/core/game.ts: Modify callSuit to set calledSuit on the top pile card instead of in GameState.
+- [ ] Update src/games/whot/mode/core/rules.ts: Change references to calledSuit in GameState to check the top pile card's calledSuit.
+- [ ] Update src/games/whot/mode/core/ui/WhotCardFace.tsx: If suit === 'whot' and calledSuit exists, render the shape instead of "WHOT".
+- [ ] Create src/games/whot/mode/core/ui/WhotShapeSelector.tsx: A modal component displaying 5 shapes (circle, triangle, cross, square, star) for selection.
+- [ ] Update src/games/whot/mode/computer/WhotComputerGameScreen.tsx: Add showShapeSelector state, render WhotShapeSelector when pendingAction is "call_suit" and currentPlayer is 0, handle selection by calling callSuit.
+- [ ] Update src/games/whot/mode/computer/whotComputerLogic.ts: Add logic for AI to choose a suit when pendingAction is "call_suit".
+- [ ] Update handleComputerTurn in WhotComputerGameScreen.tsx: If pendingAction is "call_suit", randomly select a suit and call callSuit.
 
-1. **Update isValidMoveRule1**: Modify to allow defending by playing the same number (2 or 5) when pendingAction is "draw" and targets the current player. Remove or adjust defend state logic.
-
-2. **Update applyCardEffectRule1**: 
-   - For case 2 and 5: Remove stacking (pendingPick). Set pendingAction to "draw" with count (2 for 2, 3 for 5), targeting opponent, returnTurnTo original player.
-   - Add logic for defense: If playing 2 or 5 when under "draw" pendingAction, clear pendingAction and set currentPlayer back to the original attacker.
-
-3. **Verify pickCard and executeForcedDraw**: Ensure they handle the "draw" pendingAction correctly for rule1, similar to rule2. No changes needed if already compatible.
-
-4. **Test the changes**: Run the game to ensure pick 2 and 5 work without freezing, and defense/draw mechanics function as described.
-
-5. **Clean up**: Remove any unused code like pendingPick if no longer needed.
-
-## Notes
-- Rule2 is working perfectly, so reference its "draw" logic.
-- After defense or draw, turn returns to original player, who can play another card or draw 1 normally.
-- If opponent cannot defend, they draw the full count and turn returns.
+## Followup Steps
+- [ ] Test the WHOT card behavior: Play WHOT, select shape, verify display on card.
+- [ ] Test computer suit selection.
+- [ ] Ensure no regressions in game logic.
