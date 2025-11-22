@@ -661,6 +661,28 @@ const activeCalledSuit = useMemo(() => {
           }
       }, [selectedLevel, initializeGame]);
 
+    useEffect(() => {
+    const revealCards = async () => {
+      const dealer = cardListRef.current;
+      // Check if game is over and we haven't animated the reveal yet
+      if (game?.gameState.winner && dealer) {
+        console.log("🏆 Game Over! Revealing Computer Hand...");
+        
+        const computerHand = game.gameState.players[1].hand;
+        const revealPromises: Promise<void>[] = [];
+
+        // Force flip all computer cards face up
+        computerHand.forEach((card) => {
+          revealPromises.push(dealer.flipCard(card, true)); // true = face up
+        });
+
+        await Promise.all(revealPromises);
+      }
+    };
+
+    revealCards();
+  }, [game?.gameState.winner]);
+
   const handlePlayCard = useCallback(
     async (card: Card) => {
       const dealer = cardListRef.current;

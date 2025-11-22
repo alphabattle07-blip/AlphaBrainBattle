@@ -70,6 +70,8 @@ const GameOverModal = ({ winner, onRestart, visible }: GameOverModalProps) => {
   );
 };
 
+export default GameOverModal;
+
 const styles = StyleSheet.create({
   overlay: {
     position: "absolute",
@@ -141,4 +143,3 @@ const styles = StyleSheet.create({
   },
 });
 
-export default GameOverModal;

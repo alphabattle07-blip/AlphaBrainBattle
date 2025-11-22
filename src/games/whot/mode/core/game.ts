@@ -1,7 +1,7 @@
-// game.ts
 import { generateDeck, shuffleDeck } from "./deck";
+// ✅ We import Rule 1 from its file
 import { applyCardEffectRule1, isValidMoveRule1 } from "./rules";
-import { applyCardEffectRule2, isValidMoveRule2 } from "./rules2";
+// ❌ DO NOT IMPORT Rule 2 here. We define it at the bottom of this file.
 import {
   Card,
   CardSuit,
@@ -11,11 +11,54 @@ import {
   RuleVersion,
 } from "./types";
 
+// =========================================================
+// ✅ HELPER FUNCTIONS FOR SCORING (RULE 2)
+// =========================================================
+
+/**
+ * Calculates the total score of a hand (Sum of card numbers).
+ * WHOT (20) counts as 20.
+ */
+const calculateHandScore = (hand: Card[]): number => {
+  return hand.reduce((total, card) => total + card.number, 0);
+};
+
+/**
+ * Handles the Game Over state when the Market is empty in Rule 2.
+ * The player with the LOWEST score wins.
+ */
+const determineMarketExhaustionWinner = (state: GameState): GameState => {
+  console.log("🚫 Market Empty in Rule 2! Calculating scores...");
+
+  // Calculate scores for all players
+  const playersWithScores = state.players.map((p) => ({
+    player: p,
+    score: calculateHandScore(p.hand),
+  }));
+
+  // Sort by score ascending (Lowest score wins)
+  playersWithScores.sort((a, b) => a.score - b.score);
+
+  const winner = playersWithScores[0].player;
+  const winnerScore = playersWithScores[0].score;
+
+  console.log(`🏆 Market Runout! Winner: ${winner.name} with score ${winnerScore}`);
+
+  return {
+    ...state,
+    winner: winner, // This triggers the Game Over modal
+    pendingAction: null, // Stop all actions
+    currentPlayer: -1, // Lock turns
+  };
+};
+
+// =========================================================
+// MAIN GAME LOGIC
+// =========================================================
+
 /**
  * Initialize a new game.
  */
-
-
 export const initGame = (
   playerNames: string[],
   startingHand: number = 5,
@@ -78,8 +121,6 @@ export const initGame = (
   return { gameState, allCards: fullDeck };
 };
 
-
-
 /**
  * Select ruleset dynamically.
  */
@@ -107,17 +148,15 @@ export const playCard = (
   // 1. Apply the move
   let newState = applyCardEffect(card, state, playerIndex);
 
-  // 2. CHECK FOR WINNER IMMEDIATELY
-  // We check the player who just played (using the original playerIndex)
-  // We look at newState because the card has been removed there.
+  // 2. CHECK FOR WINNER IMMEDIATELY (Empty Hand)
   const player = newState.players[playerIndex];
   
   if (player.hand.length === 0) {
     console.log(`🏆 GAME OVER! Winner is ${player.name}`);
     return {
       ...newState,
-      winner: player, // Set the winner
-      pendingAction: null, // Clear any pending actions (like call suit), game is done.
+      winner: player, 
+      pendingAction: null, 
     };
   }
 
@@ -136,33 +175,34 @@ export const pickCard = (
   // --- Rule 2 Logic ---
   if (state.ruleVersion === "rule2") {
     // Case A: Forced Draw (Defeat)
-    // If pendingAction targets ME, I am giving up on defending.
     if (
       state.pendingAction?.type === "draw" &&
       state.pendingAction.playerIndex === playerIndex
     ) {
-        // Return state as-is to trigger 'executeForcedDraw' loop in UI/GameLoop
       return { newState: state, drawnCards: [] };
     }
 
-    // Case B: Voluntary Draw (Ending Combo or No Card)
-    // "Turn should only switch when I... Draw from the market"
     const market = [...state.market];
-    if (market.length === 0) return { newState: state, drawnCards: [] };
 
+    // Case B: Market Already Empty (User clicked empty slot)
+    if (market.length === 0) {
+      const endGameState = determineMarketExhaustionWinner(state);
+      return { newState: endGameState, drawnCards: [] };
+    }
+
+    // Case C: Normal Draw
     const drawnCards = market.splice(0, 1); // Draw 1
     const newHand = [...state.players[playerIndex].hand, ...drawnCards];
-
+    
     const nextPlayer = (playerIndex + state.direction + state.players.length) % state.players.length;
 
-    // Check if I was building a stack that I am now passing to the opponent
     let preservedPendingAction = null;
     if (state.pendingAction?.type === 'draw' && state.pendingAction.playerIndex === nextPlayer) {
-        // I played a 2, then drew. The +2 is still for the next player.
         preservedPendingAction = state.pendingAction;
     }
 
-    const newState = {
+    // Create the state with the new hand
+    const stateWithCardDrawn = {
       ...state,
       market,
       players: state.players.map((p, idx) =>
@@ -170,9 +210,17 @@ export const pickCard = (
       ),
       currentPlayer: nextPlayer, // Draw always ends turn in Rule 2
       pendingAction: preservedPendingAction, 
-      lastPlayedCard: null, // Reset so next player plays on pile top
+      lastPlayedCard: null, 
     };
-    return { newState, drawnCards };
+
+    // ✅ CHECK IF MARKET BECAME EMPTY AFTER DRAWING
+    if (market.length === 0) {
+      console.log("⚡ Market just ran out after pick! Ending game...");
+      const endGameState = determineMarketExhaustionWinner(stateWithCardDrawn);
+      return { newState: endGameState, drawnCards };
+    }
+
+    return { newState: stateWithCardDrawn, drawnCards };
   }
 
   // --- Rule 1 Logic ---
@@ -180,10 +228,8 @@ export const pickCard = (
     pendingAction?.type === "defend" &&
     pendingAction.playerIndex === playerIndex
   ) {
-    // Handle drawing directly when player chooses to pick from market (unable to defend)
     const market = [...state.market];
     if (market.length === 0) {
-      // If no cards, turn passes back to attacker
       const attacker = pendingAction.returnTurnTo;
       const newState = {
         ...state,
@@ -198,7 +244,6 @@ export const pickCard = (
     const drawnCards = market.splice(0, count);
     const newHand = [...state.players[playerIndex].hand, ...drawnCards];
 
-    // Turn back to attacker
     const attacker = pendingAction.returnTurnTo;
     const newState: GameState = {
       ...state,
@@ -306,14 +351,20 @@ export const executeForcedDraw = (
 
   const { playerIndex, count, returnTurnTo } = state.pendingAction;
 
-  // If market is empty, we must abort correctly
+  // If market is ALREADY empty
   if (state.market.length === 0) {
-    // If we can't draw, return turn to the Attacker immediately
+    // ✅ CHECK FOR MARKET EXHAUSTION (Rule 2 Specific)
+    if (state.ruleVersion === "rule2") {
+       const endGameState = determineMarketExhaustionWinner(state);
+       return { newState: endGameState, drawnCard: null };
+    }
+    
+    // Rule 1 fallback
     const nextPlayer = returnTurnTo !== undefined ? returnTurnTo : state.currentPlayer;
     const newState = {
       ...state,
       currentPlayer: nextPlayer,
-      pendingAction: null, // Clear action so game resumes
+      pendingAction: null, 
     };
     return { newState, drawnCard: null };
   }
@@ -321,20 +372,33 @@ export const executeForcedDraw = (
   const market = [...state.market];
   const drawnCard = market.splice(0, 1)[0];
   
-  // Add card to start of hand (visual preference)
   const newHand = [drawnCard, ...state.players[playerIndex].hand];
   const remainingCount = count - 1;
+
+  // ✅ CHECK IF MARKET BECAME EMPTY AFTER THIS DRAW
+  if (state.ruleVersion === "rule2" && market.length === 0) {
+    console.log("⚡ Market just ran out during forced draw! Ending game...");
+    
+    const tempState: GameState = {
+        ...state,
+        market,
+        players: state.players.map((p, idx) =>
+            idx === playerIndex ? { ...p, hand: newHand } : p
+        ),
+    };
+    
+    const endGameState = determineMarketExhaustionWinner(tempState);
+    return { newState: endGameState, drawnCard };
+  }
 
   let newPendingAction: PendingAction | null;
 
   if (remainingCount > 0) {
-    // Continue drawing...
     newPendingAction = {
       ...state.pendingAction,
       count: remainingCount,
     };
     
-    // State update for the INTERMEDIATE draw
     const newState: GameState = {
       ...state,
       market,
@@ -346,22 +410,17 @@ export const executeForcedDraw = (
     return { newState, drawnCard };
 
   } else {
-    // ✅ FINAL DRAW COMPLETE
-    // This is where the "Seize" happened. We must return the turn to the attacker.
-    
     const nextPlayer = returnTurnTo !== undefined ? returnTurnTo : playerIndex;
     
-    console.log(`✅ Forced draw done. Returning turn to Player ${nextPlayer}`);
-
     const newState: GameState = {
       ...state,
       market,
       players: state.players.map((p, idx) =>
         idx === playerIndex ? { ...p, hand: newHand } : p
       ),
-      currentPlayer: nextPlayer, // <--- CRITICAL FIX: Switch player back
-      pendingAction: null,       // <--- Clear action so Attacker can play again
-      lastPlayedCard: null,      // <--- Reset this so Attacker can play ANY valid card (optional, depending on strictness)
+      currentPlayer: nextPlayer, 
+      pendingAction: null,      
+      lastPlayedCard: null,      
     };
     return { newState, drawnCard };
   }
@@ -369,4 +428,103 @@ export const executeForcedDraw = (
 
 export const checkWinner = (state: GameState): Player | null => {
   return state.players.find((p) => p.hand.length === 0) || null;
+};
+
+// =========================================================
+// ✅ RULE 2 LOGIC DEFINED HERE TO PREVENT DUPLICATES
+// =========================================================
+
+/**
+ * Check if a move is valid in Rule 2.
+ */
+export const isValidMoveRule2 = (card: Card, state: GameState): boolean => {
+  if (state.pile.length === 0) return true;
+  const topCard = state.pile[state.pile.length - 1];
+
+  if (
+    state.pendingAction?.type === "draw" &&
+    state.pendingAction.playerIndex === state.currentPlayer
+  ) {
+    return false;
+  }
+
+  if (
+    state.pendingAction?.type === "continue" &&
+    state.pendingAction.playerIndex === state.currentPlayer
+  ) {
+    const specialCard = state.lastPlayedCard || topCard;
+
+    if (specialCard.number === 1) {
+      return card.suit === specialCard.suit || card.number === specialCard.number;
+    }
+
+    if (specialCard.number === 2 || specialCard.number === 14) {
+      return card.suit === specialCard.suit;
+    }
+  }
+
+  return card.suit === topCard.suit || card.number === topCard.number;
+};
+
+/**
+ * Apply Rule 2 effects.
+ */
+export const applyCardEffectRule2 = (
+  card: Card,
+  state: GameState,
+  playerIndex: number
+): GameState => {
+  const newState: GameState = { ...state };
+
+  const getNextPlayerIndex = (currentIdx: number, steps: number = 1) => {
+    return (
+      (currentIdx + newState.direction * steps + newState.players.length) %
+      newState.players.length
+    );
+  };
+
+  const opponentIndex = getNextPlayerIndex(playerIndex, 1);
+
+  switch (card.number) {
+    case 1: // Hold On
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = { type: "continue", playerIndex: playerIndex };
+      break;
+
+    case 2: // Pick Two
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = {
+        type: "draw",
+        playerIndex: opponentIndex,
+        count: 2,
+        returnTurnTo: playerIndex, // ✅ Required for forced draw loop
+      };
+      break;
+
+    case 14: // General Market
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = {
+        type: "draw",
+        playerIndex: opponentIndex,
+        count: 1,
+        returnTurnTo: playerIndex, // ✅ Required for forced draw loop
+      };
+      break;
+
+    default: // Normal card
+      newState.currentPlayer = getNextPlayerIndex(playerIndex, 1);
+      newState.pendingAction = null;
+      break;
+  }
+
+  newState.pile = [...newState.pile, card];
+  newState.lastPlayedCard = card; 
+
+  newState.players = newState.players.map((p, idx) =>
+    idx === playerIndex
+      ? { ...p, hand: p.hand.filter((c) => c.id !== card.id) }
+      : p
+  );
+
+  return newState;
 };

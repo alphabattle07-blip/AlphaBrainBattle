@@ -1,7 +1,6 @@
-// core/ui/MarketPile.tsx
 import React, { useMemo, memo } from "react"; 
 import { StyleSheet, View, Text } from "react-native";
-import { Canvas, Group } from "@shopify/react-native-skia";
+import { Canvas, Group, RoundedRect, DashPathEffect, vec } from "@shopify/react-native-skia"; // ✅ Added imports
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { runOnJS } from "react-native-reanimated";
 import { WhotCardBack } from "./WhotCardBack";
@@ -13,14 +12,14 @@ interface MarketPileProps {
   font: any;
   smallFont: any;
   onPress?: () => void;
-  width: number; // Screen width
-  height: number; // Screen height
+  width: number; 
+  height: number; 
 }
 
 const MAX_STACK_CARDS = 15;
 const STACK_OFFSET = 0.4;
 
-// ✅ 1. CREATE THE NEW INNER, MEMOIZED CANVAS
+// --- 1. Canvas for the Cards ---
 interface MemoizedMarketCanvasProps {
   visualStackCount: number;
   font: any;
@@ -49,7 +48,27 @@ const MemoizedMarketCanvas = memo(
   }
 );
 
-// 2. Wrap the component in memo()
+// --- 2. Canvas for Empty Slot (Zero Index) ---
+// ✅ This renders when the market is empty
+const EmptyMarketPlaceholder = memo(() => {
+  return (
+    <Canvas style={StyleSheet.absoluteFill}>
+      <RoundedRect
+        x={0}
+        y={0}
+        width={CARD_WIDTH}
+        height={CARD_HEIGHT}
+        r={8} // Border Radius
+        color="rgba(255, 255, 255, 0.3)" // Semi-transparent white
+        style="stroke"
+        strokeWidth={2}
+      >
+        <DashPathEffect intervals={[10, 10]} />
+      </RoundedRect>
+    </Canvas>
+  );
+});
+
 export const MarketPile = memo(
   ({
     count,
@@ -59,7 +78,8 @@ export const MarketPile = memo(
     width,
     height,
   }: MarketPileProps) => {
-    console.log("LOG: 🟡 MarketPile re-rendered.");
+    // console.log("LOG: 🟡 MarketPile re-rendered.");
+    
     const marketPos = useMemo(
       () => getCoords("market", {}, width, height),
       [width, height]
@@ -73,15 +93,15 @@ export const MarketPile = memo(
         top: marketPos.y - CARD_HEIGHT / 2 - 10,
         left: marketPos.x - CARD_WIDTH / 2,
         zIndex: 5,
-        overflow: "visible",
+        overflow: "visible" as const, // Fixed type error
       }),
       [marketPos]
     );
 
     const visualStackCount = useMemo(
-   () => Math.min(count, MAX_STACK_CARDS),
-   [count]
-  );
+      () => Math.min(count, MAX_STACK_CARDS),
+      [count]
+    );
 
     const tapGesture = useMemo(
       () =>
@@ -93,28 +113,34 @@ export const MarketPile = memo(
       [onPress]
     );
 
-    if ( !font || !smallFont) {
+    if (!font || !smallFont) {
       return null;
     }
-return (
-   <GestureDetector gesture={tapGesture}>
-    <Animated.View style={style}>
 
-          <MemoizedMarketCanvas 
-            visualStackCount={visualStackCount}
-            font={font}
-            smallFont={smallFont}
-          />
+    return (
+      <GestureDetector gesture={tapGesture}>
+        <Animated.View style={style}>
+          
+          {/* ✅ LOGIC: If count is 0, show placeholder. If > 0, show cards. */}
+          {count === 0 ? (
+            <EmptyMarketPlaceholder />
+          ) : (
+            <MemoizedMarketCanvas
+              visualStackCount={visualStackCount}
+              font={font}
+              smallFont={smallFont}
+            />
+          )}
 
-    {count > 0 && (
-   <View style={styles.badgeContainer}>
-   <Text style={styles.badgeText}>{count}</Text>
-   </View>
-  )}
-  </Animated.View>
-   </GestureDetector>
-  );
- }
+          {count > 0 && (
+            <View style={styles.badgeContainer}>
+              <Text style={styles.badgeText}>{count}</Text>
+            </View>
+          )}
+        </Animated.View>
+      </GestureDetector>
+    );
+  }
 );
 
 const styles = StyleSheet.create({
@@ -122,12 +148,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: -12,
     top: 8,
-    backgroundColor: "#00008B", // Dark Blue
+    backgroundColor: "#00008B", 
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderWidth: 2,
     borderColor: "#FFFFFF",
+    zIndex: 20,
   },
   badgeText: {
     color: "#FFFFFF",
