@@ -1,3 +1,4 @@
+// game.ts
 import { generateDeck, shuffleDeck } from "./deck";
 import { applyCardEffectRule1, isValidMoveRule1 } from "./rules";
 import { applyCardEffectRule2, isValidMoveRule2 } from "./rules2";

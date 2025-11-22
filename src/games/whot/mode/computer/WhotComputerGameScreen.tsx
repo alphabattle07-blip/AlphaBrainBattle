@@ -28,11 +28,13 @@ import { getCoords } from "../core/coordinateHelper";
 // ✅ FIX 1: ADDED 'executeForcedDraw'
 import { initGame, pickCard, playCard, executeForcedDraw } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
+
 import { MarketPile } from "../core/ui/MarketPile";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
-import { CARD_HEIGHT } from "../core/ui/whotConfig";
-import { chooseComputerMove } from "./whotComputerLogic";
+import { CARD_WIDTH, CARD_HEIGHT } from "../core/ui/whotConfig";
+import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
+import ActiveSuitCard from "../core/ui/ActiveSuitCard";
 
 type GameData = {
   gameState: GameState;
@@ -51,6 +53,9 @@ const WhotComputerGameScreen = () => {
   const [stableHeight, setStableHeight] = useState(height);
   const [stableFont, setStableFont] = useState<SkFont | null>(null);
   const [stableWhotFont, setStableWhotFont] = useState<SkFont | null>(null);
+  const pileCoords = useMemo(() => {
+    return getCoords("pile", { cardIndex: 0 }, stableWidth, stableHeight);
+  }, [stableWidth, stableHeight]);
 
   useLayoutEffect(() => {
     const widthChanged = Math.abs(stableWidth - width) > 1;
@@ -268,48 +273,52 @@ const WhotComputerGameScreen = () => {
     },
     [layoutHandSize]
   );
+   
+const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
+    const currentGame = gameRef.current;
+    if (!currentGame) return;
 
-  const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
-      const currentGame = gameRef.current;
-      if (!currentGame) return;
+    const { gameState } = currentGame;
+    const { pendingAction } = gameState;
 
-      const { gameState } = currentGame;
-      const { pendingAction } = gameState;
+    // Must be in 'call_suit' mode
+    if (!pendingAction || pendingAction.type !== "call_suit") return;
 
-      // Ensure we are in the correct state
-      if (
-        !pendingAction ||
-        pendingAction.type !== "call_suit" ||
-        pendingAction.playerIndex !== 0 // Ensure it's human player
-      ) {
-        return;
-      }
+    console.log(`🎨 Suit Selected: ${selectedSuit} by Player ${pendingAction.playerIndex}`);
 
-      console.log(`🎨 Player selected suit: ${selectedSuit}`);
+    const newState: GameState = {
+      ...gameState,
+      calledSuit: selectedSuit, // ✅ Sets the Active Shape in Center
+      pendingAction: null,
+      currentPlayer:
+        pendingAction.nextAction === "pass"
+          ? (gameState.currentPlayer + 1) % gameState.players.length
+          : gameState.currentPlayer,
+    };
 
-      // Create new state
-      const newState: GameState = {
-        ...gameState,
-        calledSuit: selectedSuit, // Set the active shape
-        pendingAction: null, // Clear the pending action
-        // Handle turn passing logic:
-        currentPlayer:
-          pendingAction.nextAction === "pass"
-            ? (gameState.currentPlayer + 1) % gameState.players.length
-            : gameState.currentPlayer,
-      };
-      
-      // Update React State
-      setGame((prev) => (prev ? { ...prev, gameState: newState } : null));
-    }, []);
+    setGame((prev) => (prev ? { ...prev, gameState: newState } : null));
+  }, []);
   
+const activeCalledSuit = useMemo(() => {
+    if (!game) return null;
+    const { pile, calledSuit } = game.gameState;
+    const topCard = pile[pile.length - 1];
+
+    // Show if top card is 20 and a suit is active
+    if (topCard?.number === 20 && calledSuit) {
+      return calledSuit;
+    }
+    return null;
+  }, [game?.gameState.pile, game?.gameState.calledSuit]);
+
   const SPECIAL_CARD_DELAY = 500;
   // 🧩 Handle computer AI updates
-  const handleComputerTurn = useCallback(async () => {
+ const handleComputerTurn = useCallback(async () => {
     const dealer = cardListRef.current;
     const currentGame = gameRef.current;
     const animating = isAnimatingRef.current;
 
+    // 1. Safety Checks
     if (
       !currentGame ||
       animating ||
@@ -319,36 +328,33 @@ const WhotComputerGameScreen = () => {
       return;
     }
 
-    console.log("🤖 Computer's turn...");
-
-    // 1. Set animating flag
+    console.log("🤖 Computer's turn starting...");
     setIsAnimating(true);
 
-    // 2. Wrap ALL logic in a try/finally
     try {
       const oldState = currentGame.gameState;
       const { ruleVersion } = oldState;
       const computerPlayerIndex = 1;
 
+      // 2. AI Decides Move
       const move = chooseComputerMove(
         oldState,
         computerPlayerIndex,
         computerLevel
       );
 
-      // --- Handle PLAYING A CARD ---
+      // ---------------------------------------------
+      // CASE A: COMPUTER PLAYS A CARD
+      // ---------------------------------------------
       if (move) {
         console.log("🤖 Computer chose to PLAY:", move.id);
-        
+
         let newState: GameState;
         try {
           newState = playCard(oldState, computerPlayerIndex, move, ruleVersion);
         } catch (e: any) {
-          console.error(
-            "🤖 Computer AI chose invalid card, forcing pick.",
-            e.message
-          );
-          // Force pick (this is the AI's fallback)
+          console.error("🤖 AI Logic Error (Invalid Move):", e.message);
+          // FALLBACK: If AI messes up, force it to pick a card
           const { newState: pickState, drawnCards } = pickCard(
             oldState,
             computerPlayerIndex
@@ -356,30 +362,32 @@ const WhotComputerGameScreen = () => {
           setGame((prevGame) =>
             prevGame ? { ...prevGame, gameState: pickState } : null
           );
-
+          // Animate the forced pick
           if (drawnCards.length > 0) {
             const newHand = pickState.players[computerPlayerIndex].hand;
-            const newHandSize = newHand.length;
-            const animationPromises: Promise<void>[] = [];
-            newHand.forEach((card, index) => {
-              const options = { cardIndex: index, handSize: newHandSize };
-              animationPromises.push(
-                dealer.dealCard(card, "computer", options, false)
-              );
-            });
-            await Promise.all(animationPromises);
+            const promises = newHand.map((card, index) =>
+              dealer.dealCard(
+                card,
+                "computer",
+                { cardIndex: index, handSize: layoutHandSize },
+                false
+              )
+            );
+            await Promise.all(promises);
           }
-          // Let the 'finally' block handle isAnimating
-          return;
+          return; // Exit
         }
 
-        // --- This is for the 'if (move)' block ---
+        // 3. Update State (Card leaves hand logic)
         setGame((prevGame) =>
           prevGame ? { ...prevGame, gameState: newState } : null
         );
 
+        // 4. Animate Card to Pile
         const finalPileIndex = newState.pile.length - 1;
         const animationPromises: Promise<void>[] = [];
+
+        // Move card to pile
         animationPromises.push(
           dealer.dealCard(
             move,
@@ -388,8 +396,10 @@ const WhotComputerGameScreen = () => {
             false
           )
         );
+        // Flip face up
         animationPromises.push(dealer.flipCard(move, true));
 
+        // Reorganize Computer Hand (Shift remaining cards)
         const newHand = newState.players[computerPlayerIndex].hand;
         newHand.forEach((card, index) =>
           animationPromises.push(
@@ -397,56 +407,108 @@ const WhotComputerGameScreen = () => {
               card,
               "computer",
               { cardIndex: index, handSize: layoutHandSize },
-              true // true = instant
+              true // Instant shift for cleaner look
             )
           )
         );
 
         await Promise.all(animationPromises);
 
-        // Check if this move triggered a forced draw
-       if (newState.pendingAction?.type === "draw") {
-           console.log(`⏳ Special card played! Waiting ${SPECIAL_CARD_DELAY}ms...`);
-           await new Promise((resolve) => setTimeout(resolve, SPECIAL_CARD_DELAY));
+        // ============================================================
+        // ✅ NEW LOGIC: HANDLE WHOT (20) SUIT SELECTION
+        // ============================================================
+        if (
+          newState.pendingAction?.type === "call_suit" &&
+          newState.pendingAction.playerIndex === computerPlayerIndex
+        ) {
+          console.log("🤖 Computer played WHOT! Thinking of suit...");
+          
+          // 1. AI Logic: Choose best suit based on hand
+          const bestSuit = chooseComputerSuit(newState.players[computerPlayerIndex].hand);
+          
+          // 2. Realistic Delay
+          await new Promise((res) => setTimeout(res, 800));
 
-           const finalState = await runForcedDrawSequence(newState);
-           setGame((prevGame) =>
-             prevGame ? { ...prevGame, gameState: finalState } : null
-           );
+          console.log(`🤖 Computer calls: ${bestSuit}`);
+
+          // 3. Resolve the Action (Update State)
+          const finalState: GameState = {
+            ...newState,
+            calledSuit: bestSuit, // Sets active shape in center
+            pendingAction: null,  // Clear action
+            // Pass turn if rule says so (usually 'pass' for Whot)
+            currentPlayer:
+              newState.pendingAction.nextAction === "pass"
+                ? (newState.currentPlayer + 1) % newState.players.length
+                : newState.currentPlayer,
+          };
+
+          // 4. Update Game
+          setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+          
+          // Exit here, turn is fully complete
+          return; 
         }
+        // ============================================================
+
+        // 5. Handle Forced Draws (Attack Cards: 14, 2, 5)
+        if (newState.pendingAction?.type === "draw") {
+          console.log(`⏳ Attack card played! Waiting ${SPECIAL_CARD_DELAY}ms...`);
+          await new Promise((resolve) =>
+            setTimeout(resolve, SPECIAL_CARD_DELAY)
+          );
+
+          const finalState = await runForcedDrawSequence(newState);
+          setGame((prevGame) =>
+            prevGame ? { ...prevGame, gameState: finalState } : null
+          );
+        }
+
       } else {
-        // --- Handle PICKING A CARD ---
+        // ---------------------------------------------
+        // CASE B: COMPUTER PICKS A CARD
+        // ---------------------------------------------
         console.log("🤖 Computer chose to PICK");
+        
         const { newState, drawnCards } = pickCard(oldState, computerPlayerIndex);
+        
         if (drawnCards.length === 0) {
-          console.warn("🤖 Computer tried to pick, but market is empty.");
+          // Market empty logic
           setGame((prevGame) =>
             prevGame ? { ...prevGame, gameState: newState } : null
           );
-          // Let the 'finally' block handle isAnimating
           return;
         }
 
         console.log(`🤖 Computer drew ${drawnCards.length} card(s).`);
+        
+        // Update State
         setGame((prevGame) =>
           prevGame ? { ...prevGame, gameState: newState } : null
         );
 
+        // Animate Draw
         const newHand = newState.players[computerPlayerIndex].hand;
-        const newHandSize = newHand.length;
         const animationPromises: Promise<void>[] = [];
+        
+        // We only animate the *new* hand layout. 
+        // Ideally we'd animate just the new card, but re-laying out is safer for alignment.
         newHand.forEach((card, index) => {
-          const options = { cardIndex: index, handSize: layoutHandSize };
           animationPromises.push(
-            dealer.dealCard(card, "computer", options, false)
+            dealer.dealCard(
+              card, 
+              "computer", 
+              { cardIndex: index, handSize: layoutHandSize }, 
+              false
+            )
           );
         });
+        
         await Promise.all(animationPromises);
       }
     } catch (err) {
-      console.error("Error during handleComputerTurn:", err);
+      console.error("🔥 Error during handleComputerTurn:", err);
     } finally {
-      // 3. This will ALWAYS run, even if an error occurs
       setIsAnimating(false);
     }
   }, [computerLevel, runForcedDrawSequence, layoutHandSize]);
@@ -973,6 +1035,17 @@ const WhotComputerGameScreen = () => {
           onReady={onCardListReady} // ✅ Pass stable prop
         />
       )}
+       
+       {/* ✅ RENDER THE ACTIVE SUIT ON TOP OF PILE */}
+       {activeCalledSuit && stableFont && (
+        <ActiveSuitCard
+          suit={activeCalledSuit}
+          x={pileCoords.x} // ✅ Uses exact pile center X
+          y={pileCoords.y} // ✅ Uses exact pile center Y
+          font={stableFont}
+        />
+      )}
+
       <WhotSuitSelector
           isVisible={showSuitSelector}
           onSelectSuit={handleSuitSelection}

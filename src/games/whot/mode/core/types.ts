@@ -82,4 +82,7 @@ export interface GameState {
 
   // --- Rule 2 (optional) ---
   mustPlayNormal?: boolean;
+
+  // ✅ ADD THIS: Tracks the winner
+  winner: Player | null;
 }

@@ -3,12 +3,14 @@ import React, { useEffect } from "react";
 import { View, StyleSheet, Pressable, Text } from "react-native";
 import {
   Canvas,
-  Circle,
   Group,
   Path,
   Rect,
   Skia,
   SkFont,
+  RoundedRect,
+  Text as SkText,
+  Circle,
   BlurMask,
 } from "@shopify/react-native-skia";
 import Animated, {
@@ -29,14 +31,14 @@ interface WhotSuitSelectorProps {
   font: SkFont | null;
 }
 
-const SHAPE_SIZE = 60;
+const CARD_WIDTH = 80;
+const CARD_HEIGHT = 110;
 const COLOR_RED = "#A22323";
 
-// Reusing Shape Logic from WhotCardFace for consistency
-const ShapeIcon = ({ suit, x, y }: { suit: CardSuit; x: number; y: number }) => {
-  const size = SHAPE_SIZE;
-  const cx = x + size / 2;
-  const cy = y + size / 2;
+// --- Shape Drawing Logic (Same as your Card Face) ---
+const ShapeIcon = ({ suit, x, y, size }: { suit: CardSuit; x: number; y: number; size: number }) => {
+  const cx = x;
+  const cy = y;
 
   switch (suit) {
     case "circle":
@@ -87,85 +89,88 @@ const ShapeIcon = ({ suit, x, y }: { suit: CardSuit; x: number; y: number }) => 
   }
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-const SelectionItem = ({
+// --- Single Selection Card Component ---
+const SelectionCard = ({
   suit,
-  label,
   index,
+  font,
   onPress,
 }: {
   suit: CardSuit;
-  label: string;
   index: number;
+  font: SkFont | null;
   onPress: (s: CardSuit) => void;
 }) => {
   const scale = useSharedValue(0);
 
   useEffect(() => {
-    scale.value = withDelay(index * 100, withSpring(1));
+    scale.value = withDelay(index * 50, withSpring(1));
   }, []);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
+  if (!font) return null;
+
+  const textWidth = font.getTextWidth("20");
+  const padding = 8;
+  const centerX = CARD_WIDTH / 2;
+  const centerY = CARD_HEIGHT / 2;
+
   return (
-    <AnimatedPressable
-      style={[styles.itemContainer, style]}
-      onPress={() => onPress(suit)}
-    >
-      <View style={styles.canvasWrapper}>
-        <Canvas style={{ width: SHAPE_SIZE + 20, height: SHAPE_SIZE + 20 }}>
-          <Group>
-            {/* White Background Circle */}
-            <Circle cx={40} cy={40} r={38} color="white">
-                <BlurMask blur={2} style="solid" />
-            </Circle>
-            <ShapeIcon suit={suit} x={10} y={10} />
+    <AnimatedPressable style={[styles.cardWrapper, style]} onPress={() => onPress(suit)}>
+      <Canvas style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
+        <Group>
+          {/* Card Body */}
+          <RoundedRect x={0} y={0} width={CARD_WIDTH} height={CARD_HEIGHT} r={8} color="white" />
+          <RoundedRect x={1} y={1} width={CARD_WIDTH - 2} height={CARD_HEIGHT - 2} r={8} color={COLOR_RED} style="stroke" strokeWidth={2} />
+
+          {/* Top Left "20" */}
+          <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} size={14} />
+          
+          {/* Small Top Icon */}
+           <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={10} />
+
+          {/* Center Main Shape */}
+          <ShapeIcon suit={suit} x={centerX} y={centerY} size={35} />
+
+          {/* Bottom Right "20" (Rotated) */}
+          <Group origin={{ x: centerX, y: centerY }} transform={[{ rotate: Math.PI }]}>
+            <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} size={14} />
+            <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={10} />
           </Group>
-        </Canvas>
-      </View>
-      <Text style={styles.label}>{label}</Text>
+        </Group>
+      </Canvas>
     </AnimatedPressable>
   );
 };
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export const WhotSuitSelector = ({
   isVisible,
   onSelectSuit,
   width,
   height,
+  font,
 }: WhotSuitSelectorProps) => {
-  if (!isVisible) return null;
+  if (!isVisible || !font) return null;
 
-  const suits: { type: CardSuit; label: string }[] = [
-    { type: "circle", label: "CIRCLE" },
-    { type: "triangle", label: "TRIANGLE" },
-    { type: "cross", label: "CROSS" },
-    { type: "square", label: "SQUARE" },
-    { type: "star", label: "STAR" },
-  ];
+  const suits: CardSuit[] = ["circle", "triangle", "cross", "square", "star"];
 
   return (
-    <Animated.View
-      entering={FadeIn}
-      exiting={FadeOut}
-      style={[styles.overlay, { width, height }]}
-    >
+    <Animated.View entering={FadeIn} exiting={FadeOut} style={[styles.overlay, { width, height }]}>
       <View style={styles.backdrop} />
-      
-      <View style={styles.contentContainer}>
+      <View style={styles.container}>
         <Text style={styles.title}>SELECT A SHAPE</Text>
-        <Text style={styles.subTitle}>Whot played! Choose next suit.</Text>
-
         <View style={styles.grid}>
-          {suits.map((item, index) => (
-            <SelectionItem
-              key={item.type}
-              suit={item.type}
-              label={item.label}
+          {suits.map((suit, index) => (
+            <SelectionCard
+              key={suit}
+              suit={suit}
               index={index}
+              font={font}
               onPress={onSelectSuit}
             />
           ))}
@@ -180,59 +185,38 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    zIndex: 999, // Ensure it sits on top of everything
+    zIndex: 999,
     justifyContent: "center",
     alignItems: "center",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.7)",
   },
-  contentContainer: {
-    width: "90%",
-    maxWidth: 400,
+  container: {
     alignItems: "center",
-    padding: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 5,
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  subTitle: {
-    fontSize: 16,
-    color: "#DDDDDD",
-    marginBottom: 30,
+    color: "white",
+    marginBottom: 20,
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowRadius: 4,
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: 20,
+    gap: 15,
+    maxWidth: 320, // Forces wrap for better layout
   },
-  itemContainer: {
-    alignItems: "center",
-    margin: 5,
-  },
-  canvasWrapper: {
-    width: 80,
-    height: 80,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  label: {
-    marginTop: 8,
-    color: "white",
-    fontWeight: "600",
-    fontSize: 12,
+  cardWrapper: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
 });
 

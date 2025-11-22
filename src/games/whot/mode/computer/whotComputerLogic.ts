@@ -1,7 +1,45 @@
 // whot-core/computer.ts
-import { Card, GameState } from "../core/types";
+import { Card, GameState, CardSuit } from "../core/types";
 import { isValidMoveRule1 } from "../core/rules";   // Rule 1 logic
 import { isValidMoveRule2 } from "../core/rules2";                 // Rule 2 logic
+
+
+
+export const chooseComputerSuit = (hand: Card[]): CardSuit => {
+  const suitCounts: Record<string, number> = {
+    circle: 0,
+    triangle: 0,
+    cross: 0,
+    square: 0,
+    star: 0,
+  };
+
+  // Count suits in hand (ignore Whot cards for counting)
+  hand.forEach((card) => {
+    if (card.suit !== "whot") {
+      suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
+    }
+  });
+
+  // Find the suit with the highest count
+  let bestSuit: CardSuit = "circle"; // Default
+  let maxCount = -1;
+
+  (Object.keys(suitCounts) as CardSuit[]).forEach((suit) => {
+    if (suitCounts[suit] > maxCount) {
+      maxCount = suitCounts[suit];
+      bestSuit = suit;
+    }
+  });
+
+  // If hand is empty or only Whots, pick random
+  if (maxCount === 0) {
+    const suits: CardSuit[] = ["circle", "triangle", "cross", "square", "star"];
+    return suits[Math.floor(Math.random() * suits.length)];
+  }
+
+  return bestSuit;
+};
 
 export const chooseComputerMove = (
   state: GameState,
