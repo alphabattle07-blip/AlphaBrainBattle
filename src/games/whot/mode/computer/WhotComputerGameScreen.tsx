@@ -35,6 +35,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from "../core/ui/whotConfig";
 import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import ActiveSuitCard from "../core/ui/ActiveSuitCard";
+import GameOverModal from "../core/ui/GameOverModal";
 
 type GameData = {
   gameState: GameState;
@@ -650,6 +651,15 @@ const activeCalledSuit = useMemo(() => {
     console.log("✅ Card list ready!");
     setIsCardListReady(true);
   }, []); // ✅ Empty array makes this function stable
+  
+   const handleRestart = useCallback(() => {
+          if (selectedLevel) {
+              // Re-run initialization with the current level
+              // We map the label back to the value, or just store the value in state
+              const lvlValue = levels.find(l => l.label === selectedLevel)?.value || 1;
+              initializeGame(lvlValue);
+          }
+      }, [selectedLevel, initializeGame]);
 
   const handlePlayCard = useCallback(
     async (card: Card) => {
@@ -1053,6 +1063,11 @@ const activeCalledSuit = useMemo(() => {
           height={stableHeight}
           font={stableFont}
         />
+        <GameOverModal 
+             visible={!!game?.gameState.winner}
+             winner={game?.gameState.winner || null}
+             onRestart={handleRestart}
+          />
     </View>
   );
 };

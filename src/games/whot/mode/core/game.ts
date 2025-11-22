@@ -72,6 +72,7 @@ export const initGame = (
     pendingAction: null,
     // Init Rule 2 state
     mustPlayNormal: false,
+    winner: null,
   };
 
   return { gameState, allCards: fullDeck };
@@ -103,7 +104,24 @@ export const playCard = (
     throw new Error("Invalid move");
   }
 
-  return applyCardEffect(card, state, playerIndex);
+  // 1. Apply the move
+  let newState = applyCardEffect(card, state, playerIndex);
+
+  // 2. CHECK FOR WINNER IMMEDIATELY
+  // We check the player who just played (using the original playerIndex)
+  // We look at newState because the card has been removed there.
+  const player = newState.players[playerIndex];
+  
+  if (player.hand.length === 0) {
+    console.log(`🏆 GAME OVER! Winner is ${player.name}`);
+    return {
+      ...newState,
+      winner: player, // Set the winner
+      pendingAction: null, // Clear any pending actions (like call suit), game is done.
+    };
+  }
+
+  return newState;
 };
 
 /**
