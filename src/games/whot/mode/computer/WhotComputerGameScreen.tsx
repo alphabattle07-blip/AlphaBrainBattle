@@ -370,7 +370,7 @@ const activeCalledSuit = useMemo(() => {
               dealer.dealCard(
                 card,
                 "computer",
-                { cardIndex: index, handSize: layoutHandSize },
+                { cardIndex: index, handSize: newHand.length },
                 false
               )
             );
@@ -407,7 +407,7 @@ const activeCalledSuit = useMemo(() => {
             dealer.dealCard(
               card,
               "computer",
-              { cardIndex: index, handSize: layoutHandSize },
+              { cardIndex: index, handSize: newHand.length },
               true // Instant shift for cleaner look
             )
           )
@@ -497,9 +497,9 @@ const activeCalledSuit = useMemo(() => {
         newHand.forEach((card, index) => {
           animationPromises.push(
             dealer.dealCard(
-              card, 
-              "computer", 
-              { cardIndex: index, handSize: layoutHandSize }, 
+              card,
+              "computer",
+              { cardIndex: index, handSize: newHand.length },
               false
             )
           );
@@ -855,7 +855,7 @@ const activeCalledSuit = useMemo(() => {
           await dealer.dealCard(
             computerCard,
             "computer",
-            { cardIndex: i, handSize: layoutHandSize },
+            { cardIndex: i, handSize: computerHand.length },
             false
           );
           await delay(dealDelay);
@@ -957,7 +957,7 @@ const activeCalledSuit = useMemo(() => {
         dealer.dealCard(
           card,
           "computer",
-          { cardIndex: index, handSize: layoutHandSize },
+          { cardIndex: index, handSize: computerHand.length },
           true
         );
       }

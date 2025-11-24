@@ -45,48 +45,55 @@ export const getCoords = (
       };
 
     // --- COMPUTER (Top Hand) ---
-    case "computer": {
-      const boxTopMargin = isLandscape ? 10 : 20;
-      const boxHeight = CARD_HEIGHT + 10;
-      // kept your specific Y adjustment
-      const y = boxTopMargin + boxHeight / 1.5; 
+// --- COMPUTER (Top Hand) ---
+case "computer": {
+  const boxTopMargin = isLandscape ? 10 : 20;
+  const boxHeight = CARD_HEIGHT + 10;
 
-      if (isLandscape) {
-        // Landscape: No overlap
-        const spacing = 10;
-        const visualWidth = CARD_WIDTH + spacing;
-        const totalWidth = handSize * visualWidth - spacing;
-        const startX = (screenWidth - totalWidth) / 2;
-        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
-        return { x, y, rotation: 0 };
-      } else {
-        // ✅ PORTRAIT: FIXED 7-CARD WIDTH LIMIT
-        
-        const defaultSpacing = CARD_WIDTH * 0.4; // Normal spacing
-        const maxCardsBeforeSqueeze = 7; // The limit you requested
+  // Correct Y for each orientation
+  const y = isLandscape
+    ? boxTopMargin + boxHeight / 2.1   // landscape
+    : boxTopMargin + boxHeight / 1.5;  // portrait
 
-        // 1. Calculate the Maximum Allowed Width (Width of exactly 7 cards)
-        const maxAllowedWidth = CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * defaultSpacing;
+  const maxCardsBeforeSqueeze = 6;
 
-        let visualWidth = defaultSpacing;
-        let totalWidth = CARD_WIDTH + (handSize - 1) * defaultSpacing;
+  if (isLandscape) {
+    const defaultSpacing = 10;
+    const maxAllowedWidth =
+      CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * (CARD_WIDTH + defaultSpacing);
 
-        // 2. If handSize > 7, force total width to stay at maxAllowedWidth
-        //    and shrink the spacing (visualWidth) to fit.
-        if (handSize > maxCardsBeforeSqueeze) {
-           totalWidth = maxAllowedWidth;
-           visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
-        }
+    let visualWidth = CARD_WIDTH + defaultSpacing;
+    let totalWidth = handSize * visualWidth - defaultSpacing;
 
-        // 3. Calculate Start Position (Centered + Your Offset)
-        // I kept your (screenWidth * 0.07) offset
-        const startX = (screenWidth - totalWidth) / 2 + (screenWidth * 0.07);
-
-        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
-        
-        return { x, y, rotation: 0 };
-      }
+    if (handSize > maxCardsBeforeSqueeze) {
+      totalWidth = maxAllowedWidth;
+      visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
     }
+
+    const startX = (screenWidth - totalWidth) / 2;
+    const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
+
+    return { x, y, rotation: 0 };
+  } else {
+    const defaultSpacing = CARD_WIDTH * 0.5;
+    const maxAllowedWidth =
+      CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * defaultSpacing;
+
+    let visualWidth = defaultSpacing;
+    let totalWidth = CARD_WIDTH + (handSize - 2) * defaultSpacing;
+
+    if (handSize > maxCardsBeforeSqueeze) {
+      totalWidth = maxAllowedWidth;
+      visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
+    }
+
+    const startX = (screenWidth - totalWidth) / 2 + screenWidth * 0.02;
+    const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
+
+    return { x, y, rotation: 0 };
+  }
+}
+
 
     // --- PLAYER (Bottom Hand) ---
     case "player": {
