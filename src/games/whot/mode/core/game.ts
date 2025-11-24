@@ -192,7 +192,7 @@ export const pickCard = (
 
     // Case C: Normal Draw
     const drawnCards = market.splice(0, 1); // Draw 1
-    const newHand = [...state.players[playerIndex].hand, ...drawnCards];
+    const newHand = [...drawnCards, ...state.players[playerIndex].hand];
     
     const nextPlayer = (playerIndex + state.direction + state.players.length) % state.players.length;
 
@@ -242,7 +242,7 @@ export const pickCard = (
 
     const count = pendingAction.count;
     const drawnCards = market.splice(0, count);
-    const newHand = [...state.players[playerIndex].hand, ...drawnCards];
+    const newHand = [...drawnCards, ...state.players[playerIndex].hand];
 
     const attacker = pendingAction.returnTurnTo;
     const newState: GameState = {
@@ -278,7 +278,7 @@ export const pickCard = (
     }
 
     const drawnCards = market.splice(0, 1);
-    const newHand = [...state.players[playerIndex].hand, ...drawnCards];
+    const newHand = [...drawnCards, ...state.players[playerIndex].hand];
 
     const newState: GameState = {
       ...state,
