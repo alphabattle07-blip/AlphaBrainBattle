@@ -1,5 +1,3 @@
-// core/coordinateHelper.ts
-
 import { CARD_WIDTH, CARD_HEIGHT } from "../core/ui/whotConfig";
 
 type Target = "player" | "computer" | "pile" | "market";
@@ -45,55 +43,65 @@ export const getCoords = (
       };
 
     // --- COMPUTER (Top Hand) ---
-// --- COMPUTER (Top Hand) ---
-case "computer": {
-  const boxTopMargin = isLandscape ? 10 : 20;
-  const boxHeight = CARD_HEIGHT + 10;
+    case "computer": {
+      const boxTopMargin = isLandscape ? 10 : 20;
+      const boxHeight = CARD_HEIGHT + 10;
 
-  // Correct Y for each orientation
-  const y = isLandscape
-    ? boxTopMargin + boxHeight / 2.1   // landscape
-    : boxTopMargin + boxHeight / 1.5;  // portrait
+      // Correct Y for each orientation
+      const y = isLandscape
+        ? boxTopMargin + boxHeight / 2.1 // landscape
+        : boxTopMargin + boxHeight / 1.5; // portrait
 
-  const maxCardsBeforeSqueeze = 6;
+      const maxCardsBeforeSqueeze = 6;
 
-  if (isLandscape) {
-    const defaultSpacing = 10;
-    const maxAllowedWidth =
-      CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * (CARD_WIDTH + defaultSpacing);
+      if (isLandscape) {
+        const defaultSpacing = 10;
+        const maxAllowedWidth =
+          CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * (CARD_WIDTH + defaultSpacing);
 
-    let visualWidth = CARD_WIDTH + defaultSpacing;
-    let totalWidth = handSize * visualWidth - defaultSpacing;
+        let visualWidth = CARD_WIDTH + defaultSpacing;
+        let totalWidth = handSize * visualWidth - defaultSpacing;
 
-    if (handSize > maxCardsBeforeSqueeze) {
-      totalWidth = maxAllowedWidth;
-      visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
+        if (handSize > maxCardsBeforeSqueeze) {
+          totalWidth = maxAllowedWidth;
+          visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
+        }
+
+        // Fixed: Ensure division by 2 is present
+        const startX = (screenWidth - totalWidth) / 2;
+        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
+
+        return { x, y, rotation: 0 };
+      } else {
+        // --- FIXED PORTRAIT LOGIC ---
+        
+        // 1. Define a fixed starting point on the left (Fixed 0 Index)
+        // UPDATED: Fixed margin as requested
+        const startMargin = 110; 
+        
+        // 2. Define the maximum width available before squeezing
+        // We leave a matching margin on the right side to keep it balanced visually
+        const maxAllowedWidth = screenWidth - (startMargin * 1.2);
+
+        // 3. Calculate spacing (Visual Width)
+        const defaultSpacing = CARD_WIDTH * 0.9;
+        let visualWidth = defaultSpacing;
+        
+        // Calculate how wide the hand WOULD be without squeezing
+        const potentialWidth = CARD_WIDTH + (handSize - 1) * defaultSpacing;
+
+        // If hand exceeds width, recalculate spacing to squeeze
+        if (potentialWidth > maxAllowedWidth && handSize > 1) {
+          visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
+        }
+
+        // 4. Position Calculation
+        // The 0-index card stays at startMargin. Subsequent cards grow rightward.
+        const x = startMargin + (cardIndex * visualWidth) + (CARD_WIDTH / 2);
+
+        return { x, y, rotation: 0 };
+      }
     }
-
-    const startX = (screenWidth - totalWidth) / 2;
-    const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
-
-    return { x, y, rotation: 0 };
-  } else {
-    const defaultSpacing = CARD_WIDTH * 0.5;
-    const maxAllowedWidth =
-      CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * defaultSpacing;
-
-    let visualWidth = defaultSpacing;
-    let totalWidth = CARD_WIDTH + (handSize - 2) * defaultSpacing;
-
-    if (handSize > maxCardsBeforeSqueeze) {
-      totalWidth = maxAllowedWidth;
-      visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
-    }
-
-    const startX = (screenWidth - totalWidth) / 2 + screenWidth * 0.02;
-    const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
-
-    return { x, y, rotation: 0 };
-  }
-}
-
 
     // --- PLAYER (Bottom Hand) ---
     case "player": {
