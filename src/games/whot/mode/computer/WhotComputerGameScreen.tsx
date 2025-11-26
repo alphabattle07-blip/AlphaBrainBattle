@@ -1,41 +1,42 @@
 // whotComputerGameScreen.tsx
+import { SkFont } from "@shopify/react-native-skia";
 import React, {
-  useState,
-  useEffect,
   useCallback,
+  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
-  useLayoutEffect,
+  useState,
 } from "react";
 import {
-  View,
-  StyleSheet,
-  useWindowDimensions,
-  Text,
-  Button,
   ActivityIndicator,
+  Button,
   Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { SkFont } from "@shopify/react-native-skia";
-import MemoizedBackground from "../core/ui/MemoizedBackground";
-import WhotSuitSelector from "../core/ui/WhotSuitSelector"; // <--- ADD THIS
-import { CardSuit } from "../core/types"; // <--- ADD THIS
+import { getCoords } from "../core/coordinateHelper";
+import { Card, CardSuit, GameState } from "../core/types"; // <--- ADD THIS
 import AnimatedCardList, {
   AnimatedCardListHandle,
 } from "../core/ui/AnimatedCardList";
-import { Card, GameState } from "../core/types";
-import { getCoords } from "../core/coordinateHelper";
+import MemoizedBackground from "../core/ui/MemoizedBackground";
+import WhotSuitSelector from "../core/ui/WhotSuitSelector"; // <--- ADD THIS
 // ✅ FIX 1: ADDED 'executeForcedDraw'
-import { initGame, pickCard, playCard, executeForcedDraw } from "../core/game";
+import { executeForcedDraw, initGame, pickCard, playCard } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
-import { MarketPile } from "../core/ui/MarketPile";
-import { useWhotFonts } from "../core/ui/useWhotFonts";
-import { CARD_WIDTH, CARD_HEIGHT } from "../core/ui/whotConfig";
-import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
+import { usePlayerProfile } from "@/src/hooks/usePlayerProfile";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import ActiveSuitCard from "../core/ui/ActiveSuitCard";
 import GameOverModal from "../core/ui/GameOverModal";
+import { MarketPile } from "../core/ui/MarketPile";
+import { useWhotFonts } from "../core/ui/useWhotFonts";
+import { CARD_HEIGHT } from "../core/ui/whotConfig";
+import WhotPlayerProfile from "../core/ui/whotplayerProfile";
+import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
 
 type GameData = {
   gameState: GameState;
@@ -48,6 +49,7 @@ const WhotComputerGameScreen = () => {
   const isLandscape = width > height;
   const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } =
     useWhotFonts();
+  const playerProfile = usePlayerProfile("whot");
 
   // ✅ --- STABILIZATION FIX 1: STABLE DIMENSIONS & FONTS --- ✅
   const [stableWidth, setStableWidth] = useState(width);
@@ -140,6 +142,32 @@ const WhotComputerGameScreen = () => {
     game?.gameState.players[1]?.hand.length,
     game?.gameState.currentPlayer,
   ]);
+
+  const playerState = useMemo(() => {
+    if (!game) {
+      return {
+        name: playerProfile.name,
+        rating: playerProfile.rating,
+        country: playerProfile.country,
+        avatar: playerProfile.avatar,
+        handLength: 0,
+        isCurrentPlayer: false,
+      };
+    }
+
+    return {
+      name: playerProfile.name,
+      rating: playerProfile.rating,
+      country: playerProfile.country,
+      avatar: playerProfile.avatar,
+      handLength: game.gameState.players[0].hand.length,
+      isCurrentPlayer: game.gameState.currentPlayer === 0,
+    };
+  }, [
+    game?.gameState.players[0]?.hand.length,
+    game?.gameState.currentPlayer,
+    playerProfile,
+  ]);
   // --- END STABILIZATION FIX 2 ---
 
   // --- CONSTANTS ---
@@ -197,7 +225,7 @@ const WhotComputerGameScreen = () => {
   }, []);
 
   // 🧩 ✅ HELPER: Runs the sequential draw loop
- const runForcedDrawSequence = useCallback(
+  const runForcedDrawSequence = useCallback(
     async (startingState: GameState): Promise<GameState> => {
       const dealer = cardListRef.current;
       if (!dealer) return startingState;
@@ -234,30 +262,30 @@ const WhotComputerGameScreen = () => {
         // We get the NEW hand (where drawnCard is at index 0)
         const targetPlayer = newState.players[playerIndex];
         const visibleHand = targetPlayer.hand.slice(0, layoutHandSize);
-        
+
         const animationPromises: Promise<void>[] = [];
 
         // Loop through the visible hand to animate everyone
         visibleHand.forEach((card, index) => {
           const isTheNewCard = card.id === drawnCard.id;
-          
+
           // Logic: If it's the new card, it flies from market.
           // If it's an old card, it slides to its new index (Shifting right).
           animationPromises.push(
             dealer.dealCard(
-              card, 
-              target, 
-              { 
+              card,
+              target,
+              {
                 cardIndex: index, // ✅ New card goes to 0, others shift to 1, 2...
-                handSize: layoutHandSize 
-              }, 
+                handSize: layoutHandSize
+              },
               false // smooth animation
             )
           );
 
           // Flip if it is the new card and it's the player
           if (isTheNewCard && target === "player") {
-             animationPromises.push(dealer.flipCard(drawnCard, true));
+            animationPromises.push(dealer.flipCard(drawnCard, true));
           }
         });
 
@@ -274,8 +302,8 @@ const WhotComputerGameScreen = () => {
     },
     [layoutHandSize]
   );
-   
-const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
+
+  const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
     const currentGame = gameRef.current;
     if (!currentGame) return;
 
@@ -299,8 +327,8 @@ const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
 
     setGame((prev) => (prev ? { ...prev, gameState: newState } : null));
   }, []);
-  
-const activeCalledSuit = useMemo(() => {
+
+  const activeCalledSuit = useMemo(() => {
     if (!game) return null;
     const { pile, calledSuit } = game.gameState;
     const topCard = pile[pile.length - 1];
@@ -314,7 +342,7 @@ const activeCalledSuit = useMemo(() => {
 
   const SPECIAL_CARD_DELAY = 500;
   // 🧩 Handle computer AI updates
- const handleComputerTurn = useCallback(async () => {
+  const handleComputerTurn = useCallback(async () => {
     const dealer = cardListRef.current;
     const currentGame = gameRef.current;
     const animating = isAnimatingRef.current;
@@ -423,10 +451,10 @@ const activeCalledSuit = useMemo(() => {
           newState.pendingAction.playerIndex === computerPlayerIndex
         ) {
           console.log("🤖 Computer played WHOT! Thinking of suit...");
-          
+
           // 1. AI Logic: Choose best suit based on hand
           const bestSuit = chooseComputerSuit(newState.players[computerPlayerIndex].hand);
-          
+
           // 2. Realistic Delay
           await new Promise((res) => setTimeout(res, 800));
 
@@ -446,9 +474,9 @@ const activeCalledSuit = useMemo(() => {
 
           // 4. Update Game
           setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
-          
+
           // Exit here, turn is fully complete
-          return; 
+          return;
         }
         // ============================================================
 
@@ -470,9 +498,9 @@ const activeCalledSuit = useMemo(() => {
         // CASE B: COMPUTER PICKS A CARD
         // ---------------------------------------------
         console.log("🤖 Computer chose to PICK");
-        
+
         const { newState, drawnCards } = pickCard(oldState, computerPlayerIndex);
-        
+
         if (drawnCards.length === 0) {
           // Market empty logic
           setGame((prevGame) =>
@@ -482,7 +510,7 @@ const activeCalledSuit = useMemo(() => {
         }
 
         console.log(`🤖 Computer drew ${drawnCards.length} card(s).`);
-        
+
         // Update State
         setGame((prevGame) =>
           prevGame ? { ...prevGame, gameState: newState } : null
@@ -491,7 +519,7 @@ const activeCalledSuit = useMemo(() => {
         // Animate Draw
         const newHand = newState.players[computerPlayerIndex].hand;
         const animationPromises: Promise<void>[] = [];
-        
+
         // We only animate the *new* hand layout. 
         // Ideally we'd animate just the new card, but re-laying out is safer for alignment.
         newHand.forEach((card, index) => {
@@ -504,7 +532,7 @@ const activeCalledSuit = useMemo(() => {
             )
           );
         });
-        
+
         await Promise.all(animationPromises);
       }
     } catch (err) {
@@ -651,23 +679,23 @@ const activeCalledSuit = useMemo(() => {
     console.log("✅ Card list ready!");
     setIsCardListReady(true);
   }, []); // ✅ Empty array makes this function stable
-  
-   const handleRestart = useCallback(() => {
-          if (selectedLevel) {
-              // Re-run initialization with the current level
-              // We map the label back to the value, or just store the value in state
-              const lvlValue = levels.find(l => l.label === selectedLevel)?.value || 1;
-              initializeGame(lvlValue);
-          }
-      }, [selectedLevel, initializeGame]);
 
-    useEffect(() => {
+  const handleRestart = useCallback(() => {
+    if (selectedLevel) {
+      // Re-run initialization with the current level
+      // We map the label back to the value, or just store the value in state
+      const lvlValue = levels.find(l => l.label === selectedLevel)?.value || 1;
+      initializeGame(lvlValue);
+    }
+  }, [selectedLevel, initializeGame]);
+
+  useEffect(() => {
     const revealCards = async () => {
       const dealer = cardListRef.current;
       // Check if game is over and we haven't animated the reveal yet
       if (game?.gameState.winner && dealer) {
         console.log("🏆 Game Over! Revealing Computer Hand...");
-        
+
         const computerHand = game.gameState.players[1].hand;
         const revealPromises: Promise<void>[] = [];
 
@@ -766,7 +794,7 @@ const activeCalledSuit = useMemo(() => {
         await Promise.all(animationPromises);
 
         // Check if this move triggered a forced draw
-     if (newState.pendingAction?.type === "draw") {
+        if (newState.pendingAction?.type === "draw") {
           console.log(`⏳ Special card played! Waiting ${SPECIAL_CARD_DELAY}ms...`);
           await new Promise((resolve) => setTimeout(resolve, SPECIAL_CARD_DELAY));
 
@@ -785,15 +813,15 @@ const activeCalledSuit = useMemo(() => {
   );
 
   const showSuitSelector = useMemo(() => {
-        if (!game) return false;
-        const { pendingAction, currentPlayer } = game.gameState;
-        // Show if waiting for suit call AND it is Player 0 (Human)
-        return (
-            pendingAction?.type === "call_suit" && 
-            pendingAction.playerIndex === 0
-        );
-    }, [game?.gameState.pendingAction, game?.gameState.currentPlayer]);
-  
+    if (!game) return false;
+    const { pendingAction, currentPlayer } = game.gameState;
+    // Show if waiting for suit call AND it is Player 0 (Human)
+    return (
+      pendingAction?.type === "call_suit" &&
+      pendingAction.playerIndex === 0
+    );
+  }, [game?.gameState.pendingAction, game?.gameState.currentPlayer]);
+
   // ✅ FIX 2: THIS 'useEffect' WAS MISSING
   // 🧩 EFFECT: Trigger Computer's Turn
   useEffect(() => {
@@ -1016,6 +1044,22 @@ const activeCalledSuit = useMemo(() => {
           <ComputerUI computerState={computerState} level={computerLevel} />
         </View>
       )}
+
+      {game && (
+        <View
+          style={[styles.playerUIContainer, { pointerEvents: "box-none" }]}
+        >
+          <WhotPlayerProfile
+            name={playerState.name}
+            rating={playerState.rating}
+            country={playerState.country}
+            avatar={playerState.avatar}
+            cardCount={playerState.handLength}
+            isCurrentPlayer={playerState.isCurrentPlayer}
+          />
+        </View>
+      )}
+
       {/* ✅ Pass stable props to all children */}
       <MemoizedBackground width={stableWidth} height={stableHeight} />
       <View style={computerHandStyle} />
@@ -1067,9 +1111,9 @@ const activeCalledSuit = useMemo(() => {
           onReady={onCardListReady} // ✅ Pass stable prop
         />
       )}
-       
-       {/* ✅ RENDER THE ACTIVE SUIT ON TOP OF PILE */}
-       {activeCalledSuit && stableFont && (
+
+      {/* ✅ RENDER THE ACTIVE SUIT ON TOP OF PILE */}
+      {activeCalledSuit && stableFont && (
         <ActiveSuitCard
           suit={activeCalledSuit}
           x={pileCoords.x} // ✅ Uses exact pile center X
@@ -1079,17 +1123,17 @@ const activeCalledSuit = useMemo(() => {
       )}
 
       <WhotSuitSelector
-          isVisible={showSuitSelector}
-          onSelectSuit={handleSuitSelection}
-          width={stableWidth}
-          height={stableHeight}
-          font={stableFont}
-        />
-        <GameOverModal 
-             visible={!!game?.gameState.winner}
-             winner={game?.gameState.winner || null}
-             onRestart={handleRestart}
-          />
+        isVisible={showSuitSelector}
+        onSelectSuit={handleSuitSelection}
+        width={stableWidth}
+        height={stableHeight}
+        font={stableFont}
+      />
+      <GameOverModal
+        visible={!!game?.gameState.winner}
+        winner={game?.gameState.winner || null}
+        onRestart={handleRestart}
+      />
     </View>
   );
 };
@@ -1109,6 +1153,13 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 50,
     alignSelf: "center",
+    zIndex: 10,
+  },
+  playerUIContainer: {
+    position: "absolute",
+    bottom: 40,
+    right: 20,
+    alignSelf: "flex-end",
     zIndex: 10,
   },
   handContainerBase: {

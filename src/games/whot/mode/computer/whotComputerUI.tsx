@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { View, Text, StyleSheet, Image } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
 // Level definitions (kept the same)
 export const levels = [
@@ -39,7 +39,7 @@ const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
       {levelInfo && (
         <View style={styles.headerRow}>
           <Text style={styles.levelLabel}>
-             AI {levelInfo.label}
+            AI {levelInfo.label}
           </Text>
           <View style={styles.ratingContainer}>
             <Text style={styles.ratingText}>⭐ {levelInfo.rating}</Text>
@@ -50,13 +50,13 @@ const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
       {/* Middle Section: Avatar + Card Count Badge */}
       <View style={styles.profileWrapper}>
         <View style={styles.avatarContainer}>
-            <Image 
-                source={AVATAR_URI}
-                style={styles.avatar} 
-                resizeMode="cover"
-            />
+          <Image
+            source={AVATAR_URI}
+            style={styles.avatar}
+            resizeMode="cover"
+          />
         </View>
-        
+
         {/* The Badge (Card Count) */}
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{computerState.handLength}</Text>
@@ -68,7 +68,7 @@ const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
         <Text style={styles.thinking}>Thinking...</Text>
       ) : (
         // Placeholder to keep height stable when not thinking
-        <Text style={styles.idle}>Waiting...</Text> 
+        <Text style={styles.idle}>Waiting...</Text>
       )}
     </View>
   );
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     fontWeight: "900", // Extra Bold
     fontSize: 16,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: {width: -1, height: 1},
+    textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 2,
     letterSpacing: 0.5,
   },
@@ -101,15 +101,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     width: 60,
     marginLeft: 10
-    
-    
+
+
   },
   ratingText: {
     color: "#000",
     fontWeight: "bold",
     fontSize: 12,
   },
-  
+
   // Profile & Badge Logic
   profileWrapper: {
     position: "relative", // Needed for absolute positioning of the badge

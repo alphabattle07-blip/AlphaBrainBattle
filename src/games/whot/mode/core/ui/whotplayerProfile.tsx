@@ -1,9 +1,9 @@
 // src/screens/games/whot/WhotPlayerProfile.tsx
-import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
-import CountryFlag from 'react-native-country-flag';
-import { Ionicons } from '@expo/vector-icons';
 import { getRankFromRating } from '@/src/utils/rank'; // Adjust path if needed
+import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import CountryFlag from 'react-native-country-flag';
 
 interface Props {
   name: string;
@@ -12,6 +12,7 @@ interface Props {
   cardCount: number;
   avatar?: string | null;
   isAI?: boolean;
+  isCurrentPlayer?: boolean;
 }
 
 const WhotPlayerProfile = ({
@@ -21,6 +22,7 @@ const WhotPlayerProfile = ({
   cardCount,
   avatar,
   isAI = false,
+  isCurrentPlayer = false,
 }: Props) => {
   const displayName = name.split('..')[0]; // Clean up the name
   const displayAvatar = avatar || `https://ui-avatars.com/api/?name=${displayName}&background=0D8ABC&color=fff`;
@@ -28,9 +30,9 @@ const WhotPlayerProfile = ({
   const rank = getRankFromRating(rating) || { icon: '🌱', level: 'Unranked' };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isCurrentPlayer && styles.currentPlayerContainer]}>
       {/* --- Avatar with Card Count Badge --- */}
-      <View style={styles.avatarContainer}>
+      <View style={[styles.avatarContainer, isCurrentPlayer && styles.currentPlayerAvatar]}>
         <Image source={{ uri: displayAvatar }} style={styles.avatarImage} />
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{cardCount}</Text>
@@ -112,6 +114,16 @@ const styles = StyleSheet.create({
     color: '#DDD',
     fontSize: 12,
     marginLeft: 4,
+  },
+  currentPlayerContainer: {
+    // Add a subtle background or border to indicate the current player
+  },
+  currentPlayerAvatar: {
+    borderColor: '#FFD700', // A gold border for the current player
+    shadowColor: "#FFD700",
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 15,
   },
 });
 
