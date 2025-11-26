@@ -1,3 +1,4 @@
+// rule2.ts
 import { Card, GameState } from "./types"; // ✅ FIXED: Import from core/types.ts
 
 /**

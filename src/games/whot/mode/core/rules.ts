@@ -118,27 +118,24 @@ export const applyCardEffectRule1 = (
       break;
 
     // --- Group 2: Pick 2, Pick 5 ---
-    case 2:
-    case 5:
-      // Check if this is a defense move
-      const isDefense = state.pendingAction?.type === "defend" && state.pendingAction.playerIndex === playerIndex;
-      if (isDefense) {
-        // Defense successful: Turn returns to original attacker, who can play any valid card
-        const defendAction = state.pendingAction as { type: "defend"; playerIndex: number; count: number; returnTurnTo: number };
-        newState.currentPlayer = defendAction.returnTurnTo; // Return turn to attacker
-        newState.pendingAction = null; // Clear pending action for normal play
-        newState.lastPlayedCard = null; // Reset so attacker can play any valid card
-      } else {
-        // Attack: Set 'defend' action for the opponent
-        const pickCount = card.number === 2 ? 2 : 3;
-        newState.currentPlayer = opponentIndex;
-        newState.pendingAction = {
-          type: "defend",
-          playerIndex: opponentIndex,
-          count: pickCount,
-          returnTurnTo: playerIndex, // Turn returns to original player after draw or defense
-        };
-      }
+    case 2: // Pick Two
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = {
+        type: "draw",
+        playerIndex: opponentIndex,
+        count: 2,
+        returnTurnTo: playerIndex,
+      };
+      break;
+
+    case 5: // Pick Three
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = {
+        type: "draw",
+        playerIndex: opponentIndex,
+        count: 3,
+        returnTurnTo: playerIndex,
+      };
       break;
 
     // --- Group 3: WHOT ---
