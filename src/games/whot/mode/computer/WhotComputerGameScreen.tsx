@@ -1141,7 +1141,7 @@ export default WhotComputerGameScreen;
 
 // Using the styles you provided
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#1E5E4E" },
+  container: { flex: 1, backgroundColor: "#ffffffff" },
   centerContent: {
     justifyContent: "center",
     alignItems: "center",

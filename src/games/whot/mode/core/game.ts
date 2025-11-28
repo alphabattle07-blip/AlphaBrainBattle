@@ -52,6 +52,25 @@ const determineMarketExhaustionWinner = (state: GameState): GameState => {
   };
 };
 
+const reshufflePileIntoMarket = (
+  pile: Card[],
+  market: Card[]
+): { newPile: Card[]; newMarket: Card[] } => {
+  if (pile.length <= 1) {
+    return { newPile: pile, newMarket: market };
+  }
+
+  const topCard = pile[pile.length - 1];
+  const cardsToShuffle = pile.slice(0, pile.length - 1);
+  const newMarket = shuffleDeck(cardsToShuffle);
+
+  console.log(
+    `♻️ Reshuffling ${cardsToShuffle.length} cards from pile to market.`
+  );
+
+  return { newPile: [topCard], newMarket: newMarket };
+};
+
 // =========================================================
 // MAIN GAME LOGIC
 // =========================================================
@@ -150,13 +169,13 @@ export const playCard = (
 
   // 2. CHECK FOR WINNER IMMEDIATELY (Empty Hand)
   const player = newState.players[playerIndex];
-  
+
   if (player.hand.length === 0) {
     console.log(`🏆 GAME OVER! Winner is ${player.name}`);
     return {
       ...newState,
-      winner: player, 
-      pendingAction: null, 
+      winner: player,
+      pendingAction: null,
     };
   }
 
@@ -193,12 +212,12 @@ export const pickCard = (
     // Case C: Normal Draw
     const drawnCards = market.splice(0, 1); // Draw 1
     const newHand = [...drawnCards, ...state.players[playerIndex].hand];
-    
+
     const nextPlayer = (playerIndex + state.direction + state.players.length) % state.players.length;
 
     let preservedPendingAction = null;
     if (state.pendingAction?.type === 'draw' && state.pendingAction.playerIndex === nextPlayer) {
-        preservedPendingAction = state.pendingAction;
+      preservedPendingAction = state.pendingAction;
     }
 
     // Create the state with the new hand
@@ -209,8 +228,8 @@ export const pickCard = (
         idx === playerIndex ? { ...p, hand: newHand } : p
       ),
       currentPlayer: nextPlayer, // Draw always ends turn in Rule 2
-      pendingAction: preservedPendingAction, 
-      lastPlayedCard: null, 
+      pendingAction: preservedPendingAction,
+      lastPlayedCard: null,
     };
 
     // ✅ CHECK IF MARKET BECAME EMPTY AFTER DRAWING
@@ -230,14 +249,22 @@ export const pickCard = (
   ) {
     const market = [...state.market];
     if (market.length === 0) {
-      const attacker = pendingAction.returnTurnTo;
-      const newState = {
-        ...state,
-        currentPlayer: attacker,
-        pendingAction: null,
-        lastPlayedCard: null,
-      };
-      return { newState, drawnCards: [] };
+      const { newPile, newMarket } = reshufflePileIntoMarket(
+        state.pile,
+        market
+      );
+      if (newMarket.length === 0) {
+        const attacker = pendingAction.returnTurnTo;
+        const newState = {
+          ...state,
+          currentPlayer: attacker,
+          pendingAction: null,
+          lastPlayedCard: null,
+        };
+        return { newState, drawnCards: [] };
+      }
+      market.push(...newMarket);
+      state.pile = newPile;
     }
 
     const count = pendingAction.count;
@@ -265,16 +292,24 @@ export const pickCard = (
   ) {
     const market = [...state.market];
     if (market.length === 0) {
-      const newState = {
-        ...state,
-        currentPlayer:
-          (playerIndex + state.direction + state.players.length) %
-          state.players.length,
-        pendingAction: null,
-        pendingPick: 0,
-        lastPlayedCard: null,
-      };
-      return { newState, drawnCards: [] };
+      const { newPile, newMarket } = reshufflePileIntoMarket(
+        state.pile,
+        market
+      );
+      if (newMarket.length === 0) {
+        const newState = {
+          ...state,
+          currentPlayer:
+            (playerIndex + state.direction + state.players.length) %
+            state.players.length,
+          pendingAction: null,
+          pendingPick: 0,
+          lastPlayedCard: null,
+        };
+        return { newState, drawnCards: [] };
+      }
+      market.push(...newMarket);
+      state.pile = newPile;
     }
 
     const drawnCards = market.splice(0, 1);
@@ -353,40 +388,49 @@ export const executeForcedDraw = (
 
   // If market is ALREADY empty
   if (state.market.length === 0) {
-    // ✅ CHECK FOR MARKET EXHAUSTION (Rule 2 Specific)
     if (state.ruleVersion === "rule2") {
-       const endGameState = determineMarketExhaustionWinner(state);
-       return { newState: endGameState, drawnCard: null };
+      const endGameState = determineMarketExhaustionWinner(state);
+      return { newState: endGameState, drawnCard: null };
     }
-    
-    // Rule 1 fallback
-    const nextPlayer = returnTurnTo !== undefined ? returnTurnTo : state.currentPlayer;
-    const newState = {
-      ...state,
-      currentPlayer: nextPlayer,
-      pendingAction: null, 
-    };
-    return { newState, drawnCard: null };
+
+    // Rule 1: Reshuffle and continue
+    const { newPile, newMarket } = reshufflePileIntoMarket(
+      state.pile,
+      state.market
+    );
+    if (newMarket.length === 0) {
+      // Still no cards? Abort the draw.
+      const nextPlayer =
+        returnTurnTo !== undefined ? returnTurnTo : state.currentPlayer;
+      const newState = {
+        ...state,
+        currentPlayer: nextPlayer,
+        pendingAction: null,
+      };
+      return { newState, drawnCard: null };
+    }
+    state.market.push(...newMarket);
+    state.pile = newPile;
   }
 
   const market = [...state.market];
   const drawnCard = market.splice(0, 1)[0];
-  
+
   const newHand = [drawnCard, ...state.players[playerIndex].hand];
   const remainingCount = count - 1;
 
   // ✅ CHECK IF MARKET BECAME EMPTY AFTER THIS DRAW
   if (state.ruleVersion === "rule2" && market.length === 0) {
     console.log("⚡ Market just ran out during forced draw! Ending game...");
-    
+
     const tempState: GameState = {
-        ...state,
-        market,
-        players: state.players.map((p, idx) =>
-            idx === playerIndex ? { ...p, hand: newHand } : p
-        ),
+      ...state,
+      market,
+      players: state.players.map((p, idx) =>
+        idx === playerIndex ? { ...p, hand: newHand } : p
+      ),
     };
-    
+
     const endGameState = determineMarketExhaustionWinner(tempState);
     return { newState: endGameState, drawnCard };
   }
@@ -398,7 +442,7 @@ export const executeForcedDraw = (
       ...state.pendingAction,
       count: remainingCount,
     };
-    
+
     const newState: GameState = {
       ...state,
       market,
@@ -411,16 +455,16 @@ export const executeForcedDraw = (
 
   } else {
     const nextPlayer = returnTurnTo !== undefined ? returnTurnTo : playerIndex;
-    
+
     const newState: GameState = {
       ...state,
       market,
       players: state.players.map((p, idx) =>
         idx === playerIndex ? { ...p, hand: newHand } : p
       ),
-      currentPlayer: nextPlayer, 
-      pendingAction: null,      
-      lastPlayedCard: null,      
+      currentPlayer: nextPlayer,
+      pendingAction: null,
+      lastPlayedCard: null,
     };
     return { newState, drawnCard };
   }
@@ -518,7 +562,7 @@ export const applyCardEffectRule2 = (
   }
 
   newState.pile = [...newState.pile, card];
-  newState.lastPlayedCard = card; 
+  newState.lastPlayedCard = card;
 
   newState.players = newState.players.map((p, idx) =>
     idx === playerIndex
