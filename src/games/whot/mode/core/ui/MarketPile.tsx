@@ -92,7 +92,7 @@ export const MarketPile = memo(
         height: CARD_HEIGHT + MAX_STACK_CARDS * STACK_OFFSET + 20,
         top: marketPos.y - CARD_HEIGHT / 2 - 10,
         left: marketPos.x - CARD_WIDTH / 2,
-        zIndex: 5,
+        zIndex: 100,
         overflow: "visible" as const, // Fixed type error
       }),
       [marketPos]

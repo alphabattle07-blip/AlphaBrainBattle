@@ -25,7 +25,7 @@ import AnimatedCardList, {
 import MemoizedBackground from "../core/ui/MemoizedBackground";
 import WhotSuitSelector from "../core/ui/WhotSuitSelector"; // <--- ADD THIS
 // ✅ FIX 1: ADDED 'executeForcedDraw'
-import { executeForcedDraw, initGame, pickCard, playCard } from "../core/game";
+import { callSuit, executeForcedDraw, getReshuffledState, initGame, pickCard, playCard } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
 import { usePlayerProfile } from "@/src/hooks/usePlayerProfile";
@@ -244,12 +244,25 @@ const WhotComputerGameScreen = () => {
 
       for (let i = 0; i < count; i++) {
         // 1. Execute logic for *one* draw
-        const { newState, drawnCard } = executeForcedDraw(currentState);
+        let { newState, drawnCard } = executeForcedDraw(currentState);
 
         if (!drawnCard) {
-          console.warn("Market empty, stopping forced draw.");
-          currentState = newState;
-          break;
+          console.log("Market empty during forced draw, reshuffling...");
+          // Animate the reshuffle
+          await animateReshuffle();
+          // Get the new state from the game logic
+          const reshuffledState = getReshuffledState(currentState);
+          // Update game state
+          runOnJS(setGame)((prev) => prev ? { ...prev, gameState: reshuffledState } : null);
+          // Retry the draw on the reshuffled state
+          const retryResult = executeForcedDraw(reshuffledState);
+          newState = retryResult.newState;
+          drawnCard = retryResult.drawnCard;
+          if (!drawnCard) {
+            console.warn("Still no card after reshuffle, stopping forced draw.");
+            currentState = newState;
+            break;
+          }
         }
 
         // 2. Set state for this single draw
@@ -267,7 +280,7 @@ const WhotComputerGameScreen = () => {
 
         // Loop through the visible hand to animate everyone
         visibleHand.forEach((card, index) => {
-          const isTheNewCard = card.id === drawnCard.id;
+          const isTheNewCard = card.id === drawnCard!.id;
 
           // Logic: If it's the new card, it flies from market.
           // If it's an old card, it slides to its new index (Shifting right).
@@ -285,7 +298,7 @@ const WhotComputerGameScreen = () => {
 
           // Flip if it is the new card and it's the player
           if (isTheNewCard && target === "player") {
-            animationPromises.push(dealer.flipCard(drawnCard, true));
+            animationPromises.push(dealer.flipCard(drawnCard!, true));
           }
         });
 
@@ -300,7 +313,7 @@ const WhotComputerGameScreen = () => {
       console.log("🔥 Forced draw complete.");
       return currentState;
     },
-    [layoutHandSize]
+    [layoutHandSize, animateReshuffle]
   );
 
   const handleSuitSelection = useCallback((selectedSuit: CardSuit) => {
@@ -341,6 +354,39 @@ const WhotComputerGameScreen = () => {
   }, [game?.gameState.pile, game?.gameState.calledSuit]);
 
   const SPECIAL_CARD_DELAY = 500;
+
+  const animateReshuffle = useCallback(async () => {
+    const dealer = cardListRef.current;
+    const currentGame = gameRef.current;
+    if (!dealer || !currentGame) return;
+
+    console.log("🔄 Animating reshuffle...");
+
+    // 1. Get all cards from the pile, except the top one
+    const pileToRecycle = currentGame.gameState.pile.slice(
+      0,
+      currentGame.gameState.pile.length - 1
+    );
+
+    // 2. Create animation promises for each card
+    const reshufflePromises = pileToRecycle.map((card) => {
+      // Animate each card flying from the pile to the market's position
+      return dealer.dealCard(card, "market", { cardIndex: 0 }, false);
+    });
+
+    // 3. Wait for all animations to complete
+    await Promise.all(reshufflePromises);
+
+    // 4. Flip all cards face down (market cards should be face down)
+    const flipPromises = pileToRecycle.map((card) => dealer.flipCard(card, false));
+    await Promise.all(flipPromises);
+
+    // 5. Short delay for visual effect
+    await new Promise((res) => setTimeout(res, 300));
+
+    console.log("✅ Reshuffle animation complete.");
+  }, []);
+
   // 🧩 Handle computer AI updates
   const handleComputerTurn = useCallback(async () => {
     const dealer = cardListRef.current;
@@ -380,7 +426,7 @@ const WhotComputerGameScreen = () => {
 
         let newState: GameState;
         try {
-          newState = playCard(oldState, computerPlayerIndex, move, ruleVersion);
+          newState = playCard(oldState, computerPlayerIndex, move);
         } catch (e: any) {
           console.error("🤖 AI Logic Error (Invalid Move):", e.message);
           // FALLBACK: If AI messes up, force it to pick a card
@@ -492,22 +538,54 @@ const WhotComputerGameScreen = () => {
             prevGame ? { ...prevGame, gameState: finalState } : null
           );
         }
-
-      } else {
-        // ---------------------------------------------
-        // CASE B: COMPUTER PICKS A CARD
+        // ✅ --- AUTO-REFILL LOGIC ---
+        // After a successful move, check if the market is empty
+        const stateAfterPlay = gameRef.current?.gameState;
+        if (stateAfterPlay && stateAfterPlay.market.length === 0) {
+          console.log("🤖 Computer's move emptied the market. Auto-refilling...");
+          await new Promise((res) => setTimeout(res, 500)); // Visual delay
+          await animateReshuffle();
+          const finalState = getReshuffledState(stateAfterPlay);
+          setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+        }
+        // --- END AUTO-REFILL ---
+ 
+       } else {
+         // ---------------------------------------------
+         // CASE B: COMPUTER PICKS A CARD
         // ---------------------------------------------
         console.log("🤖 Computer chose to PICK");
 
         const { newState, drawnCards } = pickCard(oldState, computerPlayerIndex);
 
         if (drawnCards.length === 0) {
-          // Market empty logic
-          setGame((prevGame) =>
-            prevGame ? { ...prevGame, gameState: newState } : null
+        console.log("🤖 Market is empty. Computer must reshuffle.");
+        // 1. Animate the reshuffle
+        await animateReshuffle();
+        // 2. Get the new state from the game logic
+        const reshuffledState = getReshuffledState(oldState);
+        // 3. NOW, execute the pick on the NEW state
+        const { newState: finalState, drawnCards: newDrawnCards } = pickCard(
+          reshuffledState,
+          computerPlayerIndex
+        );
+        // 4. Update the game with the final state
+        setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+        // 5. Animate the single card draw
+        if (newDrawnCards.length > 0) {
+          const newHand = finalState.players[computerPlayerIndex].hand;
+          const promises = newHand.map((card, index) =>
+            dealer.dealCard(
+              card,
+              "computer",
+              { cardIndex: index, handSize: newHand.length },
+              false
+            )
           );
-          return;
+          await Promise.all(promises);
         }
+        return; // Stop here, the pick is done.
+      }
 
         console.log(`🤖 Computer drew ${drawnCards.length} card(s).`);
 
@@ -547,6 +625,7 @@ const WhotComputerGameScreen = () => {
     const dealer = cardListRef.current;
     const currentGame = gameRef.current;
     const animating = isAnimatingRef.current;
+
     if (
       !currentGame ||
       animating ||
@@ -554,6 +633,52 @@ const WhotComputerGameScreen = () => {
       !dealer
     ) {
       return;
+    }
+
+    // ✅ MODIFICATION: If market is empty, trigger the refill logic
+    if (currentGame.gameState.market.length === 0) {
+      console.log("👉 Player tapped empty market. Starting refill...");
+      setIsAnimating(true);
+
+      // 1. Animate the reshuffle
+      await animateReshuffle();
+
+      // 2. Get the new state from the game logic
+      const reshuffledState = getReshuffledState(currentGame.gameState);
+
+      // 3. NOW, execute the pick on the NEW state
+      const { newState: finalState, drawnCards } = pickCard(reshuffledState, 0);
+
+      // 4. Update the game with the final state
+      setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+
+      // 5. Animate the single card draw
+      if (drawnCards.length > 0) {
+        const drawnCard = drawnCards[0];
+        const newHand = finalState.players[0].hand;
+
+        // Animate the new card flying to the player's hand
+        await dealer.dealCard(
+          drawnCard,
+          "player",
+          { cardIndex: 0, handSize: layoutHandSize },
+          false
+        );
+        await dealer.flipCard(drawnCard, true);
+
+        // Shift the rest of the hand instantly
+        newHand.slice(1).forEach((card, index) => {
+          dealer.dealCard(
+            card,
+            "player",
+            { cardIndex: index + 1, handSize: layoutHandSize },
+            true
+          );
+        });
+      }
+
+      setIsAnimating(false);
+      return; // Stop here, the pick is done.
     }
     setIsAnimating(true);
     const oldState = currentGame.gameState;
@@ -674,11 +799,11 @@ const WhotComputerGameScreen = () => {
     await Promise.all(animationPromises);
     setIsAnimating(false);
   }, []); // ✅ Empty array makes this function stable
-
-  const onCardListReady = useCallback(() => {
-    console.log("✅ Card list ready!");
-    setIsCardListReady(true);
-  }, []); // ✅ Empty array makes this function stable
+ 
+   const onCardListReady = useCallback(() => {
+     console.log("✅ Card list ready!");
+     setIsCardListReady(true);
+   }, []); // ✅ Empty array makes this function stable
 
   const handleRestart = useCallback(() => {
     if (selectedLevel) {
@@ -737,8 +862,7 @@ const WhotComputerGameScreen = () => {
           newState = playCard(
             currentGame.gameState,
             0,
-            card,
-            currentGame.gameState.ruleVersion
+            card
           );
         } catch (error: any) {
           console.log("Invalid move:", error.message);
@@ -1088,16 +1212,6 @@ const WhotComputerGameScreen = () => {
         )}
       </View>
 
-      {game && (
-        <MarketPile
-          count={marketCardCount}
-          font={stableWhotFont}
-          smallFont={stableFont}
-          width={stableWidth} // ✅ Pass stable prop
-          height={stableHeight} // ✅ Pass stable prop
-          onPress={handlePickFromMarket} // ✅ Pass stable prop
-        />
-      )}
       {allCards.length > 0 && stableFont && stableWhotFont && (
         <AnimatedCardList
           ref={cardListRef}
@@ -1109,6 +1223,17 @@ const WhotComputerGameScreen = () => {
           height={stableHeight} // ✅ Pass stable prop
           onCardPress={handlePlayCard} // ✅ Pass stable prop
           onReady={onCardListReady} // ✅ Pass stable prop
+        />
+      )}
+
+        {game && (
+        <MarketPile
+          count={marketCardCount}
+          font={stableWhotFont}
+          smallFont={stableFont}
+          width={stableWidth} // ✅ Pass stable prop
+          height={stableHeight} // ✅ Pass stable prop
+          onPress={handlePickFromMarket} // ✅ Pass stable prop
         />
       )}
 

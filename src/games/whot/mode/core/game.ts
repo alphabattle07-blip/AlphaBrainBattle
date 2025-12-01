@@ -291,25 +291,21 @@ export const pickCard = (
       pendingAction.playerIndex === playerIndex)
   ) {
     const market = [...state.market];
+
+    // ✅ If market is empty, return early. The UI will handle the reshuffle.
     if (market.length === 0) {
-      const { newPile, newMarket } = reshufflePileIntoMarket(
-        state.pile,
-        market
-      );
-      if (newMarket.length === 0) {
-        const newState = {
-          ...state,
-          currentPlayer:
-            (playerIndex + state.direction + state.players.length) %
-            state.players.length,
-          pendingAction: null,
-          pendingPick: 0,
-          lastPlayedCard: null,
-        };
-        return { newState, drawnCards: [] };
-      }
-      market.push(...newMarket);
-      state.pile = newPile;
+      // The user can't draw, but we pass the turn if they were supposed to.
+      // This prevents the game from getting stuck.
+      const newState = {
+        ...state,
+        currentPlayer:
+          (playerIndex + state.direction + state.players.length) %
+          state.players.length,
+        pendingAction: null,
+        pendingPick: 0,
+        lastPlayedCard: null,
+      };
+      return { newState, drawnCards: [] };
     }
 
     const drawnCards = market.splice(0, 1);
@@ -386,31 +382,12 @@ export const executeForcedDraw = (
 
   const { playerIndex, count, returnTurnTo } = state.pendingAction;
 
-  // If market is ALREADY empty
+  // If market is ALREADY empty, let the auto-refill handle it.
   if (state.market.length === 0) {
-    if (state.ruleVersion === "rule2") {
-      const endGameState = determineMarketExhaustionWinner(state);
-      return { newState: endGameState, drawnCard: null };
-    }
-
-    // Rule 1: Reshuffle and continue
-    const { newPile, newMarket } = reshufflePileIntoMarket(
-      state.pile,
-      state.market
-    );
-    if (newMarket.length === 0) {
-      // Still no cards? Abort the draw.
-      const nextPlayer =
-        returnTurnTo !== undefined ? returnTurnTo : state.currentPlayer;
-      const newState = {
-        ...state,
-        currentPlayer: nextPlayer,
-        pendingAction: null,
-      };
-      return { newState, drawnCard: null };
-    }
-    state.market.push(...newMarket);
-    state.pile = newPile;
+    console.log("Market is empty during a forced draw. Waiting for refill.");
+    // We don't change state here, just signal that no card was drawn.
+    // The pendingAction remains, and the game will re-evaluate.
+    return { newState: state, drawnCard: null };
   }
 
   const market = [...state.market];
@@ -472,6 +449,18 @@ export const executeForcedDraw = (
 
 export const checkWinner = (state: GameState): Player | null => {
   return state.players.find((p) => p.hand.length === 0) || null;
+};
+
+/**
+ * ✅ This function is now EXPORTED and will be called by the UI *after* the reshuffle animation.
+ */
+export const getReshuffledState = (state: GameState): GameState => {
+  const { newPile, newMarket } = reshufflePileIntoMarket(state.pile, state.market);
+  return {
+    ...state,
+    pile: newPile,
+    market: newMarket,
+  };
 };
 
 // =========================================================
