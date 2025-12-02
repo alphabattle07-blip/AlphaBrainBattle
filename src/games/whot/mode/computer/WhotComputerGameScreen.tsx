@@ -1072,10 +1072,12 @@ const animateReshuffle = useCallback(async () => {
     };
   }, [isCardListReady, game, hasDealt, isAnimating, playerHandLimit]);
 
-  // Handle Screen Rotation
+// Handle Screen Rotation
   useLayoutEffect(() => {
     const currentGame = gameRef.current;
     const animating = isAnimatingRef.current;
+    
+    // Safety checks
     if (
       !isCardListReady ||
       !cardListRef.current ||
@@ -1085,59 +1087,88 @@ const animateReshuffle = useCallback(async () => {
     ) {
       return;
     }
-    console.log(
-      "🔄 Screen rotated (using stable layout), instantly moving cards..."
-    );
+
+    console.log("🔄 Screen rotated. Snapping cards to new layout...");
+    
     const dealer = cardListRef.current;
     const { players, pile, market } = currentGame.gameState;
-    const playerHand = players[0].hand;
-    const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
-    const hiddenPlayerHand = playerHand.slice(playerHandLimit);
-    visiblePlayerHand.forEach((card, index) => {
-      if (card) {
-        dealer.dealCard(
-          card,
-          "player",
-          { cardIndex: index, handSize: layoutHandSize },
-          true
-        );
-      }
+
+    // We use requestAnimationFrame to ensure the new dimensions (stableWidth/Height)
+    // are fully applied to the view before we calculate coordinates.
+    requestAnimationFrame(() => {
+        const playerHand = players[0].hand;
+        
+        // Split hand into Visible vs Hidden
+        const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
+        const hiddenPlayerHand = playerHand.slice(playerHandLimit);
+
+        // 1. Reposition VISIBLE cards (Indexes 0, 1, 2, 3, 4)
+        // These keep their index so they spread out normally.
+        visiblePlayerHand.forEach((card, index) => {
+            if (card) {
+                dealer.dealCard(
+                    card,
+                    "player",
+                    { cardIndex: index, handSize: layoutHandSize },
+                    true // true = Instant snap (no animation)
+                );
+            }
+        });
+
+        // 2. Reposition HIDDEN cards (Indexes 5, 6, 7...)
+        // ✅ CRITICAL FIX: We ignore the loop index.
+        // We force ALL hidden cards into 'cardIndex: playerHandLimit' (Slot 5).
+        // This makes them stack directly on top of each other.
+        hiddenPlayerHand.forEach((card) => {
+            if (card) {
+                dealer.dealCard(
+                    card,
+                    "player",
+                    { 
+                        cardIndex: playerHandLimit, // <--- Constant (e.g., 5)
+                        handSize: layoutHandSize 
+                    },
+                    true // Instant snap
+                );
+            }
+        });
+
+        // 3. Reposition Market (No change)
+        market.forEach((card) => {
+            if (card) {
+                dealer.dealCard(card, "market", { cardIndex: 0 }, true);
+            }
+        });
+
+        // 4. Reposition Computer Hand (No change)
+        const computerHand = players[1].hand;
+        computerHand.forEach((card, index) => {
+            if (card) {
+                dealer.dealCard(
+                    card,
+                    "computer",
+                    { cardIndex: index, handSize: computerHand.length },
+                    true
+                );
+            }
+        });
+
+        // 5. Reposition Pile (No change)
+        pile.forEach((card, index) => {
+            if (card) {
+                dealer.dealCard(
+                    card,
+                    "pile",
+                    { cardIndex: index, handSize: pile.length },
+                    true
+                );
+            }
+        });
     });
-    hiddenPlayerHand.forEach((card) => {
-      if (card) {
-        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-      }
-    });
-    market.forEach((card) => {
-      if (card) {
-        dealer.dealCard(card, "market", { cardIndex: 0 }, true);
-      }
-    });
-    const computerHand = players[1].hand;
-    const computerHandSize = computerHand.length;
-    computerHand.forEach((card, index) => {
-      if (card) {
-        dealer.dealCard(
-          card,
-          "computer",
-          { cardIndex: index, handSize: computerHand.length },
-          true
-        );
-      }
-    });
-    pile.forEach((card, index) => {
-      if (card) {
-        dealer.dealCard(
-          card,
-          "pile",
-          { cardIndex: index, handSize: pile.length },
-          true
-        );
-      }
-    });
+
   }, [
-    stableWidth, // ✅ React to STABLE width
-    stableHeight, // ✅ React to STABLE height
+    stableWidth, // Trigger when width changes
+    stableHeight, // Trigger when height changes
     isCardListReady,
     hasDealt,
   ]);
