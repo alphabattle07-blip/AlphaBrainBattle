@@ -268,20 +268,30 @@ export const pickCard = (
     }
 
     const count = pendingAction.count;
-    const drawnCards = market.splice(0, count);
+    const drawnCards = market.splice(0, 1); // ✅ Draw only ONE card
     const newHand = [...drawnCards, ...state.players[playerIndex].hand];
+    const remainingCount = count - 1;
 
     const attacker = pendingAction.returnTurnTo;
+
+    // If there are more cards to draw, update the pending action
+    const newPendingAction: PendingAction | null =
+      remainingCount > 0
+        ? { ...pendingAction, count: remainingCount }
+        : null;
+
     const newState: GameState = {
       ...state,
       market,
       players: state.players.map((p, idx) =>
         idx === playerIndex ? { ...p, hand: newHand } : p
       ),
-      currentPlayer: attacker,
-      pendingAction: null,
-      lastPlayedCard: null,
+      // ✅ If drawing is finished, it's the attacker's turn. Otherwise, it's still our turn to draw.
+      currentPlayer: newPendingAction ? playerIndex : attacker,
+      pendingAction: newPendingAction,
+      lastPlayedCard: newPendingAction ? state.lastPlayedCard : null,
     };
+
     return { newState, drawnCards };
   }
 
@@ -561,3 +571,4 @@ export const applyCardEffectRule2 = (
 
   return newState;
 };
+
