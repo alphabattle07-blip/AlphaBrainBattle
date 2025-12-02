@@ -27,9 +27,11 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
     // WHOT is always allowed
     if (card.number === 20) return true;
 
-    // If continuing after Hold-On (card 1), allow another Hold-On
-    if (cardToMatch.number === 1) {
-      return card.number === 1 || card.suit === cardToMatch.suit;
+    // If continuing after Hold-On (1) or Suspension (8)
+    if (cardToMatch.number === 1 || cardToMatch.number === 8) {
+      return (
+        card.number === cardToMatch.number || card.suit === cardToMatch.suit
+      );
     }
 
     // If a suit was just called by WHOT, must follow that suit

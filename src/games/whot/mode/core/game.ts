@@ -247,30 +247,9 @@ export const pickCard = (
     pendingAction?.type === "defend" &&
     pendingAction.playerIndex === playerIndex
   ) {
-    // ✅ NEW: Check if the player *can* defend. If so, do nothing.
-    const defendingPlayer = state.players[playerIndex];
-    const canDefend = defendingPlayer.hand.some((card) =>
-      isValidMoveRule1(card, state)
-    );
-
-    if (canDefend) {
-      console.log("Player can defend, but chose to pick. Ignoring.");
-      return { newState: state, drawnCards: [] }; // Ignore the pick
-    }
-
-    // ✅ If they cannot defend, convert to a "draw" action and let the UI handle it.
-    console.log("Player cannot defend. Converting to a draw action.");
-    const newState = {
-      ...state,
-      pendingAction: {
-        type: "draw" as const,
-        playerIndex: pendingAction.playerIndex,
-        count: pendingAction.count,
-        returnTurnTo: pendingAction.returnTurnTo,
-      },
-    };
-    // Return empty drawnCards because the UI sequence will handle the drawing.
-    return { newState, drawnCards: [] };
+    // The UI now handles the conversion from "defend" to "draw".
+    // This logic is now redundant. We just return the state as is.
+    return { newState: state, drawnCards: [] };
   }
 
   if (

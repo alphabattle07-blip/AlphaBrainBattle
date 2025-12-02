@@ -665,15 +665,30 @@ const WhotComputerGameScreen = () => {
 
     const oldState = currentGame.gameState;
 
-    // ✅ NEW: Check if this is a forced draw for the player
+    // ✅ NEW: Check if this is a forced draw or a defense-to-draw for the player
     if (
-      oldState.pendingAction?.type === "draw" &&
+      (oldState.pendingAction?.type === "draw" ||
+        oldState.pendingAction?.type === "defend") &&
       oldState.pendingAction.playerIndex === 0
     ) {
       console.log("👉 Player is under a forced draw. Running sequence...");
       setIsAnimating(true);
       try {
-        const finalState = await runForcedDrawSequence(oldState);
+        // ✅ If defending, convert to a draw action before running the sequence
+        const stateToDraw =
+          oldState.pendingAction?.type === "defend"
+            ? {
+                ...oldState,
+                pendingAction: {
+                  type: "draw" as const,
+                  playerIndex: oldState.pendingAction.playerIndex,
+                  count: oldState.pendingAction.count,
+                  returnTurnTo: oldState.pendingAction.returnTurnTo,
+                },
+              }
+            : oldState;
+
+        const finalState = await runForcedDrawSequence(stateToDraw);
         setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
       } catch (e) {
         console.error("Error during player forced draw:", e);
