@@ -224,6 +224,51 @@ const WhotComputerGameScreen = () => {
     setHasDealt(false);
   }, []);
 
+  const SPECIAL_CARD_DELAY = 500;
+
+  const animateReshuffle = useCallback(async () => {
+    const dealer = cardListRef.current;
+    const currentGame = gameRef.current;
+    if (!dealer || !currentGame) return;
+
+    console.log("🔄 Animating reshuffle...");
+
+    const currentPile = currentGame.gameState.pile;
+
+    // 1. Identify the Survivor (The card that stays on top)
+    const survivorCard = currentPile[currentPile.length - 1];
+
+    // 2. Identify the cards leaving (All cards except the survivor)
+    const pileToRecycle = currentPile.slice(0, currentPile.length - 1);
+
+    // ✅ FIX: Reset the Survivor Card's visual index to 0.
+    // This ensures that the NEXT card played (which will be index 1)
+    // renders ON TOP of this survivor card.
+    if (survivorCard) {
+      // "teleportCard" updates the internal position state instantly without flying around
+      dealer.teleportCard(survivorCard, "pile", { cardIndex: 0 });
+    }
+
+    // 3. Create animation promises for the cards leaving
+    const reshufflePromises = pileToRecycle.map((card) => {
+      // Animate each card flying from the pile to the market's position
+      return dealer.dealCard(card, "market", { cardIndex: 0 }, false);
+    });
+    // 4. Wait for all animations to complete
+    await Promise.all(reshufflePromises);
+
+    // 5. Flip all recycled cards face down
+    const flipPromises = pileToRecycle.map((card) =>
+      dealer.flipCard(card, false)
+    );
+    await Promise.all(flipPromises);
+
+    // 6. Short delay for visual effect
+    await new Promise((res) => setTimeout(res, 300));
+
+    console.log("✅ Reshuffle animation complete.");
+  }, []);
+
   // 🧩 ✅ HELPER: Runs the sequential draw loop
   const runForcedDrawSequence = useCallback(
     async (startingState: GameState): Promise<GameState> => {
@@ -352,51 +397,6 @@ const WhotComputerGameScreen = () => {
     }
     return null;
   }, [game?.gameState.pile, game?.gameState.calledSuit]);
-
-  const SPECIAL_CARD_DELAY = 500;
-
-const animateReshuffle = useCallback(async () => {
-    const dealer = cardListRef.current;
-    const currentGame = gameRef.current;
-    if (!dealer || !currentGame) return;
-
-    console.log("🔄 Animating reshuffle...");
-
-    const currentPile = currentGame.gameState.pile;
-
-    // 1. Identify the Survivor (The card that stays on top)
-    const survivorCard = currentPile[currentPile.length - 1];
-
-    // 2. Identify the cards leaving (All cards except the survivor)
-    const pileToRecycle = currentPile.slice(0, currentPile.length - 1);
-
-    // ✅ FIX: Reset the Survivor Card's visual index to 0.
-    // This ensures that the NEXT card played (which will be index 1)
-    // renders ON TOP of this survivor card.
-    if (survivorCard) {
-      // "teleportCard" updates the internal position state instantly without flying around
-      dealer.teleportCard(survivorCard, "pile", { cardIndex: 0 });
-    }
-
-    // 3. Create animation promises for the cards leaving
-    const reshufflePromises = pileToRecycle.map((card) => {
-      // Animate each card flying from the pile to the market's position
-      return dealer.dealCard(card, "market", { cardIndex: 0 }, false);
-    });
-    // 4. Wait for all animations to complete
-    await Promise.all(reshufflePromises);
-
-    // 5. Flip all recycled cards face down
-    const flipPromises = pileToRecycle.map((card) =>
-      dealer.flipCard(card, false)
-    );
-    await Promise.all(flipPromises);
-
-    // 6. Short delay for visual effect
-    await new Promise((res) => setTimeout(res, 300));
-
-    console.log("✅ Reshuffle animation complete.");
-  }, []);
 
   // 🧩 Handle computer AI updates
   const handleComputerTurn = useCallback(async () => {
@@ -567,36 +567,55 @@ const animateReshuffle = useCallback(async () => {
         // ---------------------------------------------
         console.log("🤖 Computer chose to PICK");
 
+        // ✅ NEW LOGIC: If computer is defending, convert to a draw sequence
+        if (oldState.pendingAction?.type === "defend") {
+          console.log("🤖 Computer cannot defend. Converting to draw sequence.");
+          const drawState: GameState = {
+            ...oldState,
+            pendingAction: {
+              type: "draw",
+              playerIndex: oldState.pendingAction.playerIndex,
+              count: oldState.pendingAction.count,
+              returnTurnTo: oldState.pendingAction.returnTurnTo,
+            },
+          };
+          // Run the animation sequence
+          const finalState = await runForcedDrawSequence(drawState);
+          setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+          return; // Exit here
+        }
+
+        // --- This is now the REGULAR (non-forced) pick logic ---
         const { newState, drawnCards } = pickCard(oldState, computerPlayerIndex);
 
         if (drawnCards.length === 0) {
-        console.log("🤖 Market is empty. Computer must reshuffle.");
-        // 1. Animate the reshuffle
-        await animateReshuffle();
-        // 2. Get the new state from the game logic
-        const reshuffledState = getReshuffledState(oldState);
-        // 3. NOW, execute the pick on the NEW state
-        const { newState: finalState, drawnCards: newDrawnCards } = pickCard(
-          reshuffledState,
-          computerPlayerIndex
-        );
-        // 4. Update the game with the final state
-        setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
-        // 5. Animate the single card draw
-        if (newDrawnCards.length > 0) {
-          const newHand = finalState.players[computerPlayerIndex].hand;
-          const promises = newHand.map((card, index) =>
-            dealer.dealCard(
-              card,
-              "computer",
-              { cardIndex: index, handSize: newHand.length },
-              false
-            )
+          console.log("🤖 Market is empty. Computer must reshuffle.");
+          // 1. Animate the reshuffle
+          await animateReshuffle();
+          // 2. Get the new state from the game logic
+          const reshuffledState = getReshuffledState(oldState);
+          // 3. NOW, execute the pick on the NEW state
+          const { newState: finalState, drawnCards: newDrawnCards } = pickCard(
+            reshuffledState,
+            computerPlayerIndex
           );
-          await Promise.all(promises);
+          // 4. Update the game with the final state
+          setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+          // 5. Animate the single card draw
+          if (newDrawnCards.length > 0) {
+            const newHand = finalState.players[computerPlayerIndex].hand;
+            const promises = newHand.map((card, index) =>
+              dealer.dealCard(
+                card,
+                "computer",
+                { cardIndex: index, handSize: newHand.length },
+                false
+              )
+            );
+            await Promise.all(promises);
+          }
+          return; // Stop here, the pick is done.
         }
-        return; // Stop here, the pick is done.
-      }
 
         console.log(`🤖 Computer drew ${drawnCards.length} card(s).`);
 
@@ -609,8 +628,6 @@ const animateReshuffle = useCallback(async () => {
         const newHand = newState.players[computerPlayerIndex].hand;
         const animationPromises: Promise<void>[] = [];
 
-        // We only animate the *new* hand layout. 
-        // Ideally we'd animate just the new card, but re-laying out is safer for alignment.
         newHand.forEach((card, index) => {
           animationPromises.push(
             dealer.dealCard(
@@ -646,8 +663,28 @@ const animateReshuffle = useCallback(async () => {
       return;
     }
 
+    const oldState = currentGame.gameState;
+
+    // ✅ NEW: Check if this is a forced draw for the player
+    if (
+      oldState.pendingAction?.type === "draw" &&
+      oldState.pendingAction.playerIndex === 0
+    ) {
+      console.log("👉 Player is under a forced draw. Running sequence...");
+      setIsAnimating(true);
+      try {
+        const finalState = await runForcedDrawSequence(oldState);
+        setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+      } catch (e) {
+        console.error("Error during player forced draw:", e);
+      } finally {
+        setIsAnimating(false);
+      }
+      return; // Exit here
+    }
+
     // ✅ MODIFICATION: If market is empty, trigger the refill logic
-    if (currentGame.gameState.market.length === 0) {
+    if (oldState.market.length === 0) {
       console.log("👉 Player tapped empty market. Starting refill...");
       setIsAnimating(true);
 
@@ -655,7 +692,7 @@ const animateReshuffle = useCallback(async () => {
       await animateReshuffle();
 
       // 2. Get the new state from the game logic
-      const reshuffledState = getReshuffledState(currentGame.gameState);
+      const reshuffledState = getReshuffledState(oldState);
 
       // 3. NOW, execute the pick on the NEW state
       const { newState: finalState, drawnCards } = pickCard(reshuffledState, 0);
@@ -691,8 +728,9 @@ const animateReshuffle = useCallback(async () => {
       setIsAnimating(false);
       return; // Stop here, the pick is done.
     }
+
+    // --- This is now the REGULAR (non-forced) draw logic ---
     setIsAnimating(true);
-    const oldState = currentGame.gameState;
     const { newState: stateAfterPick, drawnCards } = pickCard(oldState, 0);
     if (drawnCards.length === 0) {
       setGame((prevGame) =>
