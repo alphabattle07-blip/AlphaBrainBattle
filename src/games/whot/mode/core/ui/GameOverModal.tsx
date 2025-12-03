@@ -1,82 +1,132 @@
 // core/ui/GameOverModal.tsx
-import React from "react";
-import { View, StyleSheet, Text, Pressable, useWindowDimensions } from "react-native";
+// core/ui/GameOverModal.tsx
+import React, { useMemo } from "react";
+import { View, StyleSheet, Text, Pressable, useWindowDimensions, TouchableOpacity } from "react-native";
 import Animated, { FadeIn, BounceIn, FadeOut } from "react-native-reanimated";
-import { Canvas, BlurMask, RoundedRect, Group, Circle, Star } from "@shopify/react-native-skia";
+import { Canvas, BlurMask, RoundedRect, Group, Circle } from "@shopify/react-native-skia";
 import { Player } from "../types";
+import { Ionicons } from '@expo/vector-icons';
+import { ComputerLevel } from "../../computer/whotComputerUI";
+
+const levels = [
+  { label: "Apprentice (Easy)", value: 1, rating: 1250, reward: 10 },
+  { label: "Knight (Normal)", value: 2, rating: 1500, reward: 15 },
+  { label: "Warrior (Hard)", value: 3, rating: 1700, reward: 20 },
+  { label: "Master (Expert)", value: 4, rating: 1900, reward: 25 },
+  { label: "Alpha (Legend)", value: 5, rating: 2100, reward: 30 },
+];
+
+const BATTLE_BONUS = 15;
 
 interface GameOverModalProps {
   winner: Player | null;
   onRematch: () => void;
   onNewBattle: () => void;
   visible: boolean;
+  level?: ComputerLevel;
+  playerName: string;
+  opponentName: string;
+  playerRating: number;
+  result: 'win' | 'loss' | 'draw';
 }
 
-const GameOverModal = ({ winner, onRematch, onNewBattle, visible }: GameOverModalProps) => {
+const GameOverModal = ({
+  winner,
+  onRematch,
+  onNewBattle,
+  visible,
+  level,
+  playerName,
+  opponentName,
+  playerRating,
+  result,
+}: GameOverModalProps) => {
   const { width, height } = useWindowDimensions();
+
+  const isWin = result === 'win';
+  const isLoss = result === 'loss';
+  const isDraw = result === 'draw';
+
+  const { levelReward, newRating } = useMemo(() => {
+    if (!isWin || !level) {
+      return { levelReward: 0, newRating: playerRating };
+    }
+    const levelData = levels.find((l) => l.value === level);
+    const reward = levelData?.reward ?? 0;
+    const total = isWin ? reward + BATTLE_BONUS : 0;
+    return {
+      levelReward: reward,
+      newRating: playerRating + total,
+    };
+  }, [level, isWin, playerRating]);
 
   if (!visible || !winner) return null;
 
-  const isHuman = winner.id.includes("player-0") || winner.name === "Player";
-
   return (
-    <Animated.View 
-      entering={FadeIn.duration(300)} 
+    <Animated.View
+      entering={FadeIn.duration(300)}
       exiting={FadeOut.duration(300)}
       style={[styles.overlay, { width, height }]}
     >
-      {/* Semi-transparent Background */}
       <View style={styles.backdrop} />
-
-      {/* Bouncing Content Card */}
       <Animated.View entering={BounceIn.delay(100).duration(600)} style={styles.modalContainer}>
-        
-        {/* Decorative Skia Background behind the text */}
-        <View style={styles.skiaBackground}>
-             <Canvas style={{ width: 300, height: 300 }}>
-                <Group color={isHuman ? "#FFD700" : "#A22323"} opacity={0.15}>
-                   <Circle cx={150} cy={150} r={120}>
-                      <BlurMask blur={20} style="normal" />
-                   </Circle>
-                </Group>
-             </Canvas>
-        </View>
+        {isWin && <Text style={styles.winText}>You Won!</Text>}
+        {isLoss && <Text style={styles.loseText}>You Lost!</Text>}
+        {isDraw && <Text style={styles.drawText}>It’s a Draw!</Text>}
 
-        {/* Title */}
-        <Text style={styles.gameOverText}>GAME OVER</Text>
+        <Text style={styles.winnerText}>
+          {isDraw
+            ? `${playerName} and ${opponentName} tied`
+            : `Winner: ${isWin ? playerName : opponentName}`}
+        </Text>
 
-        {/* Winner Announcement */}
-        <View style={styles.winnerContainer}>
-            <Text style={styles.winnerText}>
-                {isHuman ? "🎉 YOU WON! 🎉" : "🤖 COMPUTER WINS"}
-            </Text>
-            <Text style={styles.subText}>
-                {isHuman ? "Great job clearing your hand!" : "Better luck next time!"}
-            </Text>
-        </View>
+        {(isWin || isDraw) && (
+          <View style={styles.rewardSection}>
+            <View style={styles.rewardRow}>
+              <Text style={styles.rewardLabel}>Battle Bonus</Text>
+              <Text style={styles.rewardValue}>
+                <Ionicons name="diamond" size={16} color="#FFD700" /> +
+                {isWin ? BATTLE_BONUS : 0} R-coin
+              </Text>
+            </View>
 
-        {/* Buttons */}
+            {isWin && (
+              <View style={styles.rewardRow}>
+                <Text style={styles.rewardLabel}>Level Reward</Text>
+                <Text style={styles.rewardValue}>
+                  <Ionicons name="diamond" size={16} color="#FFD700" /> +
+                  {levelReward} R-coin
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.rewardRow}>
+              <Text style={styles.rewardLabel}>Rapid Rating</Text>
+              <Text style={[styles.rewardValue, styles.totalRewardValue]}>
+                <Ionicons name="diamond" size={16} color="#FFD700" /> {newRating}
+              </Text>
+            </View>
+          </View>
+        )}
+
         <View style={styles.buttonContainer}>
-            <Pressable
-                onPress={onRematch}
-                style={({pressed}) => [
-                    styles.button,
-                    { backgroundColor: isHuman ? "#1E5E4E" : "#A22323", opacity: pressed ? 0.8 : 1 }
-                ]}
+          {onRematch && (
+            <TouchableOpacity
+              style={[styles.button, styles.rematchButton]}
+              onPress={onRematch}
             >
-                <Text style={styles.buttonText}>REMATCH</Text>
-            </Pressable>
-            <Pressable
-                onPress={onNewBattle}
-                style={({pressed}) => [
-                    styles.button,
-                    { backgroundColor: "#FFD700", opacity: pressed ? 0.8 : 1 }
-                ]}
+              <Text style={styles.buttonText}>Rematch</Text>
+            </TouchableOpacity>
+          )}
+          {onNewBattle && (
+            <TouchableOpacity
+              style={[styles.button, styles.newBattleButton]}
+              onPress={onNewBattle}
             >
-                <Text style={[styles.buttonText, { color: "#000" }]}>NEW BATTLE</Text>
-            </Pressable>
+              <Text style={styles.buttonText}>New Battle</Text>
+            </TouchableOpacity>
+          )}
         </View>
-
       </Animated.View>
     </Animated.View>
   );
@@ -86,76 +136,63 @@ export default GameOverModal;
 
 const styles = StyleSheet.create({
   overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
     zIndex: 1000,
-    justifyContent: "center",
-    alignItems: "center",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.7)",
   },
   modalContainer: {
-    width: 320,
-    padding: 30,
-    borderRadius: 25,
-    backgroundColor: "white",
-    alignItems: "center",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    overflow: 'hidden'
+    backgroundColor: '#333',
+    borderRadius: 15,
+    padding: 20,
+    width: '90%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#555',
   },
-  skiaBackground: {
-      position: 'absolute',
-      top: -50,
-      left: 0,
-      right: 0,
-      alignItems: 'center',
-  },
-  gameOverText: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#333",
-    marginBottom: 20,
-    letterSpacing: 2,
-  },
-  winnerContainer: {
-      alignItems: 'center',
-      marginBottom: 30,
-  },
+  winText: { fontSize: 32, fontWeight: 'bold', color: '#4CAF50' },
+  loseText: { fontSize: 32, fontWeight: 'bold', color: '#F44336' },
+  drawText: { fontSize: 32, fontWeight: 'bold', color: '#FFD700' },
   winnerText: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#000",
-    marginBottom: 8,
-    textAlign: "center",
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    marginVertical: 10,
   },
-  subText: {
-      fontSize: 14,
-      color: "#666",
-      textAlign: "center"
+  rewardSection: {
+    width: '100%',
+    backgroundColor: '#444',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 25,
+  },
+  rewardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  rewardLabel: { color: '#E0E0E0', fontSize: 16 },
+  rewardValue: { color: '#FFD700', fontSize: 16, fontWeight: '600' },
+  totalRewardValue: { fontSize: 18, fontWeight: 'bold' },
+  buttonContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-around',
   },
   button: {
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 50,
-    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10
   },
-  buttonContainer: {
-    width: '100%',
-    gap: 10,
-  },
-  buttonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
+  rematchButton: { backgroundColor: '#4A90E2' },
+  newBattleButton: { backgroundColor: '#666' },
+  buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
 });
 

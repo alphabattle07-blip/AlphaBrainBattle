@@ -1369,6 +1369,17 @@ const handleRestart = useCallback(() => {
         winner={game?.gameState.winner || null}
         onRematch={handleRestart}
         onNewBattle={handleNewBattle}
+        level={computerLevel}
+        playerName={playerState.name}
+        opponentName={computerState.name}
+        playerRating={playerState.rating}
+        result={
+          game?.gameState.winner?.id.includes("player-0")
+            ? "win"
+            : game?.gameState.winner
+            ? "loss"
+            : "draw"
+        }
       />
     </View>
   );
