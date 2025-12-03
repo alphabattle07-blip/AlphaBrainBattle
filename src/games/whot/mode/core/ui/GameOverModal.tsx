@@ -7,11 +7,12 @@ import { Player } from "../types";
 
 interface GameOverModalProps {
   winner: Player | null;
-  onRestart: () => void;
+  onRematch: () => void;
+  onNewBattle: () => void;
   visible: boolean;
 }
 
-const GameOverModal = ({ winner, onRestart, visible }: GameOverModalProps) => {
+const GameOverModal = ({ winner, onRematch, onNewBattle, visible }: GameOverModalProps) => {
   const { width, height } = useWindowDimensions();
 
   if (!visible || !winner) return null;
@@ -54,16 +55,27 @@ const GameOverModal = ({ winner, onRestart, visible }: GameOverModalProps) => {
             </Text>
         </View>
 
-        {/* Restart Button */}
-        <Pressable 
-            onPress={onRestart} 
-            style={({pressed}) => [
-                styles.button, 
-                { backgroundColor: isHuman ? "#1E5E4E" : "#A22323", opacity: pressed ? 0.8 : 1 }
-            ]}
-        >
-            <Text style={styles.buttonText}>PLAY AGAIN</Text>
-        </Pressable>
+        {/* Buttons */}
+        <View style={styles.buttonContainer}>
+            <Pressable
+                onPress={onRematch}
+                style={({pressed}) => [
+                    styles.button,
+                    { backgroundColor: isHuman ? "#1E5E4E" : "#A22323", opacity: pressed ? 0.8 : 1 }
+                ]}
+            >
+                <Text style={styles.buttonText}>REMATCH</Text>
+            </Pressable>
+            <Pressable
+                onPress={onNewBattle}
+                style={({pressed}) => [
+                    styles.button,
+                    { backgroundColor: "#FFD700", opacity: pressed ? 0.8 : 1 }
+                ]}
+            >
+                <Text style={[styles.buttonText, { color: "#000" }]}>NEW BATTLE</Text>
+            </Pressable>
+        </View>
 
       </Animated.View>
     </Animated.View>
@@ -135,6 +147,10 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     marginTop: 10
+  },
+  buttonContainer: {
+    width: '100%',
+    gap: 10,
   },
   buttonText: {
     color: "white",

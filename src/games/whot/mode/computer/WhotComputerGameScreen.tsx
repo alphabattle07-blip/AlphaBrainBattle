@@ -869,14 +869,32 @@ const WhotComputerGameScreen = () => {
      setIsCardListReady(true);
    }, []); // ✅ Empty array makes this function stable
 
-  const handleRestart = useCallback(() => {
+const handleRestart = useCallback(() => {
     if (selectedLevel) {
-      // Re-run initialization with the current level
-      // We map the label back to the value, or just store the value in state
-      const lvlValue = levels.find(l => l.label === selectedLevel)?.value || 1;
-      initializeGame(lvlValue);
+      const lvlValue = levels.find((l) => l.label === selectedLevel)?.value || 1;
+
+      console.log("🔄 RESTARTING: Wiping state...");
+
+      // 1. HARD RESET: Clear everything to force components to unmount
+      setGame(null);       
+      setAllCards([]);     
+      setHasDealt(false);
+      setIsCardListReady(false);
+      setIsAnimating(false);
+
+      // 2. Re-initialize after a short delay
+      setTimeout(() => {
+        console.log("🚀 RESTARTING: Initializing new game...");
+        initializeGame(lvlValue);
+      }, 100);
     }
   }, [selectedLevel, initializeGame]);
+
+  // 👇 This was likely missing or deleted
+  const handleNewBattle = useCallback(() => {
+    setSelectedLevel(null);
+    setGame(null); // Optional: Clear the background game while choosing a level
+  }, []);
 
   useEffect(() => {
     const revealCards = async () => {
@@ -999,6 +1017,8 @@ const WhotComputerGameScreen = () => {
     },
     [runForcedDrawSequence, layoutHandSize, playerHandLimit]
   );
+
+  
 
   const showSuitSelector = useMemo(() => {
     if (!game) return false;
@@ -1167,11 +1187,6 @@ const WhotComputerGameScreen = () => {
                 );
             }
         });
-
-        // 2. Reposition HIDDEN cards (Indexes 5, 6, 7...)
-        // ✅ CRITICAL FIX: We ignore the loop index.
-        // We force ALL hidden cards into 'cardIndex: playerHandLimit' (Slot 5).
-        // This makes them stack directly on top of each other.
         hiddenPlayerHand.forEach((card) => {
             if (card) {
                 dealer.dealCard(
@@ -1352,7 +1367,8 @@ const WhotComputerGameScreen = () => {
       <GameOverModal
         visible={!!game?.gameState.winner}
         winner={game?.gameState.winner || null}
-        onRestart={handleRestart}
+        onRematch={handleRestart}
+        onNewBattle={handleNewBattle}
       />
     </View>
   );
