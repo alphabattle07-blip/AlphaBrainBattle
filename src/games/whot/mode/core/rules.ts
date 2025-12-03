@@ -1,4 +1,4 @@
-import { Card, GameState } from "./types";
+import { Card, GameState, CardSuit } from "./types";
 
 /**
  * Check if a move is valid in "Rule 1".
@@ -27,7 +27,10 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
     // WHOT is always allowed
     if (card.number === 20) return true;
 
-    // If continuing after Hold-On (1) or Suspension (8)
+    // ✅ FIX: Allow stacking 8s (Suspension) just like 1s (Hold On)
+    // If continuing after Hold-On (1) or Suspension (8), we can play:
+    // - The same number (stacking)
+    // - The same suit (ending the chain)
     if (cardToMatch.number === 1 || cardToMatch.number === 8) {
       return (
         card.number === cardToMatch.number || card.suit === cardToMatch.suit
@@ -60,6 +63,7 @@ export const isValidMoveRule1 = (card: Card, state: GameState): boolean => {
 
   return false;
 };
+
 /**
  * Apply "Rule 1" effects and set the *next* pending action.
  */
@@ -105,6 +109,7 @@ export const applyCardEffectRule1 = (
       break;
 
     case 8: // Suspension
+      // ✅ Treated exactly like Hold On (1) for stacking purposes
       newState.currentPlayer = playerIndex;
       newState.pendingAction = { type: "continue", playerIndex: playerIndex };
       break;
