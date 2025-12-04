@@ -13,6 +13,7 @@ interface Props {
   avatar?: string | null;
   isAI?: boolean;
   isCurrentPlayer?: boolean;
+  showCardCount?: boolean;
 }
 
 const WhotPlayerProfile = ({
@@ -23,6 +24,7 @@ const WhotPlayerProfile = ({
   avatar,
   isAI = false,
   isCurrentPlayer = false,
+  showCardCount = true,
 }: Props) => {
   const displayName = name.split('..')[0]; // Clean up the name
   const displayAvatar = avatar || `https://ui-avatars.com/api/?name=${displayName}&background=0D8ABC&color=fff`;
@@ -34,9 +36,11 @@ const WhotPlayerProfile = ({
       {/* --- Avatar with Card Count Badge --- */}
       <View style={[styles.avatarContainer, isCurrentPlayer && styles.currentPlayerAvatar]}>
         <Image source={{ uri: displayAvatar }} style={styles.avatarImage} />
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{cardCount}</Text>
-        </View>
+        {showCardCount && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{cardCount}</Text>
+          </View>
+        )}
       </View>
 
       {/* --- Player Info --- */}

@@ -1290,6 +1290,7 @@ const handleRestart = useCallback(() => {
             avatar={playerState.avatar}
             cardCount={playerState.handLength}
             isCurrentPlayer={playerState.isCurrentPlayer}
+            showCardCount={true}
           />
         </View>
       )}
@@ -1380,7 +1381,29 @@ const handleRestart = useCallback(() => {
             ? "loss"
             : "draw"
         }
-      />
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%' }}>
+          <WhotPlayerProfile
+            name={playerState.name}
+            rating={playerState.rating}
+            country={playerState.country}
+            avatar={playerState.avatar}
+            cardCount={playerState.handLength}
+            isCurrentPlayer={false}
+            showCardCount={false}
+          />
+          <WhotPlayerProfile
+            name={computerState.name}
+            rating={levels.find(l => l.value === computerLevel)?.rating || 1250}
+            country="AI"
+            avatar={null}
+            cardCount={computerState.handLength}
+            isCurrentPlayer={false}
+            isAI={true}
+            showCardCount={false}
+          />
+        </View>
+      </GameOverModal>
     </View>
   );
 };

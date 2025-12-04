@@ -28,6 +28,7 @@ interface GameOverModalProps {
   opponentName: string;
   playerRating: number;
   result: 'win' | 'loss' | 'draw';
+  children?: React.ReactNode;
 }
 
 const GameOverModal = ({
@@ -40,6 +41,7 @@ const GameOverModal = ({
   opponentName,
   playerRating,
   result,
+  children,
 }: GameOverModalProps) => {
   const { width, height } = useWindowDimensions();
 
@@ -79,6 +81,8 @@ const GameOverModal = ({
             ? `${playerName} and ${opponentName} tied`
             : `Winner: ${isWin ? playerName : opponentName}`}
         </Text>
+
+        {children}
 
         {(isWin || isDraw) && (
           <View style={styles.rewardSection}>
