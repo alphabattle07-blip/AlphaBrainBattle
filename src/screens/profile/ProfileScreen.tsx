@@ -155,19 +155,19 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const name = playerToShow.name ?? 'Unknown Player';
   const country = playerToShow.country ?? '';
 
-  const statsToRender = [...gameStats, ...(playerToShow?.gameStats || [])].filter((stat, index, arr) => arr.findIndex(s => s.gameId === stat.gameId) === index).map((stat: any) => {
-    const gameTitle = DEFAULT_GAMES.find(g => g.id === stat.gameId)?.title || stat.gameId;
+  const statsToRender = DEFAULT_GAMES.map(game => {
+    const existingStat = gameStats.find(stat => stat.gameId === game.id);
     return {
-      id: stat.id || `temp-${stat.gameId}`,
-      gameId: stat.gameId,
-      title: gameTitle,
-      wins: stat.wins,
-      losses: stat.losses,
-      draws: stat.draws,
-      rating: stat.rating,
-      createdAt: stat.createdAt || new Date().toISOString(),
-      updatedAt: stat.updatedAt || new Date().toISOString(),
-      hasExistingStats: stat.hasExistingStats ?? true,
+      id: existingStat?.id || `temp-${game.id}`,
+      gameId: game.id,
+      title: game.title,
+      wins: existingStat?.wins ?? 0,
+      losses: existingStat?.losses ?? 0,
+      draws: existingStat?.draws ?? 0,
+      rating: existingStat?.rating ?? 1000,
+      createdAt: existingStat?.createdAt || new Date().toISOString(),
+      updatedAt: existingStat?.updatedAt || new Date().toISOString(),
+      hasExistingStats: !!existingStat,
     };
   });
   const selectedGame = statsToRender.find((stat: GameStats) => stat.gameId === selectedGameId);

@@ -7,6 +7,8 @@ import { Canvas, BlurMask, RoundedRect, Group, Circle } from "@shopify/react-nat
 import { Player } from "../types";
 import { Ionicons } from '@expo/vector-icons';
 import { ComputerLevel } from "../../computer/whotComputerUI";
+import { useAppDispatch } from "../../../../../store/hooks";
+import { updateGameStatsThunk } from "../../../../../store/thunks/gameStatsThunks";
 
 const levels = [
   { label: "Apprentice (Easy)", value: 1, rating: 1250, reward: 10 },
@@ -29,6 +31,7 @@ interface GameOverModalProps {
   playerRating: number;
   result: 'win' | 'loss' | 'draw';
   children?: React.ReactNode;
+  onStatsUpdate?: (result: 'win' | 'loss' | 'draw', newRating: number) => void;
 }
 
 const GameOverModal = ({
@@ -42,14 +45,15 @@ const GameOverModal = ({
   playerRating,
   result,
   children,
+  onStatsUpdate,
 }: GameOverModalProps) => {
   const { width, height } = useWindowDimensions();
-
+  const dispatch = useAppDispatch();
   const isWin = result === 'win';
   const isLoss = result === 'loss';
   const isDraw = result === 'draw';
 
-  const { levelReward, newRating } = useMemo(() => {
+  const { levelReward, newRating } = useMemo<{ levelReward: number; newRating: number }>(() => {
     if (!isWin || !level) {
       return { levelReward: 0, newRating: playerRating };
     }
@@ -61,6 +65,19 @@ const GameOverModal = ({
       newRating: playerRating + total,
     };
   }, [level, isWin, playerRating]);
+
+  React.useEffect(() => {
+    if (isWin) {
+      dispatch(
+        updateGameStatsThunk({
+          gameId: 'whot',
+          result: 'win',
+          newRating: newRating,
+        })
+      );
+    }
+    onStatsUpdate?.(result, newRating);
+  }, [isWin, newRating, playerRating, result, dispatch, onStatsUpdate]);
 
   if (!visible || !winner) return null;
 

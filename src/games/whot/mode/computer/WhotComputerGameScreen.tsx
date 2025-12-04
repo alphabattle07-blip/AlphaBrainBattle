@@ -1381,6 +1381,9 @@ const handleRestart = useCallback(() => {
             ? "loss"
             : "draw"
         }
+        onStatsUpdate={(result, newRating) => {
+          console.log(`Game Over. Result: ${result}, New Rating: ${newRating}`);
+        }}
       >
         <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%' }}>
           <WhotPlayerProfile
