@@ -398,6 +398,8 @@ const WhotComputerGameScreen = () => {
     return null;
   }, [game?.gameState.pile, game?.gameState.calledSuit]);
 
+  
+
   // 🧩 Handle computer AI updates
   const handleComputerTurn = useCallback(async () => {
     const dealer = cardListRef.current;
@@ -1032,14 +1034,22 @@ const handleRestart = useCallback(() => {
 
   // ✅ FIX 2: THIS 'useEffect' WAS MISSING
   // 🧩 EFFECT: Trigger Computer's Turn
+
   useEffect(() => {
     // Basic guards: Don't run if game isn't ready or an animation is in progress
     if (!game || isAnimating || !hasDealt) {
       return;
     }
 
+    // ✅ CRITICAL FIX: STOP EVERYTHING if Game Over
+    // This prevents the AI from trying to play (or think) after a win/loss,
+    // which ensures no background state updates interfere with the Rating Modal.
+    if (game.gameState.winner) {
+      return;
+    }
+
     // Do not run AI if a 'draw' action is pending for *any* player
-    // The draw sequence loop will handle this.
+    // The draw sequence loop will handle this separately.
     if (game.gameState.pendingAction?.type === "draw") {
       return;
     }
@@ -1048,7 +1058,10 @@ const handleRestart = useCallback(() => {
     if (game.gameState.currentPlayer === 1) {
       // "Thinking" delay
       const timer = setTimeout(() => {
-        runOnJS(handleComputerTurn)();
+        // ✅ DOUBLE CHECK: Ensure the game didn't end during the 1200ms wait
+        if (!game.gameState.winner) {
+          runOnJS(handleComputerTurn)();
+        }
       }, 1200);
 
       return () => clearTimeout(timer);
@@ -1056,6 +1069,7 @@ const handleRestart = useCallback(() => {
   }, [
     game?.gameState.currentPlayer,
     game?.gameState.pendingAction,
+    game?.gameState.winner, // ✅ Added to dependencies to react immediately to game over
     isAnimating,
     hasDealt,
     handleComputerTurn,

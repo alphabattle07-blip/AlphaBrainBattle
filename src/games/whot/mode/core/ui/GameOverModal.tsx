@@ -1,9 +1,6 @@
-// core/ui/GameOverModal.tsx
-// core/ui/GameOverModal.tsx
-import React, { useMemo } from "react";
-import { View, StyleSheet, Text, Pressable, useWindowDimensions, TouchableOpacity } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet, Text, TouchableOpacity, useWindowDimensions } from "react-native";
 import Animated, { FadeIn, BounceIn, FadeOut } from "react-native-reanimated";
-import { Canvas, BlurMask, RoundedRect, Group, Circle } from "@shopify/react-native-skia";
 import { Player } from "../types";
 import { Ionicons } from '@expo/vector-icons';
 import { ComputerLevel } from "../../computer/whotComputerUI";
@@ -53,33 +50,64 @@ const GameOverModal = ({
   const isLoss = result === 'loss';
   const isDraw = result === 'draw';
 
-  const { levelReward, newRating } = useMemo<{ levelReward: number; newRating: number }>(() => {
-    if (!isWin || !level) {
-      return { levelReward: 0, newRating: playerRating };
-    }
-    const levelData = levels.find((l) => l.value === level);
-    const reward = levelData?.reward ?? 0;
-    const total = isWin ? reward + BATTLE_BONUS : 0;
-    return {
-      levelReward: reward,
-      newRating: playerRating + total,
-    };
-  }, [level, isWin, playerRating]);
+  // ✅ FIX: Store the calculated results in state so they don't change 
+  // even if the parent passes a new playerRating from Redux.
+  const [calculatedData, setCalculatedData] = useState<{
+    levelReward: number;
+    finalRating: number;
+    bonus: number;
+  } | null>(null);
 
-  React.useEffect(() => {
-    if (isWin) {
-      dispatch(
-        updateGameStatsThunk({
-          gameId: 'whot',
-          result: 'win',
-          newRating: newRating,
-        })
-      );
-    }
-    onStatsUpdate?.(result, newRating);
-  }, [isWin, newRating, playerRating, result, dispatch, onStatsUpdate]);
+  // ✅ FIX: Effect to calculate ONCE and Dispatch ONCE
+  useEffect(() => {
+    // Only run if visible, we have a winner, and we haven't calculated yet.
+    if (visible && winner && !calculatedData) {
+      
+      let reward = 0;
+      let totalChange = 0;
+      
+      if (isWin && level) {
+        const levelData = levels.find((l) => l.value === level);
+        reward = levelData?.reward ?? 0;
+        totalChange = reward + BATTLE_BONUS;
+      }
+      
+      const finalRating = playerRating + totalChange;
+      
+      // 1. Freeze the data
+      setCalculatedData({
+        levelReward: reward,
+        finalRating: finalRating,
+        bonus: isWin ? BATTLE_BONUS : 0,
+      });
 
-  if (!visible || !winner) return null;
+      // 2. Dispatch update strictly once
+      if (isWin) {
+        dispatch(
+          updateGameStatsThunk({
+            gameId: 'whot',
+            result: 'win',
+            newRating: finalRating,
+          })
+        );
+      }
+      
+      // 3. Notify parent
+      onStatsUpdate?.(result, finalRating);
+    }
+  }, [visible, winner, isWin, level, playerRating, result, dispatch, onStatsUpdate, calculatedData]);
+
+  // Reset state when modal closes (so next game calculates fresh)
+  useEffect(() => {
+    if (!visible) {
+      setCalculatedData(null);
+    }
+  }, [visible]);
+
+  if (!visible || !winner || !calculatedData) return null;
+
+  // Use the frozen data for rendering
+  const { levelReward, finalRating, bonus } = calculatedData;
 
   return (
     <Animated.View
@@ -107,7 +135,7 @@ const GameOverModal = ({
               <Text style={styles.rewardLabel}>Battle Bonus</Text>
               <Text style={styles.rewardValue}>
                 <Ionicons name="diamond" size={16} color="#FFD700" /> +
-                {isWin ? BATTLE_BONUS : 0} R-coin
+                {bonus} R-coin
               </Text>
             </View>
 
@@ -124,7 +152,7 @@ const GameOverModal = ({
             <View style={styles.rewardRow}>
               <Text style={styles.rewardLabel}>Rapid Rating</Text>
               <Text style={[styles.rewardValue, styles.totalRewardValue]}>
-                <Ionicons name="diamond" size={16} color="#FFD700" /> {newRating}
+                <Ionicons name="diamond" size={16} color="#FFD700" /> {finalRating}
               </Text>
             </View>
           </View>
@@ -216,4 +244,3 @@ const styles = StyleSheet.create({
   newBattleButton: { backgroundColor: '#666' },
   buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
 });
-
