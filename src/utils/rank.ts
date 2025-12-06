@@ -1,3 +1,4 @@
+// rank.ts
 export const getRankFromRating = (rating: number) => {
   if (rating >= 2250) {
     return { level: 'Alpha', icon: '🔱' };

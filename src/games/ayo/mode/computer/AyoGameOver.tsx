@@ -1,5 +1,5 @@
 // Alpha-Battle/src/games/ayo/mode/computer/AyoGameOver.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ComputerLevel } from './AyoComputerLogic';
@@ -57,8 +57,57 @@ const AyoGameOver: React.FC<AyoGameOverProps> = ({
     };
   }, [level, isWin, playerRating]);
 
-  // Remove the useEffect that dispatches updateGameStatsThunk to prevent blocking the UI
-  // Stats update will be handled asynchronously without blocking the game over screen
+  // ✅ FIX: Store the calculated results in state so they don't change
+  // even if the parent passes a new playerRating from Redux.
+  const [calculatedData, setCalculatedData] = useState<{
+    levelReward: number;
+    finalRating: number;
+    bonus: number;
+  } | null>(null);
+
+  // ✅ FIX: Effect to calculate ONCE and Dispatch ONCE
+  useEffect(() => {
+    // Only run if we have a result and haven't calculated yet.
+    if (result && !calculatedData) {
+
+      let reward = 0;
+      let totalChange = 0;
+
+      if (isWin && level) {
+        const levelData = levels.find((l) => l.value === level);
+        reward = levelData?.reward ?? 0;
+        totalChange = reward + BATTLE_BONUS;
+      }
+
+      const finalRating = playerRating + totalChange;
+
+      // 1. Freeze the data
+      setCalculatedData({
+        levelReward: reward,
+        finalRating: finalRating,
+        bonus: isWin ? BATTLE_BONUS : 0,
+      });
+
+      // 2. Dispatch update strictly once
+      if (isWin) {
+        dispatch(
+          updateGameStatsThunk({
+            gameId: 'ayo',
+            result: 'win',
+            newRating: finalRating,
+          })
+        );
+      }
+
+      // 3. Notify parent
+      onStatsUpdate?.(result, finalRating);
+    }
+  }, [result, isWin, level, playerRating, dispatch, onStatsUpdate, calculatedData]);
+
+  // Use the frozen data for rendering if available, else fallback to memo
+  const displayLevelReward = calculatedData?.levelReward ?? levelReward;
+  const displayNewRating = calculatedData?.finalRating ?? newRating;
+  const displayBonus = calculatedData?.bonus ?? (isWin ? BATTLE_BONUS : 0);
 
   return (
     <View style={styles.overlay}>
@@ -79,7 +128,7 @@ const AyoGameOver: React.FC<AyoGameOverProps> = ({
               <Text style={styles.rewardLabel}>Battle Bonus</Text>
               <Text style={styles.rewardValue}>
                 <Ionicons name="diamond" size={16} color="#FFD700" /> +
-                {isWin ? BATTLE_BONUS : 0} R-coin
+                {displayBonus} R-coin
               </Text>
             </View>
 
@@ -88,7 +137,7 @@ const AyoGameOver: React.FC<AyoGameOverProps> = ({
                 <Text style={styles.rewardLabel}>Level Reward</Text>
                 <Text style={styles.rewardValue}>
                   <Ionicons name="diamond" size={16} color="#FFD700" /> +
-                  {levelReward} R-coin
+                  {displayLevelReward} R-coin
                 </Text>
               </View>
             )}
@@ -96,7 +145,7 @@ const AyoGameOver: React.FC<AyoGameOverProps> = ({
             <View style={styles.rewardRow}>
               <Text style={styles.rewardLabel}>Rapid Rating</Text>
               <Text style={[styles.rewardValue, styles.totalRewardValue]}>
-                <Ionicons name="diamond" size={16} color="#FFD700" /> {newRating}
+                <Ionicons name="diamond" size={16} color="#FFD700" /> {displayNewRating}
               </Text>
             </View>
           </View>

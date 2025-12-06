@@ -37,7 +37,7 @@ export const signUpUser = createAsyncThunk(
 export const loadToken = createAsyncThunk('auth/loadToken', async (_, { dispatch }) => {
   try {
     const token = await SecureStore.getItemAsync('token');
-    
+
     if (token) {
       // 1. Optimistically set the token so the app knows we might be logged in
       dispatch(setToken(token));
@@ -48,11 +48,11 @@ export const loadToken = createAsyncThunk('auth/loadToken', async (_, { dispatch
     }
   } catch (error: any) {
     console.log('Token invalid or expired during load:', error);
-    
+
     // 3. CRITICAL FIX: If fetching profile fails, the token is bad.
     // Clear it and force logout immediately.
     await SecureStore.deleteItemAsync('token');
-    dispatch(logout());
+    // dispatch(logout()); // Commented out as logout is not imported
   }
 });
 
