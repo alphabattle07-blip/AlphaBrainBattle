@@ -1,16 +1,16 @@
-// src/screens/profile/ProfileScreen.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   ScrollView,
-  Image,  
+  Image,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
   Button,
+  RefreshControl,
 } from 'react-native';
-import { useNavigation, NavigationProp, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackParamList } from '@/src/navigation/types';
 import { useAppDispatch, useAppSelector } from '@/src/store/hooks';
@@ -18,14 +18,13 @@ import { fetchUserProfile } from '@/src/store/thunks/authThunks';
 import { fetchAllGameStatsThunk } from '@/src/store/thunks/gameStatsThunks';
 import { getFlagEmoji } from '../../utils/flags';
 import { getRankFromRating } from '../../utils/rank';
-import { Medal, ArrowLeft, User } from 'lucide-react-native';
-import { fetchGameStats, UserProfile, GameStats } from '@/src/services/api/authService';
+import { ArrowLeft, User } from 'lucide-react-native';
+import { UserProfile, GameStats } from '@/src/services/api/authService';
 
 type ProfileScreenProps = {
-  isOwnProfile?: boolean; // Made optional as it might be passed via route params
+  isOwnProfile?: boolean;
 };
 
-// Define the navigation and route prop types for this screen
 type ProfileScreenNavigationProp = NavigationProp<RootStackParamList>;
 type ProfileScreenRouteProp = RouteProp<RootStackParamList, 'profile'>;
 
@@ -34,49 +33,77 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const route = useRoute<ProfileScreenRouteProp>();
   const dispatch = useAppDispatch();
 
-  // Determine if it's the user's own profile based on prop or route params
   const isOwnProfile = propIsOwnProfile ?? (route.params?.userId === undefined);
 
-  // --- SINGLE SOURCE OF TRUTH: REDUX ---
+  // --- REDUX STATE ---
   const { token } = useAppSelector((state) => state.auth);
   const { profile: reduxProfile, loading: userLoading, error: userError } = useAppSelector((state) => state.user);
+  
+  // Game Stats from Redux (Slice)
+  const { gameStats: reduxGameStats, loading: gameStatsLoading } = useAppSelector((state) => state.gameStats);
+  const gameStatsArray = Object.values(reduxGameStats);
 
-  // State for other player's profile
+  // --- LOCAL STATE ---
   const [otherPlayerProfile, setOtherPlayerProfile] = useState<UserProfile | null>(null);
   const [otherPlayerLoading, setOtherPlayerLoading] = useState(false);
   const [otherPlayerError, setOtherPlayerError] = useState<string | null>(null);
-
-  // New state to manage the selected game for detailed stats
+  
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
-  // Use Redux store for game stats instead of local state
-  const { gameStats: reduxGameStats, loading: gameStatsLoading } = useAppSelector((state) => state.gameStats);
-  const gameStats = Object.values(reduxGameStats);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { userId } = route.params || {};
 
-  useEffect(() => {
-    if (isOwnProfile && token && !reduxProfile) {
-      dispatch(fetchUserProfile(undefined)); // Fetch own profile
-    } else if (!isOwnProfile && userId && token && !otherPlayerProfile) {
+  // --- DATA FETCHING ---
+  const loadData = useCallback(async () => {
+    if (!token) return;
+
+    if (isOwnProfile) {
+      // 1. Always fetch Profile (contains embedded stats usually)
+      try {
+        await dispatch(fetchUserProfile(undefined)).unwrap();
+      } catch (err) {
+        console.log("Profile fetch error:", err);
+      }
+
+      // 2. Try to fetch detailed Stats, but don't crash if it fails
+      try {
+        await dispatch(fetchAllGameStatsThunk()).unwrap();
+      } catch (err) {
+        console.log("Stats fetch error (ignoring to use profile fallback):", err);
+      }
+    } else if (userId) {
+      // Fetch other player
       setOtherPlayerLoading(true);
-      dispatch(fetchUserProfile(userId))
-        .unwrap()
-        .then((profile) => {
-          setOtherPlayerProfile(profile);
-          setOtherPlayerLoading(false);
-        })
-        .catch((error) => {
-          setOtherPlayerError(error);
-          setOtherPlayerLoading(false);
-        });
+      try {
+        const profile = await dispatch(fetchUserProfile(userId)).unwrap();
+        setOtherPlayerProfile(profile);
+      } catch (error: any) {
+        setOtherPlayerError(error.message || 'Failed to load profile');
+      } finally {
+        setOtherPlayerLoading(false);
+      }
     }
-  }, [isOwnProfile, token, reduxProfile, userId, otherPlayerProfile, dispatch]);
+  }, [isOwnProfile, token, userId, dispatch]);
+
+  // --- RE-FETCH ON FOCUS (Crucial Fix) ---
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
 
   const playerToShow = isOwnProfile ? reduxProfile : otherPlayerProfile;
-  const loading = isOwnProfile ? userLoading : otherPlayerLoading;
+  
+  // Only show full loading screen if we have absolutely no data
+  const isLoading = (isOwnProfile ? userLoading : otherPlayerLoading) && !playerToShow && !refreshing;
   const error = isOwnProfile ? userError : otherPlayerError;
 
-  // Define DEFAULT_GAMES outside useEffect to be accessible
   const DEFAULT_GAMES = [
     { id: 'chess', title: 'Chess' },
     { id: 'ayo', title: 'Ayo' },
@@ -85,38 +112,78 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
     { id: 'draughts', title: 'Draughts' },
   ];
 
-  useEffect(() => {
-    // Fetch all game stats when component mounts or player changes
-    if (playerToShow && token && isOwnProfile) {
-      dispatch(fetchAllGameStatsThunk());
-    }
-  }, [isOwnProfile, playerToShow, token, dispatch]);
+  // --- RENDER PREPARATION ---
+  
+  // MERGE STRATEGY: Try to find stats in the Redux Slice first. 
+  // If not found (e.g. fetch failed), fall back to the `gameStats` array inside the Profile object.
+  const profileEmbeddedStats = playerToShow?.gameStats || [];
 
-  useEffect(() => {
-    // Set selected game when gameStats are loaded
-    if (gameStats.length > 0 && !selectedGameId) {
-      setSelectedGameId(gameStats[0].gameId);
+  const statsToRender = DEFAULT_GAMES.map(game => {
+    // 1. Try Redux Slice
+    let existingStat = gameStatsArray.find(stat => stat.gameId === game.id);
+    
+    // 2. If missing, try Profile Embedded Stats (mapped to match interface)
+    if (!existingStat) {
+      const embedded = profileEmbeddedStats.find(s => s.gameId === game.id);
+      if (embedded) {
+        existingStat = {
+           id: embedded.id || `emb-${game.id}`,
+           gameId: embedded.gameId,
+           title: game.title,
+           wins: embedded.wins,
+           losses: embedded.losses,
+           draws: embedded.draws,
+           rating: embedded.rating,
+           createdAt: new Date().toISOString(),
+           updatedAt: new Date().toISOString(),
+        } as GameStats;
+      }
     }
-  }, [gameStats, selectedGameId]);
 
-  // --- RENDER LOGIC ---
-  if (loading) {
+    return {
+      id: existingStat?.id || `temp-${game.id}`,
+      gameId: game.id,
+      title: game.title,
+      wins: existingStat?.wins ?? 0,
+      losses: existingStat?.losses ?? 0,
+      draws: existingStat?.draws ?? 0,
+      rating: existingStat?.rating ?? 1000,
+      createdAt: existingStat?.createdAt || new Date().toISOString(),
+      updatedAt: existingStat?.updatedAt || new Date().toISOString(),
+      hasExistingStats: !!existingStat,
+    };
+  });
+
+  // Auto-select first game
+  useEffect(() => {
+    if (statsToRender.length > 0 && !selectedGameId) {
+      setSelectedGameId(statsToRender[0].gameId);
+    }
+  }, [statsToRender, selectedGameId]);
+
+  const selectedGame = statsToRender.find((stat) => stat.gameId === selectedGameId);
+  const totalRating = selectedGame ? selectedGame.rating : (playerToShow?.rating ?? 1000);
+  const rank = getRankFromRating(totalRating);
+
+  // --- RENDER UI ---
+
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" />
+          <ActivityIndicator size="large" color="#2E86DE" />
           <Text style={styles.loadingText}>Loading Profile...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (error) {
+  if (error && !playerToShow) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
           <Text style={styles.errorText}>Error: {error}</Text>
-          <Button title="Retry" onPress={() => dispatch(fetchUserProfile(userId))} />
+          <Button title="Retry" onPress={loadData} />
         </View>
       </SafeAreaView>
     );
@@ -143,44 +210,28 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   if (!playerToShow) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
+        <ScrollView 
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          contentContainerStyle={styles.centered}
+        >
           <Text>No profile data available.</Text>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
-  
-  // --- SUCCESS: RENDER THE PROFILE ---
+
   const avatar = playerToShow.avatar ?? null;
   const name = playerToShow.name ?? 'Unknown Player';
   const country = playerToShow.country ?? '';
 
-  const statsToRender = DEFAULT_GAMES.map(game => {
-    const existingStat = gameStats.find(stat => stat.gameId === game.id);
-    return {
-      id: existingStat?.id || `temp-${game.id}`,
-      gameId: game.id,
-      title: game.title,
-      wins: existingStat?.wins ?? 0,
-      losses: existingStat?.losses ?? 0,
-      draws: existingStat?.draws ?? 0,
-      rating: existingStat?.rating ?? 1000,
-      createdAt: existingStat?.createdAt || new Date().toISOString(),
-      updatedAt: existingStat?.updatedAt || new Date().toISOString(),
-      hasExistingStats: !!existingStat,
-    };
-  });
-  const selectedGame = statsToRender.find((stat: GameStats) => stat.gameId === selectedGameId);
-
-  const totalRating = selectedGame ? selectedGame.rating : (playerToShow.rating ?? 1000);
-  const rank = getRankFromRating(totalRating);
-  const mcoin = playerToShow.mcoin ?? 0;
-  const showMCoin = rank && ['Warrior', 'Master', 'Alpha'].includes(rank?.level ?? '');
-
-
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView 
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2E86DE" />
+        }
+      >
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <ArrowLeft size={24} />
@@ -205,31 +256,24 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
           </View>
         </View>
 
-        {/* --- R-Coin and M-Coin --- */}
         <View style={styles.coinSection}>
-          {/* Display R-coin for the selected game */}
           {selectedGame && (
             <View style={styles.rCoinBlock}>
               <Text style={styles.coinHeader}>R-Coin: {selectedGame.title}</Text>
               <Text style={styles.coinValue}>{selectedGame.rating ?? 1000}</Text>
             </View>
           )}
-          {/* Display M-Coin if available */}
-          
         </View>
 
-        {/* --- Tappable Game Stats List --- */}
         <View style={styles.gameListContainer}>
           <Text style={styles.gameListTitle}>Games</Text>
           <ScrollView horizontal style={styles.gamesScrollView} showsHorizontalScrollIndicator={false}>
-            {gameStatsLoading ? (
-              <ActivityIndicator size="small" color="#666" style={{ paddingHorizontal: 20 }} />
-            ) : statsToRender.length === 0 ? (
+            {/* Even if loading, if we have rendered stats (e.g. from profile fallback), show them */}
+            {statsToRender.length === 0 ? (
               <Text style={styles.noGamesText}>No games played yet</Text>
             ) : (
               <>
-                {statsToRender.map((s: GameStats) => {
-                  return (
+                {statsToRender.map((s) => (
                     <TouchableOpacity
                       key={s.gameId}
                       style={[
@@ -245,14 +289,13 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
                         {s.title}
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
+                  )
+                )}
               </>
             )}
           </ScrollView>
         </View>
 
-        {/* --- Detailed Stats for Selected Game --- */}
         {selectedGame && (
           <View style={styles.statBlock}>
             <Text style={styles.statTitle}>{selectedGame.title} Stats</Text>
@@ -283,210 +326,42 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#fff' 
-  },
-  scrollView: {
-    flex: 1,
-  },
-  centered: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    padding: 20 
-  },
-  errorText: { 
-    color: 'red',
-    textAlign: 'center',
-    marginBottom: 20 
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  button: {
-    backgroundColor: '#2E86DE',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  headerRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0'
-  },
-  headerText: { 
-    marginLeft: 12, 
-    fontSize: 20, 
-    fontWeight: '700' 
-  },
-  profileSection: { 
-    alignItems: 'center',
-    padding: 16 
-  },
-  avatar: { 
-    width: 96, 
-    height: 96, 
-    borderRadius: 48, 
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-  },
-  avatarPlaceholder: { 
-    backgroundColor: '#F3F4F6', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  playerName: { 
-    fontSize: 22, 
-    fontWeight: 'bold',
-  },
-  countryFlag: { 
-    marginTop: 4,
-    fontSize: 18,
-  },
-  rankRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingVertical: 6, 
-    paddingHorizontal: 12,
-    borderRadius: 20, 
-    marginTop: 12, 
-    backgroundColor: '#F3F4F6' 
-  },
-  rankIcon: {
-    fontSize: 18,
-    marginRight: 6,
-  },
-  rankText: { 
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  coinSection: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  rCoinBlock: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#ECFDF5',
-    alignItems: 'center',
-    marginRight: 16,
-    minWidth: 120,
-  },
-  mCoinBlock: {
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    minWidth: 120,
-  },
-  coinHeader: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  coinValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#10B981',
-  },
-  gameListContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  gameListTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  gamesScrollView: {
-    flexDirection: 'row',
-  },
-  gameChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: '#E5E7EB',
-    marginRight: 10,
-  },
-  selectedGameChip: {
-    backgroundColor: '#2E86DE',
-  },
-  gameChipText: {
-    color: '#4B5563',
-    fontWeight: '600',
-  },
-  selectedGameChipText: {
-    color: '#fff',
-  },
-  statBlock: { 
-    marginTop: 24, 
-    width: '100%', 
-    padding: 16, 
-    backgroundColor: '#F9FAFB', 
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  statTitle: { 
-    fontWeight: '700',
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  detailedStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-  },
-  statItem: {
-    alignItems: 'center',
-    marginHorizontal: 10,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginTop: 4,
-  },
-  ratingBlock: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  noGamesText: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 10,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollView: { flex: 1 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  errorText: { color: 'red', textAlign: 'center', marginBottom: 20 },
+  title: { fontSize: 24, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
+  subtitle: { fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 30 },
+  button: { backgroundColor: '#2E86DE', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 8, marginTop: 20 },
+  buttonText: { color: 'white', fontWeight: '600', fontSize: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  headerText: { marginLeft: 12, fontSize: 20, fontWeight: '700' },
+  profileSection: { alignItems: 'center', padding: 16 },
+  avatar: { width: 96, height: 96, borderRadius: 48, marginBottom: 8, borderWidth: 2, borderColor: '#E5E7EB' },
+  avatarPlaceholder: { backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  playerName: { fontSize: 22, fontWeight: 'bold' },
+  countryFlag: { marginTop: 4, fontSize: 18 },
+  rankRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginTop: 12, backgroundColor: '#F3F4F6' },
+  rankIcon: { fontSize: 18, marginRight: 6 },
+  rankText: { fontWeight: '600', fontSize: 16 },
+  coinSection: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 16, marginBottom: 16 },
+  rCoinBlock: { padding: 12, borderRadius: 10, backgroundColor: '#ECFDF5', alignItems: 'center', marginRight: 16, minWidth: 120 },
+  coinHeader: { fontSize: 14, fontWeight: '500', color: '#374151', marginBottom: 4 },
+  coinValue: { fontSize: 20, fontWeight: 'bold', color: '#10B981' },
+  gameListContainer: { paddingHorizontal: 16, marginBottom: 16 },
+  gameListTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  gamesScrollView: { flexDirection: 'row' },
+  gameChip: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: '#E5E7EB', marginRight: 10 },
+  selectedGameChip: { backgroundColor: '#2E86DE' },
+  gameChipText: { color: '#4B5563', fontWeight: '600' },
+  selectedGameChipText: { color: '#fff' },
+  statBlock: { marginTop: 24, width: '100%', padding: 16, backgroundColor: '#F9FAFB', borderRadius: 10, alignItems: 'center' },
+  statTitle: { fontWeight: '700', fontSize: 18, marginBottom: 8 },
+  detailedStatsRow: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
+  statItem: { alignItems: 'center', marginHorizontal: 10 },
+  statLabel: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  statValue: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginTop: 4 },
+  ratingBlock: { marginTop: 16, alignItems: 'center' },
+  noGamesText: { fontSize: 16, color: '#6B7280', textAlign: 'center', padding: 20 },
+  loadingText: { fontSize: 16, color: '#666', marginTop: 10 },
 });
