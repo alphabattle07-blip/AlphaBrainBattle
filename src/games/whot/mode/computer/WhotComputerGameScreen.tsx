@@ -1460,7 +1460,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   playerHandContainerPortrait: {
-    bottom: "12%",
+    bottom: "11%",
     left: "3%",
     right: "15%",
     width: "auto",

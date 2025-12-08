@@ -1,3 +1,4 @@
+// Alpha-Battle/src/games/whot/mode/computer/whotComputerUI.tsx
 import React, { memo } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 
@@ -119,9 +120,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarContainer: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     borderWidth: 3,
     borderColor: "#fff", // White ring around avatar
     overflow: "hidden",
@@ -131,6 +132,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 5,
+    top: -7,
   },
   avatar: {
     width: "100%",
@@ -138,24 +140,25 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: "absolute",
-    top: 0,
-    right: 0, // "By the side"
+    top: 1,
+    right: 8, // "By the side"
     backgroundColor: "#8B0000", // Dark Red/Brown like the image
     borderWidth: 2,
     borderColor: "#FFF",
-    borderRadius: 8, // Rounded rectangle
-    minWidth: 28,
-    height: 28,
+    borderRadius: 6, // Rounded rectangle
+    minWidth: 20,
+    height: 20,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
     elevation: 5, // Shadow to make it pop
     zIndex: 2,
+    
   },
   badgeText: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: 12,
   },
 
   // Status Text
@@ -167,11 +170,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textShadowColor: 'rgba(0, 0, 0, 1)',
     textShadowRadius: 4,
+    
   },
   idle: {
     marginTop: -2,
     color: "transparent", // Invisible but keeps layout height
     fontSize: 14,
-    marginLeft: 10,
+    marginLeft: 8,
+    top: -15,
   },
 });
