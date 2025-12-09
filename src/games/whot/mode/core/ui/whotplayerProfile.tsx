@@ -1,9 +1,7 @@
-// src/screens/games/whot/WhotPlayerProfile.tsx
-import { getRankFromRating } from '@/src/utils/rank'; // Adjust path if needed
+import { getRankFromRating } from '@/src/utils/rank';
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
-
+import React, { useState, useEffect } from 'react';
+import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 interface Props {
   name: string;
@@ -24,163 +22,226 @@ const WhotPlayerProfile = ({
   isCurrentPlayer = false,
   showCardCount = true,
 }: Props) => {
+  const { width, height } = useWindowDimensions();
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  useEffect(() => {
+    setIsLandscape(width > height);
+  }, [width, height]);
+
   const displayName = name.split('..')[0]; // Clean up the name
   const displayAvatar = avatar || `https://ui-avatars.com/api/?name=${displayName}&background=0D8ABC&color=fff`;
-
   const rank = getRankFromRating(rating) || { icon: '🌱', level: 'Unranked' };
 
   return (
-    <View style={[styles.container, isCurrentPlayer && styles.currentPlayerContainer]}>
-      {/* Top Section: Player Name */}
-      <View style={styles.headerRow}>
-        <Text style={styles.playerName}>
+    <View style={[
+      styles.container,
+      isLandscape && styles.containerLandscape
+    ]}>
+      
+      {/* 1. Player Name */}
+      <View style={styles.nameRow}>
+        <Text style={[styles.playerName, isLandscape && styles.textLandscape]}>
           {displayName}
         </Text>
-        {isAI && <Ionicons name="hardware-chip-outline" size={16} color="#0ff" style={{ marginLeft: 5 }} />}
+        {isAI && (
+          <Ionicons 
+            name="hardware-chip-outline" 
+            size={isLandscape ? 12 : 14} 
+            color="#0ff" 
+            style={{ marginLeft: 4 }} 
+          />
+        )}
       </View>
 
-      {/* Middle Section: Avatar + Card Count Badge */}
+      {/* 2. Avatar + Card Count Badge */}
       <View style={styles.profileWrapper}>
-        <View style={[styles.avatarContainer, isCurrentPlayer && styles.currentPlayerAvatar]}>
+        <View style={[
+          styles.avatarContainer, 
+          isLandscape && styles.avatarContainerLandscape,
+          isCurrentPlayer && styles.currentPlayerAvatar
+        ]}>
           <Image source={{ uri: displayAvatar }} style={styles.avatar} />
         </View>
 
         {/* The Badge (Card Count) */}
         {showCardCount && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{cardCount}</Text>
+          <View style={[styles.badge, isLandscape && styles.badgeLandscape]}>
+            <Text style={[styles.badgeText, isLandscape && styles.badgeTextLandscape]}>
+              {cardCount}
+            </Text>
           </View>
         )}
       </View>
 
-      {/* Rating Section: Rating Icon + Rating Name (row) + Rating Number */}
-      <View style={styles.ratingSection}>
-        <View style={styles.ratingNameRow}>
-          <Text style={styles.ratingIcon}>
+      {/* 3. Rating Info */}
+      <View style={styles.ratingContainer}>
+        
+        {/* Row: Icon + Name */}
+        <View style={styles.ratingRow}>
+          <Text style={[styles.ratingIcon, isLandscape && styles.textLandscape]}>
             {rank.icon}
           </Text>
-          <Text style={styles.ratingName}>
+          <Text style={[styles.ratingName, isLandscape && styles.textSmallLandscape]}>
             {rank.level}
           </Text>
         </View>
-        <Text style={styles.ratingNumber}>
+        
+        {/* Rating Number (Below the row) */}
+        <Text style={[styles.ratingNumber, isLandscape && styles.textSmallLandscape]}>
           {rating}
         </Text>
+
       </View>
+
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  // --- Containers ---
   container: {
-    marginRight: "73%",
-    top: -150,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: "70%", 
+    top: -180,
+    width: 110, // Slightly wider to accommodate side-by-side text
   },
-  headerRow: {
-    marginBottom: 2,
-    gap: 2, // Spacing between Name and Rating
+  containerLandscape: {
+    marginRight: "80%",
+    top: 25,
+    transform: [{ scale: 1 }],
+  },
+
+  // --- 1. Name Styles ---
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    zIndex: 10,
   },
   playerName: {
     color: "#FFF",
-    fontWeight: "900", // Extra Bold
-    fontSize: 16,
+    fontWeight: "900",
+    fontSize: 15,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 2,
-    letterSpacing: 0.5,
-    marginLeft: 15,
-
+    textAlign: 'center',
   },
 
-  // Profile & Badge Logic
+  // --- 2. Avatar Styles ---
   profileWrapper: {
-    position: "relative", // Needed for absolute positioning of the badge
-    width: 80,
-    height: 80,
+    position: "relative",
     justifyContent: 'center',
     alignItems: 'center',
-    top: -4,
+    marginBottom: 2,
   },
   avatarContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     borderWidth: 3,
-    borderColor: "#fff", // White ring around avatar
+    borderColor: "#fff",
     overflow: "hidden",
     backgroundColor: "#ccc",
-    elevation: 10,
+    elevation: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 5,
-    top: -7,
+  },
+  avatarContainerLandscape: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
   },
   avatar: {
     width: "100%",
     height: "100%",
   },
+  
+  // Active Player Highlight
+  currentPlayerAvatar: {
+    borderColor: '#FFD700', // Gold border
+    shadowColor: "#FFD700",
+    elevation: 15,
+  },
+
+  // Badge Styles
   badge: {
     position: "absolute",
-    top: 1,
-    right: 8, // "By the side"
-    backgroundColor: "#8B0000", // Dark Red/Brown like the image
+    top: 0,
+    right: -4,
+    backgroundColor: "#8B0000",
     borderWidth: 2,
     borderColor: "#FFF",
-    borderRadius: 6, // Rounded rectangle
-    minWidth: 20,
-    height: 20,
+    borderRadius: 8,
+    minWidth: 22,
+    height: 22,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 3,
-    elevation: 5, // Shadow to make it pop
-    zIndex: 2,
+    paddingHorizontal: 4,
+    elevation: 6,
+    zIndex: 20,
+  },
+  badgeLandscape: {
+    minWidth: 18,
+    height: 18,
+    right: -2,
+    borderWidth: 1.5,
   },
   badgeText: {
     color: "white",
     fontWeight: "bold",
     fontSize: 12,
   },
-
-  // Rating Section
-  ratingSection: {
-    alignItems: 'center',
-    marginTop: 2,
+  badgeTextLandscape: {
+    fontSize: 10,
   },
-  ratingNameRow: {
-    flexDirection: 'row',
+
+  // --- 3. Rating Styles ---
+  ratingContainer: {
     alignItems: 'center',
-    gap: 4, // Small spacing between icon and name
-    top: -22,
+    justifyContent: 'center',
+  },
+  ratingRow: {
+    flexDirection: 'row', // Side by side
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4, // Space between Icon and Name
+    marginBottom: 0,
   },
   ratingIcon: {
-    color: "#FFD700", // Gold
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    textAlign: 'center',
   },
   ratingName: {
     color: "#FFF",
-    fontWeight: "bold",
+    fontWeight: "700",
     fontSize: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   ratingNumber: {
     color: "#FFD700", // Gold
     fontWeight: "bold",
-    fontSize: 12,
-    marginTop: 1,
-    top: -22,
+    fontSize: 11,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    textAlign: 'center',
+    marginTop: 1, 
   },
 
-  // Current Player Styles
-  currentPlayerContainer: {
-    // Add a subtle background or border to indicate the current player
+  // Landscape Text Overrides
+  textLandscape: {
+    fontSize: 13,
   },
-  currentPlayerAvatar: {
-    borderColor: '#FFD700', // A gold border for the current player
-    shadowColor: "#FFD700",
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-    elevation: 15,
+  textSmallLandscape: {
+    fontSize: 10,
   },
 });
 

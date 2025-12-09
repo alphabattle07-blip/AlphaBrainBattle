@@ -1315,27 +1315,28 @@ const handleRestart = useCallback(() => {
       <View style={playerHandStyle} />
 
       <View
-        style={[
-          styles.pagingContainer,
-          isLandscape
-            ? styles.pagingContainerLandscape
-            : styles.pagingContainerPortrait,
-        ]}
-        pointerEvents="box-none"
-      >
-        {showPagingButton && (
-          <Pressable
-            onPress={handlePagingPress} // ✅ Pass stable prop
-            style={({ pressed }) => [
-              styles.pagingButtonBase,
-              styles.rightPagingButton,
-              pressed && { backgroundColor: "#e6c200" },
-            ]}
-          >
-            <Text style={styles.pagingIcon}>{">"}</Text>
-          </Pressable>
-        )}
-      </View>
+  style={[
+    styles.pagingContainer,
+    isLandscape
+      ? styles.pagingContainerLandscape
+      : styles.pagingContainerPortrait,
+  ]}
+  pointerEvents="box-none"
+>
+  {showPagingButton && (
+    <Pressable
+      onPress={handlePagingPress}
+      // ✅ FIX: Conditionally apply the specific width/margin styles
+      style={({ pressed }) => [
+        styles.pagingButtonBase, // Shared styles (color, radius)
+        isLandscape ? styles.pagingButtonLandscape : styles.pagingButtonPortrait, // Specific width/margin
+        pressed && { backgroundColor: "#e6c200" },
+      ]}
+    >
+      <Text style={styles.pagingIcon}>{">"}</Text>
+    </Pressable>
+  )}
+</View>
 
       {allCards.length > 0 && stableFont && stableWhotFont && (
         <AnimatedCardList
@@ -1436,6 +1437,8 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, color: "#FFF", margin: 20, textAlign: "center" },
   levelButtonContainer: { marginBottom: 15, width: 200 },
+
+  // --- UI CONTAINERS ---
   computerUIContainer: {
     position: "absolute",
     top: 50,
@@ -1449,20 +1452,24 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     zIndex: 10,
   },
+
+  // --- HAND CONTAINER BASE ---
   handContainerBase: {
     position: "absolute",
     backgroundColor: "rgba(0, 0, 0, 0.2)",
     borderTopLeftRadius: 20,
     zIndex: 0,
     height: CARD_HEIGHT + 10,
-    overflow: "hidden", // ✅ hide outside cards
+    overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
+
+  // --- PORTRAIT HAND POSITIONS ---
   playerHandContainerPortrait: {
     bottom: "11%",
     left: "3%",
-    right: "15%",
+    right: "15%", // Ends 15% from right edge
     width: "auto",
   },
   computerHandContainerPortrait: {
@@ -1471,10 +1478,12 @@ const styles = StyleSheet.create({
     right: "5%",
     width: "auto",
   },
+
+  // --- LANDSCAPE HAND POSITIONS ---
   playerHandContainerLandscape: {
     bottom: 8,
     left: "19%",
-    right: "19%",
+    right: "19%", // Ends 19% from right edge
     width: "auto",
   },
   computerHandContainerLandscape: {
@@ -1483,6 +1492,8 @@ const styles = StyleSheet.create({
     right: "19%",
     width: "auto",
   },
+
+  // --- PAGING CONTAINER (WRAPPER) ---
   pagingContainer: {
     position: "absolute",
     zIndex: 100,
@@ -1491,39 +1502,46 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT + 10,
     pointerEvents: "box-none",
   },
-
   pagingContainerPortrait: {
-    bottom: "12%",
+    bottom: "11%", // Matches playerHandContainerPortrait
   },
-
   pagingContainerLandscape: {
-    bottom: 8,
+    bottom: 8,     // Matches playerHandContainerLandscape
   },
 
+  // --- PAGING BUTTON SHARED STYLES ---
+  // (Colors, Radius, Elevation ONLY. No width/position here)
   pagingButtonBase: {
     position: "absolute",
     right: 0,
-    width: "12%", // takes up the right 15%
-    height: CARD_HEIGHT + 10, // same height as box
-    backgroundColor: "#FFD700", // solid gold yellow
+    height: CARD_HEIGHT + 10,
+    backgroundColor: "#FFD700",
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 5, // shadow for Android
+    elevation: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
   },
 
-  pagingIcon: {
-    fontSize: 36, // big bold arrow
-    fontWeight: "bold",
-    color: "#000",
+  // ✅ PORTRAIT BUTTON SPECIFICS
+  pagingButtonPortrait: {
+    width: "12%", // As requested
+    marginRight: "3%", // 15% (Hand Right) - 12% (Width) = 3%
   },
 
-  rightPagingButton: {
-    marginRight: "3%",
+  // ✅ LANDSCAPE BUTTON SPECIFICS
+  pagingButtonLandscape: {
+    width: "7%", // As requested (smaller)
+    marginRight: "13%", // 19% (Hand Right) - 8% (Width) = 11%
+  },
+
+  pagingIcon: {
+    fontSize: 36,
+    fontWeight: "bold",
+    color: "#000",
   },
 });
