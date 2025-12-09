@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, Text, TouchableOpacity, useWindowDimensions } from "react-native";
+import { View, StyleSheet, Text, TouchableOpacity, useWindowDimensions, ScrollView } from "react-native";
 import Animated, { FadeIn, BounceIn, FadeOut } from "react-native-reanimated";
 import { Player } from "../types";
 import { Ionicons } from '@expo/vector-icons';
@@ -45,43 +45,37 @@ const GameOverModal = ({
   onStatsUpdate,
 }: GameOverModalProps) => {
   const { width, height } = useWindowDimensions();
+  const isLandscape = width > height; // Detect Landscape
   const dispatch = useAppDispatch();
   const isWin = result === 'win';
   const isLoss = result === 'loss';
   const isDraw = result === 'draw';
 
-  // ✅ FIX: Store the calculated results in state so they don't change 
-  // even if the parent passes a new playerRating from Redux.
   const [calculatedData, setCalculatedData] = useState<{
     levelReward: number;
     finalRating: number;
     bonus: number;
   } | null>(null);
 
-  // ✅ FIX: Effect to calculate ONCE and Dispatch ONCE
   useEffect(() => {
-    // Only run if visible, we have a winner, and we haven't calculated yet.
     if (visible && winner && !calculatedData) {
-      
       let reward = 0;
       let totalChange = 0;
-      
+
       if (isWin && level) {
         const levelData = levels.find((l) => l.value === level);
         reward = levelData?.reward ?? 0;
         totalChange = reward + BATTLE_BONUS;
       }
-      
+
       const finalRating = playerRating + totalChange;
-      
-      // 1. Freeze the data
+
       setCalculatedData({
         levelReward: reward,
         finalRating: finalRating,
         bonus: isWin ? BATTLE_BONUS : 0,
       });
 
-      // 2. Dispatch update strictly once
       if (isWin) {
         dispatch(
           updateGameStatsThunk({
@@ -91,13 +85,11 @@ const GameOverModal = ({
           })
         );
       }
-      
-      // 3. Notify parent
+
       onStatsUpdate?.(result, finalRating);
     }
   }, [visible, winner, isWin, level, playerRating, result, dispatch, onStatsUpdate, calculatedData]);
 
-  // Reset state when modal closes (so next game calculates fresh)
   useEffect(() => {
     if (!visible) {
       setCalculatedData(null);
@@ -106,7 +98,6 @@ const GameOverModal = ({
 
   if (!visible || !winner || !calculatedData) return null;
 
-  // Use the frozen data for rendering
   const { levelReward, finalRating, bonus } = calculatedData;
 
   return (
@@ -116,66 +107,88 @@ const GameOverModal = ({
       style={[styles.overlay, { width, height }]}
     >
       <View style={styles.backdrop} />
-      <Animated.View entering={BounceIn.delay(100).duration(600)} style={styles.modalContainer}>
-        {isWin && <Text style={styles.winText}>You Won!</Text>}
-        {isLoss && <Text style={styles.loseText}>You Lost!</Text>}
-        {isDraw && <Text style={styles.drawText}>It’s a Draw!</Text>}
+      
+      <Animated.View 
+        entering={BounceIn.delay(100).duration(600)} 
+        style={[
+          styles.modalContainer, 
+          // ✅ FIX: Dynamic width based on orientation to prevent "too wide" landscape
+          { width: isLandscape ? '60%' : '90%', maxHeight: isLandscape ? '90%' : 'auto' }
+        ]}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent} 
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 1. Header Text */}
+          <View style={styles.headerSection}>
+            {isWin && <Text style={styles.winText}>You Won!</Text>}
+            {isLoss && <Text style={styles.loseText}>You Lost!</Text>}
+            {isDraw && <Text style={styles.drawText}>It’s a Draw!</Text>}
+          </View>
 
-        <Text style={styles.winnerText}>
-          {isDraw
-            ? `${playerName} and ${opponentName} tied`
-            : `Winner: ${isWin ? playerName : opponentName}`}
-        </Text>
+          {/* 2. Profiles (Children) - ✅ Moved ABOVE winner text */}
+          <View style={styles.profilesSection}>
+            {children}
+          </View>
 
-        {children}
+          {/* 3. Winner Name - ✅ Moved BELOW profiles */}
+          <Text style={styles.winnerText}>
+            {isDraw
+              ? `${playerName} and ${opponentName} tied`
+              : `Winner: ${isWin ? playerName : opponentName}`}
+          </Text>
 
-        {(isWin || isDraw) && (
-          <View style={styles.rewardSection}>
-            <View style={styles.rewardRow}>
-              <Text style={styles.rewardLabel}>Battle Bonus</Text>
-              <Text style={styles.rewardValue}>
-                <Ionicons name="diamond" size={16} color="#FFD700" /> +
-                {bonus} R-coin
-              </Text>
-            </View>
-
-            {isWin && (
+          {/* 4. Rewards Section */}
+          {(isWin || isDraw) && (
+            <View style={styles.rewardSection}>
               <View style={styles.rewardRow}>
-                <Text style={styles.rewardLabel}>Level Reward</Text>
+                <Text style={styles.rewardLabel}>Battle Bonus</Text>
                 <Text style={styles.rewardValue}>
                   <Ionicons name="diamond" size={16} color="#FFD700" /> +
-                  {levelReward} R-coin
+                  {bonus} R-coin
                 </Text>
               </View>
-            )}
 
-            <View style={styles.rewardRow}>
-              <Text style={styles.rewardLabel}>Rapid Rating</Text>
-              <Text style={[styles.rewardValue, styles.totalRewardValue]}>
-                <Ionicons name="diamond" size={16} color="#FFD700" /> {finalRating}
-              </Text>
+              {isWin && (
+                <View style={styles.rewardRow}>
+                  <Text style={styles.rewardLabel}>Level Reward</Text>
+                  <Text style={styles.rewardValue}>
+                    <Ionicons name="diamond" size={16} color="#FFD700" /> +
+                    {levelReward} R-coin
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.rewardRow}>
+                <Text style={styles.rewardLabel}>Rapid Rating</Text>
+                <Text style={[styles.rewardValue, styles.totalRewardValue]}>
+                  <Ionicons name="diamond" size={16} color="#FFD700" /> {finalRating}
+                </Text>
+              </View>
             </View>
-          </View>
-        )}
+          )}
 
-        <View style={styles.buttonContainer}>
-          {onRematch && (
-            <TouchableOpacity
-              style={[styles.button, styles.rematchButton]}
-              onPress={onRematch}
-            >
-              <Text style={styles.buttonText}>Rematch</Text>
-            </TouchableOpacity>
-          )}
-          {onNewBattle && (
-            <TouchableOpacity
-              style={[styles.button, styles.newBattleButton]}
-              onPress={onNewBattle}
-            >
-              <Text style={styles.buttonText}>New Battle</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+          {/* 5. Buttons */}
+          <View style={styles.buttonContainer}>
+            {onRematch && (
+              <TouchableOpacity
+                style={[styles.button, styles.rematchButton]}
+                onPress={onRematch}
+              >
+                <Text style={styles.buttonText}>Rematch</Text>
+              </TouchableOpacity>
+            )}
+            {onNewBattle && (
+              <TouchableOpacity
+                style={[styles.button, styles.newBattleButton]}
+                onPress={onNewBattle}
+              >
+                <Text style={styles.buttonText}>New Battle</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
       </Animated.View>
     </Animated.View>
   );
@@ -199,46 +212,67 @@ const styles = StyleSheet.create({
     backgroundColor: '#333',
     borderRadius: 15,
     padding: 20,
-    width: '90%',
+    // width: '90%' removed here, handled inline for logic
+    maxWidth: 600, // ✅ FIX: Prevents it from getting absurdly wide on tablets
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#555',
   },
-  winText: { fontSize: 32, fontWeight: 'bold', color: '#4CAF50' },
-  loseText: { fontSize: 32, fontWeight: 'bold', color: '#F44336' },
-  drawText: { fontSize: 32, fontWeight: 'bold', color: '#FFD700' },
+  scrollContent: {
+    alignItems: 'center',
+    width: '100%',
+    paddingBottom: 10,
+  },
+  headerSection: {
+    marginBottom: 10,
+  },
+  winText: { fontSize: 32, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
+  loseText: { fontSize: 32, fontWeight: 'bold', color: '#F44336', textAlign: 'center' },
+  drawText: { fontSize: 32, fontWeight: 'bold', color: '#FFD700', textAlign: 'center' },
+  
+  profilesSection: {
+    marginVertical: 10,
+    width: '100%',
+    alignItems: 'center',
+  },
+  
   winnerText: {
     fontSize: 18,
     color: '#FFFFFF',
     fontWeight: '500',
     marginVertical: 10,
+    textAlign: 'center',
   },
+  
   rewardSection: {
     width: '100%',
     backgroundColor: '#444',
     borderRadius: 10,
     padding: 15,
-    marginBottom: 25,
+    marginBottom: 20,
   },
   rewardRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 10,
     alignItems: 'center',
     paddingVertical: 8,
   },
   rewardLabel: { color: '#E0E0E0', fontSize: 16 },
   rewardValue: { color: '#FFD700', fontSize: 16, fontWeight: '600' },
   totalRewardValue: { fontSize: 18, fontWeight: 'bold' },
+  
   buttonContainer: {
     flexDirection: 'row',
     width: '100%',
     justifyContent: 'space-around',
+    gap: 10, // Adds space if buttons wrap
   },
   button: {
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 8,
     alignItems: 'center',
+    minWidth: 120,
   },
   rematchButton: { backgroundColor: '#4A90E2' },
   newBattleButton: { backgroundColor: '#666' },
