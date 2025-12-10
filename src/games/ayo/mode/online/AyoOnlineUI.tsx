@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '@/src/store/hooks';
 import {
   createOnlineGame,
@@ -8,36 +9,93 @@ import {
   updateOnlineGameState,
   fetchGameState
 } from '@/src/store/thunks/onlineGameThunks';
-import { clearCurrentGame, setCurrentGame } from '@/src/store/slices/onlineGameSlice';
+import { clearCurrentGame } from '@/src/store/slices/onlineGameSlice';
 import { usePlayerProfile } from '@/src/hooks/usePlayerProfile';
-import { AyoGame } from "../core/AyoCoreUI";
-import { calculateMoveResult } from "../core/AyoCoreLogic";
+import { calculateMoveResult, Capture } from "../core/AyoCoreLogic";
+import { AyoSkiaImageBoard } from "../core/AyoSkiaBoard"; // Directly use the board component
+import GamePlayerProfile from "../core/GamePlayerProfile"; // Directly use the profile component
 import AyoGameOver from "../computer/AyoGameOver";
+import { Ionicons } from '@expo/vector-icons';
+
+// --- Board Rotation Helper ---
+// Rotates the board so that the player's side is always at the bottom (indices 6-11).
+// If we are Player 1 (logically 0-5), we rotate by 6.
+// If we are Player 2 (logically 6-11), we keep it as is.
+const rotateBoard = (board: number[]) => {
+  return [...board.slice(6, 12), ...board.slice(0, 6)];
+};
+
+const unrotateBoard = (board: number[]) => {
+  return [...board.slice(6, 12), ...board.slice(0, 6)]; // Rotation is symmetric (shift 6 in mod 12)
+};
+
+const mapPitToVisual = (pit: number) => (pit + 6) % 12;
+const mapPitToLogical = (pit: number) => (pit + 6) % 12;
 
 const AyoOnlineUI = () => {
   const dispatch = useAppDispatch();
+  const navigation = useNavigation();
   const { currentGame, availableGames, isLoading, error } = useAppSelector(state => state.onlineGame);
   const { profile: userProfile } = useAppSelector(state => state.user);
   const playerProfile = usePlayerProfile('ayo');
-  const [animationPaths, setAnimationPaths] = useState<number[][]>([]);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [pendingMove, setPendingMove] = useState<{ player: 1 | 2; pit: number } | null>(null);
 
-  // Fetch available games on mount
+  // Local State for Animation & Interaction
+  const [visualBoard, setVisualBoard] = useState<number[]>(Array(12).fill(4));
+  const [boardBeforeMove, setBoardBeforeMove] = useState<number[]>(Array(12).fill(4));
+  const [animationPaths, setAnimationPaths] = useState<number[][]>([]);
+  const [captures, setCaptures] = useState<Capture[]>([]);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [pendingServerUpdate, setPendingServerUpdate] = useState<{ board: number[], turn: string } | null>(null);
+
+  // Identify Player Role
+  const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
+  const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
+  const amISpectator = !isPlayer1 && !isPlayer2;
+
+  // Derived Properties based on Role
+  // We want to simulate that WE are always Player 2 (Bottom) visually.
+  // If we are P1, we rotate everything.
+  const needsRotation = isPlayer1;
+
+  // --- Fetch Data & Polling ---
   useEffect(() => {
     dispatch(fetchAvailableGames());
   }, [dispatch]);
 
-  // Handle game state updates from server
+  // Handle Game Polling
   useEffect(() => {
     if (currentGame?.id) {
+      if (!isAnimating) {
+        // Initial sync or polling updates
+        syncGameStateFromProps();
+      }
+
       const interval = setInterval(() => {
+        // Only fetch. Syncing happens in useEffect dependency on currentGame
         dispatch(fetchGameState(currentGame.id));
-      }, 2000); // Poll every 2 seconds
+      }, 3000);
 
       return () => clearInterval(interval);
     }
   }, [currentGame?.id, dispatch]);
+
+  // --- Sync State ---
+  // When currentGame updates from server, update local visual board if not animating
+  useEffect(() => {
+    if (currentGame && !isAnimating) {
+      syncGameStateFromProps();
+    }
+  }, [currentGame, isAnimating, needsRotation]);
+
+  const syncGameStateFromProps = () => {
+    if (!currentGame) return;
+    const serverBoard = currentGame.board;
+    const displayBoard = needsRotation ? rotateBoard(serverBoard) : serverBoard;
+    setVisualBoard(displayBoard);
+    setBoardBeforeMove(displayBoard); // Reset reference for animations
+  };
+
+  // --- Handlers ---
 
   const handleCreateGame = async () => {
     try {
@@ -55,141 +113,126 @@ const AyoOnlineUI = () => {
     }
   };
 
-  const handleMove = async (pitIndex: number) => {
-    if (!currentGame || isAnimating || currentGame.currentTurn !== userProfile?.id) return;
+  const handleMove = async (visualPitIndex: number) => {
+    if (!currentGame || isAnimating) return;
 
-    const moveResult = calculateMoveResult({ board: currentGame.board, scores: { 1: 0, 2: 0 }, currentPlayer: 1, isGameOver: false, timerState: { player1Time: 600, player2Time: 600, isRunning: false, lastActivePlayer: 1 } }, pitIndex);
+    // Validate turn
+    const isMyTurn = currentGame.currentTurn === userProfile?.id;
+    if (!isMyTurn) {
+      // Optional: Show "Not your turn" feedback
+      return;
+    }
+
+    // Determine actual logical pit index
+    const logicalPitIndex = needsRotation ? mapPitToLogical(visualPitIndex) : visualPitIndex;
+
+    // Run Logic Locally for Immediate Feedback
+    // We run logic on the VISUAL board treating ourselves as Player 2 (Bottom)
+    // because standard logic/component expects Player 2 at bottom.
+    // If needsRotation is true, we ARE Player 1, but we rotated the board so we LOOK like Player 2.
+    // However, calculateMoveResult needs to know the "currentPlayer" ID (1 or 2).
+    // If we passed rotated board, we are effectively Player 2 in this rotated universe.
+
+    const virtualState = {
+      board: visualBoard,
+      scores: { 1: 0, 2: 0 }, // Scores are visual only here
+      currentPlayer: 2, // We always play as Bottom (Player 2) in visual space
+      isGameOver: false,
+      timerState: { player1Time: 0, player2Time: 0, isRunning: false, lastActivePlayer: 2 }
+    };
+
+    const moveResult = calculateMoveResult(virtualState, visualPitIndex);
+
     if (moveResult.animationPaths.length > 0) {
+      setBoardBeforeMove(visualBoard); // Snapshot for animation
       setIsAnimating(true);
-      setPendingMove({ player: currentGame.currentTurn === currentGame.player1.id ? 1 : 2, pit: pitIndex });
       setAnimationPaths(moveResult.animationPaths);
-    } else {
-      // Update game state immediately
-      const newBoard = moveResult.nextState.board;
-      const nextTurn = currentGame.currentTurn === currentGame.player1.id ? currentGame.player2?.id : currentGame.player1.id;
+      setCaptures(moveResult.captures);
 
-      try {
-        await dispatch(updateOnlineGameState({
-          gameId: currentGame.id,
-          updates: {
-            board: newBoard,
-            currentTurn: nextTurn || currentGame.currentTurn
-          }
-        })).unwrap();
-      } catch (error) {
-        Alert.alert('Error', 'Failed to make move');
-      }
+      // Update local visual state to the final state immediately (for after animation)
+      // Actually, we wait for animation to end to set visualBoard to final, 
+      // but we need to compute the logical final board for the server.
+
+      const finalVisualBoard = moveResult.nextState.board;
+      const finalLogicalBoard = needsRotation ? unrotateBoard(finalVisualBoard) : finalVisualBoard;
+
+      // Prepare Server Update
+      const nextTurnId = isPlayer1 ? currentGame.player2?.id : currentGame.player1?.id;
+
+      setPendingServerUpdate({
+        board: finalLogicalBoard,
+        turn: nextTurnId || currentGame.currentTurn // Should ensure P2 exists
+      });
+
+    } else {
+      // Only update if move actually did something (Ayo requires sowing)
     }
   };
 
   const onAnimationDone = async () => {
-    if (pendingMove && currentGame) {
-      const moveResult = calculateMoveResult({ board: currentGame.board, scores: { 1: 0, 2: 0 }, currentPlayer: 1, isGameOver: false, timerState: { player1Time: 600, player2Time: 600, isRunning: false, lastActivePlayer: 1 } }, pendingMove.pit);
-      const newBoard = moveResult.nextState.board;
-      const nextTurn = currentGame.currentTurn === currentGame.player1.id ? currentGame.player2?.id : currentGame.player1.id;
+    setIsAnimating(false);
+    setAnimationPaths([]);
+    setCaptures([]);
 
+    if (pendingServerUpdate && currentGame) {
       try {
+        // Optimistically update
+        if (needsRotation) {
+          setVisualBoard(rotateBoard(pendingServerUpdate.board));
+        } else {
+          setVisualBoard(pendingServerUpdate.board);
+        }
+
         await dispatch(updateOnlineGameState({
           gameId: currentGame.id,
           updates: {
-            board: newBoard,
-            currentTurn: nextTurn || currentGame.currentTurn
+            board: pendingServerUpdate.board,
+            currentTurn: pendingServerUpdate.turn
           }
         })).unwrap();
       } catch (error) {
-        Alert.alert('Error', 'Failed to make move');
+        console.log("Failed to update server", error);
+        // Revert/Sync happens automatically on next poll/effect
       }
+      setPendingServerUpdate(null);
     }
-    setIsAnimating(false);
-    setPendingMove(null);
-    setAnimationPaths([]);
   };
 
   const handleRematch = () => {
     dispatch(clearCurrentGame());
-    handleCreateGame();
+    if (isPlayer1) handleCreateGame();
+    // If P2, wait for P1? Simplify: just go back to lobby
+    else handleCreateGame();
   };
 
-  const handleNewGame = () => {
+  const handleExit = () => {
     dispatch(clearCurrentGame());
+    navigation.goBack();
   };
 
-  const opponent = useMemo(() => {
-    if (!currentGame) return null;
 
-    const isPlayer1 = currentGame.player1.id === userProfile?.id;
-    const opponentPlayer = isPlayer1 ? currentGame.player2 : currentGame.player1;
+  // --- Render Helpers ---
 
-    if (!opponentPlayer) return null;
-
-    return {
-      name: opponentPlayer.name,
-      country: "NG", // Default country, could be extended
-      rating: opponentPlayer.rating,
-      isAI: false,
-    };
-  }, [currentGame, userProfile?.id]);
-
-  const isGameOver = currentGame?.status === 'COMPLETED';
-  const isPlayerWinner = currentGame?.winnerId === userProfile?.id;
-
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#fff" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Error: {error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => dispatch(fetchAvailableGames())}>
-          <Text style={styles.retryText}>Retry</Text>
+  const renderLobby = () => (
+    <View style={styles.lobbyContainer}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
+        <Text style={styles.title}>Online Lobby</Text>
       </View>
-    );
-  }
-
-  if (currentGame) {
-    return (
-      <View style={styles.container}>
-        <AyoGame
-          initialGameState={{ board: currentGame.board, scores: { 1: 0, 2: 0 }, currentPlayer: 1, isGameOver: false, timerState: { player1Time: 600, player2Time: 600, isRunning: false, lastActivePlayer: 1 } }}
-          onPitPress={handleMove}
-          opponent={opponent || { name: 'Opponent', country: 'NG', rating: 1000, isAI: false }}
-          player={playerProfile}
-          level={1} // Online games don't have difficulty levels
-        />
-
-        {isGameOver && (
-          <AyoGameOver
-            result={isPlayerWinner ? "win" : "loss"}
-            level={1}
-            onRematch={handleRematch}
-            onNewBattle={handleNewGame}
-            playerName={playerProfile.name}
-            opponentName={opponent?.name || 'Opponent'}
-            playerRating={playerProfile.rating}
-          />
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Online Ayo Games</Text>
 
       <TouchableOpacity style={styles.createButton} onPress={handleCreateGame}>
-        <Text style={styles.createButtonText}>Create New Game</Text>
+        <Text style={styles.createButtonText}>Create New Game Hall</Text>
+        <Text style={styles.createButtonSub}>Wait for challengers</Text>
       </TouchableOpacity>
 
-      <Text style={styles.subtitle}>Available Games:</Text>
+      <Text style={styles.sectionTitle}>Available Games</Text>
       {availableGames.length === 0 ? (
-        <Text style={styles.noGamesText}>No games available. Create one to start playing!</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.noGamesText}>No games currently open.</Text>
+          <Text style={styles.noGamesSub}>Create one to start playing!</Text>
+        </View>
       ) : (
         availableGames.map((game) => (
           <TouchableOpacity
@@ -197,83 +240,306 @@ const AyoOnlineUI = () => {
             style={styles.gameItem}
             onPress={() => handleJoinGame(game.id)}
           >
-            <Text style={styles.gameText}>
-              {game.player1.name} ({game.player1.rating}) - Waiting for opponent
-            </Text>
+            <View style={styles.gameInfo}>
+              <Text style={styles.helperText}>Challenger</Text>
+              <Text style={styles.gameText}>{game.player1.name}</Text>
+              <Text style={styles.ratingText}>Rating: {game.player1.rating}</Text>
+            </View>
+            <View style={styles.joinBadge}>
+              <Text style={styles.joinText}>JOIN</Text>
+            </View>
           </TouchableOpacity>
         ))
       )}
     </View>
   );
+
+  const renderGame = () => {
+    if (!currentGame) return null;
+
+    const isGameOver = currentGame.status === 'COMPLETED';
+    // Opponent Info
+    const opponent = isPlayer1 ? currentGame.player2 : currentGame.player1;
+
+    // If waiting for opponent
+    if (!opponent) {
+      return (
+        <View style={styles.waitingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.waitingTitle}>Waiting for Opponent...</Text>
+          <Text style={styles.waitingSub}>Your game is visible in the lobby.</Text>
+          <Text style={styles.waitingGameId}>Game ID: {currentGame.id.slice(0, 6).toUpperCase()}</Text>
+          <TouchableOpacity style={styles.cancelButton} onPress={handleExit}>
+            <Text style={styles.cancelText}>Cancel Game</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Visual Props for Profiles
+    // P1 is us so we are bottom. Opponent is top.
+    // GamePlayerProfile Props: name, country, rating, isActive, score
+
+    // We don't have scores in the basic backend model yet?
+    // Assuming naive scoring or derived from board.
+    // Calculate scores on fly:
+    const p1Score = currentGame.board.slice(0, 6).reduce((a, b) => a + b, 0); // Logic P1
+    const p2Score = currentGame.board.slice(6, 12).reduce((a, b) => a + b, 0); // Logic P2
+
+    // Map to Visual Top/Bottom
+    // If needsRotation (We are P1): Bottom=P1, Top=P2.
+    // Top Profile = Opponent (P2)
+    // Bottom Profile = Us (P1)
+
+    const topProfile = {
+      name: opponent.name,
+      rating: opponent.rating,
+      country: "NG", // Placeholder
+      score: needsRotation ? p2Score : p1Score, // Logic Opponent Score
+      isActive: currentGame.currentTurn === opponent.id,
+    };
+
+    const bottomProfile = {
+      name: userProfile?.displayName || "You",
+      rating: userProfile?.rating || 1200,
+      country: "NG",
+      score: needsRotation ? p1Score : p2Score, // Logic My Score
+      isActive: currentGame.currentTurn === userProfile?.id,
+    };
+
+    return (
+      <View style={styles.gameContainer}>
+        {/* Opponent (Top) */}
+        <View style={styles.profileContainer}>
+          <GamePlayerProfile
+            name={topProfile.name}
+            country={topProfile.country}
+            rating={topProfile.rating}
+            score={topProfile.score}
+            isActive={topProfile.isActive && !isAnimating}
+            timeLeft="--:--"
+          />
+        </View>
+
+        {/* Board */}
+        <View style={styles.boardContainer}>
+          <AyoSkiaImageBoard
+            board={visualBoard}
+            boardBeforeMove={boardBeforeMove}
+            animatingPaths={animationPaths}
+            captures={captures.map(c => c.pitIndex)} // Only need correct pit index? 
+            // Note: captures need to be in visual indices?
+            // calculateMoveResult returned captures with indices consistent with the 'virtualState' (which is visual)
+            // So yes, these indices are correct.
+            onPitPress={handleMove}
+            onAnimationEnd={onAnimationDone}
+          />
+        </View>
+
+        {/* Player (Bottom) */}
+        <View style={styles.profileContainer}>
+          <GamePlayerProfile
+            name={bottomProfile.name}
+            country={bottomProfile.country}
+            rating={bottomProfile.rating}
+            score={bottomProfile.score}
+            isActive={bottomProfile.isActive && !isAnimating}
+            timeLeft="--:--"
+          />
+        </View>
+
+        {/* Game Over Overlay */}
+        {isGameOver && (
+          <AyoGameOver
+            result={currentGame.winnerId === userProfile?.id ? "win" : "loss"}
+            level={1}
+            onRematch={handleRematch}
+            onNewBattle={handleExit}
+            playerName={bottomProfile.name}
+            opponentName={topProfile.name}
+            playerRating={bottomProfile.rating}
+          />
+        )}
+      </View>
+    );
+  };
+
+  if (isLoading && !currentGame) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Connecting to Arena...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      {currentGame ? renderGame() : renderLobby()}
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 10,
-    backgroundColor: '#222',
+    backgroundColor: '#1a1a1a',
+  },
+  centerContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+  },
+  lobbyContainer: {
+    flex: 1,
+    padding: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  backButton: {
+    padding: 5,
+    marginRight: 10,
   },
   title: {
     color: 'white',
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
   },
-  subtitle: {
-    color: 'white',
-    fontSize: 18,
+  sectionTitle: {
+    color: '#888',
+    fontSize: 14,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
     marginBottom: 10,
+    marginTop: 20,
   },
   createButton: {
-    backgroundColor: '#4CAF50',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: '#2E7D32',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 10,
     alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
   },
   createButtonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
+  createButtonSub: {
+    color: '#A5D6A7',
+    marginTop: 4,
+  },
   gameItem: {
-    backgroundColor: '#444',
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 4,
+    backgroundColor: '#333',
+    padding: 16,
+    borderRadius: 12,
+    marginVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  gameInfo: {
+    flex: 1,
+  },
+  helperText: {
+    color: '#888',
+    fontSize: 10,
+    marginBottom: 2,
   },
   gameText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  ratingText: {
+    color: '#FFD700',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  joinBadge: {
+    backgroundColor: '#1976D2',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  joinText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+    opacity: 0.5
   },
   noGamesText: {
-    color: '#ccc',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 20,
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  noGamesSub: {
+    color: 'white',
+    marginTop: 5,
   },
   loadingText: {
-    color: 'white',
-    fontSize: 16,
-    marginTop: 10,
+    color: '#888',
+    marginTop: 15,
   },
-  errorText: {
-    color: '#ff6b6b',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
+
+  // Game Styles
+  gameContainer: {
+    flex: 1,
+    justifyContent: "space-between",
+    padding: 10,
+    paddingVertical: 20,
   },
-  retryButton: {
-    backgroundColor: '#2196F3',
-    padding: 12,
-    borderRadius: 8,
+  profileContainer: {
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  boardContainer: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  waitingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  retryText: {
+  waitingTitle: {
     color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 20,
+  },
+  waitingSub: {
+    color: '#ccc',
+    marginTop: 10,
     fontSize: 16,
+  },
+  waitingGameId: {
+    color: '#444',
+    marginTop: 30,
+    fontFamily: 'monospace',
+  },
+  cancelButton: {
+    marginTop: 50,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#d32f2f',
+    borderRadius: 8,
+  },
+  cancelText: {
+    color: '#ef5350',
   },
 });
 
