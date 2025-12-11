@@ -9,13 +9,14 @@ import {
   updateOnlineGameState,
   fetchGameState
 } from '@/src/store/thunks/onlineGameThunks';
-import { clearCurrentGame } from '@/src/store/slices/onlineGameSlice';
+import { clearCurrentGame, setCurrentGame } from '@/src/store/slices/onlineGameSlice';
 import { usePlayerProfile } from '@/src/hooks/usePlayerProfile';
 import { calculateMoveResult, Capture } from "../core/AyoCoreLogic";
 import { AyoSkiaImageBoard } from "../core/AyoSkiaBoard"; // Directly use the board component
 import GamePlayerProfile from "../core/GamePlayerProfile"; // Directly use the profile component
 import AyoGameOver from "../computer/AyoGameOver";
 import { Ionicons } from '@expo/vector-icons';
+import { matchmakingService } from '@/src/services/api/matchmakingService';
 
 // --- Board Rotation Helper ---
 // Rotates the board so that the player's side is always at the bottom (indices 6-11).
@@ -47,6 +48,11 @@ const AyoOnlineUI = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [pendingServerUpdate, setPendingServerUpdate] = useState<{ board: number[], turn: string } | null>(null);
 
+  // Matchmaking State
+  const [isMatchmaking, setIsMatchmaking] = useState(false);
+  const [matchmakingMessage, setMatchmakingMessage] = useState('Finding match...');
+  const matchmakingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   // Identify Player Role
   const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
   const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
@@ -57,10 +63,23 @@ const AyoOnlineUI = () => {
   // If we are P1, we rotate everything.
   const needsRotation = isPlayer1;
 
-  // --- Fetch Data & Polling ---
+  // --- Automatic Matchmaking ---
   useEffect(() => {
-    dispatch(fetchAvailableGames());
-  }, [dispatch]);
+    // Start matchmaking automatically when component mounts (if no current game)
+    if (!currentGame) {
+      startAutomaticMatchmaking();
+    }
+
+    return () => {
+      // Cleanup: cancel matchmaking when component unmounts
+      if (matchmakingIntervalRef.current) {
+        clearInterval(matchmakingIntervalRef.current);
+      }
+      if (isMatchmaking) {
+        matchmakingService.cancelMatchmaking().catch(console.error);
+      }
+    };
+  }, []);
 
   // Handle Game Polling
   useEffect(() => {
@@ -93,6 +112,79 @@ const AyoOnlineUI = () => {
     const displayBoard = needsRotation ? rotateBoard(serverBoard) : serverBoard;
     setVisualBoard(displayBoard);
     setBoardBeforeMove(displayBoard); // Reset reference for animations
+  };
+
+  // --- Matchmaking Handlers ---
+
+  const startAutomaticMatchmaking = async () => {
+    try {
+      setIsMatchmaking(true);
+      setMatchmakingMessage('Finding match...');
+
+      const response = await matchmakingService.startMatchmaking('ayo');
+
+      if (response.matched && response.game) {
+        // Match found immediately!
+        setIsMatchmaking(false);
+        // Update Redux store with the matched game
+        dispatch(setCurrentGame(response.game));
+        console.log('Match found!', response.game);
+      } else {
+        // No immediate match, start polling
+        setMatchmakingMessage(response.message);
+        startMatchmakingPolling();
+      }
+    } catch (error) {
+      console.error('Failed to start matchmaking:', error);
+      setIsMatchmaking(false);
+      Alert.alert('Error', 'Failed to start matchmaking. Please try again.');
+    }
+  };
+
+  const startMatchmakingPolling = () => {
+    // Poll every 2 seconds for match status
+    matchmakingIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await matchmakingService.checkMatchmakingStatus('ayo');
+
+        if (response.matched && response.game) {
+          // Match found!
+          if (matchmakingIntervalRef.current) {
+            clearInterval(matchmakingIntervalRef.current);
+          }
+          setIsMatchmaking(false);
+
+          // Set the game in Redux store
+          dispatch(setCurrentGame(response.game));
+          console.log('Match found during polling!', response.game);
+        } else if (response.inQueue) {
+          setMatchmakingMessage(response.message || 'Searching for opponent...');
+        } else {
+          // Not in queue anymore (cancelled or error)
+          if (matchmakingIntervalRef.current) {
+            clearInterval(matchmakingIntervalRef.current);
+          }
+          setIsMatchmaking(false);
+        }
+      } catch (error) {
+        console.error('Matchmaking polling error:', error);
+      }
+    }, 2000); // Poll every 2 seconds
+  };
+
+  const handleCancelMatchmaking = async () => {
+    try {
+      if (matchmakingIntervalRef.current) {
+        clearInterval(matchmakingIntervalRef.current);
+      }
+      await matchmakingService.cancelMatchmaking();
+      setIsMatchmaking(false);
+      navigation.goBack();
+    } catch (error) {
+      console.error('Failed to cancel matchmaking:', error);
+      setIsMatchmaking(false);
+      navigation.goBack();
+    }
   };
 
   // --- Handlers ---
@@ -365,6 +457,33 @@ const AyoOnlineUI = () => {
     );
   };
 
+  // Show matchmaking screen while searching
+  if (isMatchmaking) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.matchmakingContainer}>
+          <View style={styles.matchmakingContent}>
+            <ActivityIndicator size="large" color="#4CAF50" />
+            <Text style={styles.matchmakingTitle}>{matchmakingMessage}</Text>
+            <Text style={styles.matchmakingSub}>
+              Pairing you with the closest available rating...
+            </Text>
+            <View style={styles.ratingInfo}>
+              <Text style={styles.ratingLabel}>Your Rating</Text>
+              <Text style={styles.ratingValue}>{userProfile?.rating || 1200}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.cancelMatchmakingButton}
+              onPress={handleCancelMatchmaking}
+            >
+              <Text style={styles.cancelMatchmakingText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isLoading && !currentGame) {
     return (
       <View style={styles.centerContainer}>
@@ -541,6 +660,69 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: '#ef5350',
+  },
+
+  // Matchmaking Styles
+  matchmakingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  matchmakingContent: {
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    padding: 40,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  matchmakingTitle: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  matchmakingSub: {
+    color: '#aaa',
+    marginTop: 10,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  ratingInfo: {
+    marginTop: 30,
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    padding: 20,
+    borderRadius: 12,
+    width: '100%',
+  },
+  ratingLabel: {
+    color: '#888',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  ratingValue: {
+    color: '#FFD700',
+    fontSize: 36,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  cancelMatchmakingButton: {
+    marginTop: 30,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#d32f2f',
+    borderRadius: 8,
+    width: '100%',
+  },
+  cancelMatchmakingText: {
+    color: '#ef5350',
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
