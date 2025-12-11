@@ -53,6 +53,7 @@ const AyoOnlineUI = () => {
   const [isMatchmaking, setIsMatchmaking] = useState(false);
   const [matchmakingMessage, setMatchmakingMessage] = useState('Finding match...');
   const matchmakingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasStartedMatchmaking = useRef(false);
 
   // Identify Player Role
   const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
@@ -82,8 +83,15 @@ const AyoOnlineUI = () => {
       return;
     }
 
+    // Prevent duplicate matchmaking calls
+    if (hasStartedMatchmaking.current) {
+      console.log('Matchmaking already started, skipping');
+      return;
+    }
+
     // Start matchmaking automatically when component mounts (if no current game)
     if (!currentGame) {
+      hasStartedMatchmaking.current = true;
       startAutomaticMatchmaking();
     }
 
@@ -95,6 +103,7 @@ const AyoOnlineUI = () => {
       if (isMatchmaking) {
         matchmakingService.cancelMatchmaking().catch(console.error);
       }
+      hasStartedMatchmaking.current = false;
     };
   }, []);
 

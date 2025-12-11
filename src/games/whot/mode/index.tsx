@@ -2,7 +2,7 @@
 
 import React from 'react';
 // --- FIX: Import the main computer game screen ---
-import WhotComputerGameScreen from "./computer/WhotComputerGameScreen"; 
+import WhotComputerGameScreen from "./computer/WhotComputerGameScreen";
 import WhotOnline from "./online/WhotOnline";
 import WhotBattleGroundUI from "./battleground/whotBattleGroundUI"
 
@@ -27,7 +27,7 @@ export default function WhotIndex({ mode }: WhotIndexProps) {
 
   // --- FIX: Render the full game screen component ---
   if (mode === "computer") return <WhotComputerGameScreen />;
-  
-  if (mode === "online") return <WhotOnline toast={toast} />;
+
+  if (mode === "online") return <WhotOnline />;
   return <WhotBattleGroundUI toast={toast} />;
 }
