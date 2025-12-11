@@ -37,11 +37,25 @@ class MatchmakingService {
     async startMatchmaking(gameType: string): Promise<MatchmakingResponse> {
         console.log('[MatchmakingService] Starting matchmaking for:', gameType);
         try {
+            // Check if token exists before making request
+            const token = await SecureStore.getItemAsync('token');
+            if (!token) {
+                throw new Error('Not authenticated. Please log in again.');
+            }
+
             const response = await this.api.post('/start', { gameType });
             console.log('[MatchmakingService] Matchmaking response:', response.data);
             return response.data;
         } catch (error: any) {
             console.error('[MatchmakingService] Failed to start matchmaking:', error.response?.data || error.message);
+
+            // Handle authentication errors specifically
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                // Token is invalid or expired, clear it
+                await SecureStore.deleteItemAsync('token');
+                throw new Error('Session expired. Please log in again.');
+            }
+
             throw error;
         }
     }

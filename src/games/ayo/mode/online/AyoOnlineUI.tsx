@@ -38,6 +38,7 @@ const AyoOnlineUI = () => {
   const navigation = useNavigation();
   const { currentGame, availableGames, isLoading, error } = useAppSelector(state => state.onlineGame);
   const { profile: userProfile } = useAppSelector(state => state.user);
+  const { isAuthenticated, token } = useAppSelector(state => state.auth);
   const playerProfile = usePlayerProfile('ayo');
 
   // Local State for Animation & Interaction
@@ -65,6 +66,22 @@ const AyoOnlineUI = () => {
 
   // --- Automatic Matchmaking ---
   useEffect(() => {
+    // Check if user is authenticated before starting matchmaking
+    if (!isAuthenticated || !token || !userProfile?.id) {
+      console.log('User not authenticated, redirecting back', { isAuthenticated, hasToken: !!token, hasProfile: !!userProfile?.id });
+      Alert.alert(
+        'Authentication Required',
+        'Please log in to play online.',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
+      return;
+    }
+
     // Start matchmaking automatically when component mounts (if no current game)
     if (!currentGame) {
       startAutomaticMatchmaking();
@@ -134,10 +151,28 @@ const AyoOnlineUI = () => {
         setMatchmakingMessage(response.message);
         startMatchmakingPolling();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to start matchmaking:', error);
       setIsMatchmaking(false);
-      Alert.alert('Error', 'Failed to start matchmaking. Please try again.');
+
+      // Handle authentication errors
+      const errorMessage = error.message || 'Failed to start matchmaking. Please try again.';
+
+      if (errorMessage.includes('Session expired') || errorMessage.includes('Not authenticated')) {
+        Alert.alert(
+          'Authentication Required',
+          'Your session has expired. Please log in again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Error', errorMessage);
+        navigation.goBack();
+      }
     }
   };
 
