@@ -89,7 +89,7 @@ const AyoOnlineUI = () => {
 
   const syncGameStateFromProps = () => {
     if (!currentGame) return;
-    const serverBoard = currentGame.board;
+    const serverBoard = currentGame.board || Array(12).fill(4); // Default to standard board if null
     const displayBoard = needsRotation ? rotateBoard(serverBoard) : serverBoard;
     setVisualBoard(displayBoard);
     setBoardBeforeMove(displayBoard); // Reset reference for animations
@@ -283,8 +283,9 @@ const AyoOnlineUI = () => {
     // We don't have scores in the basic backend model yet?
     // Assuming naive scoring or derived from board.
     // Calculate scores on fly:
-    const p1Score = currentGame.board.slice(0, 6).reduce((a, b) => a + b, 0); // Logic P1
-    const p2Score = currentGame.board.slice(6, 12).reduce((a, b) => a + b, 0); // Logic P2
+    const currentBoard = currentGame.board || Array(12).fill(4); // Default to standard board if null
+    const p1Score = currentBoard.slice(0, 6).reduce((a: number, b: number) => a + b, 0); // Logic P1
+    const p2Score = currentBoard.slice(6, 12).reduce((a: number, b: number) => a + b, 0); // Logic P2
 
     // Map to Visual Top/Bottom
     // If needsRotation (We are P1): Bottom=P1, Top=P2.

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../../config/api';
+import * as SecureStore from 'expo-secure-store';
 
 export interface Game {
   id: string;
@@ -32,18 +33,29 @@ class GameService {
 
   constructor() {
     // Add auth token to requests
-    this.api.interceptors.request.use((config) => {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+    this.api.interceptors.request.use(async (config) => {
+      try {
+        const token = await SecureStore.getItemAsync('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error('Error fetching token for game service:', error);
       }
       return config;
     });
   }
 
   async createGame(gameType: string): Promise<Game> {
-    const response = await this.api.post('', { gameType });
-    return response.data.game;
+    console.log('[GameService] Creating game with payload:', { gameType });
+    try {
+      const response = await this.api.post('', { gameType });
+      console.log('[GameService] Game created successfully:', response.data);
+      return response.data.game;
+    } catch (error: any) {
+      console.error('[GameService] Failed to create game:', error.response?.data || error.message);
+      throw error;
+    }
   }
 
   async joinGame(gameId: string): Promise<Game> {
@@ -52,8 +64,13 @@ class GameService {
   }
 
   async getAvailableGames(): Promise<Game[]> {
-    const response = await this.api.get('/available');
-    return response.data.games;
+    try {
+      const response = await this.api.get('/available');
+      return response.data.games;
+    } catch (error) {
+      console.log('[GameService] Fetch available games error', error);
+      return [];
+    }
   }
 
   async getGame(gameId: string): Promise<Game> {
