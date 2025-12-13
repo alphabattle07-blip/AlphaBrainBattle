@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repo
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -40,7 +40,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > alpha-battle-keystore.jks
 
-      # 7. Build APK (non-interactive)
+      # 7. Build APK (Android-only, non-interactive)
       - name: Build APK
         env:
           EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -49,7 +49,7 @@ jobs:
           EXPO_NO_INTERACTIVE: 1
         run: |
           npm ci
-          npx expo prebuild
+          npx expo prebuild --platform android
           npx expo run:android --no-install --variant release
 
       # 8. Upload APK artifact
