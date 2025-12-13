@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repo
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -21,22 +21,26 @@ jobs:
         with:
           node-version: 20
 
-      # 3. Install dependencies
+      # 3. Install project dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 4. Authenticate with Expo
+      # 4. Install Expo CLI locally
+      - name: Install Expo CLI
+        run: npm install --save-dev expo
+
+      # 5. Authenticate with Expo
       - name: Authenticate with Expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx expo whoami || npx expo login --token $EXPO_TOKEN
 
-      # 5. Decode keystore
+      # 6. Decode keystore
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > alpha-battle-keystore.jks
 
-      # 6. Build APK
+      # 7. Build APK
       - name: Build APK
         env:
           EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -44,9 +48,9 @@ jobs:
           EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           npx expo prebuild --clean
-          expo run:android --no-install --variant release
+          npx expo run:android --no-install --variant release
 
-      # 7. Upload APK
+      # 8. Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
