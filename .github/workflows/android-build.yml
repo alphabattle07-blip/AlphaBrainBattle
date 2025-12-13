@@ -46,10 +46,11 @@ jobs:
           EXPO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           EXPO_ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          EXPO_NO_INTERACTIVE: 1
         run: |
           npm install --save-dev expo
           npm ci
-          npx expo prebuild --clean --yes
+          npx expo prebuild --clean
           npx expo run:android --no-install --variant release
 
       # 8. Upload APK artifact
