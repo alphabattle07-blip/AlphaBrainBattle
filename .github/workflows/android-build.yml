@@ -47,7 +47,9 @@ jobs:
           EXPO_ANDROID_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           EXPO_ANDROID_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          npx expo prebuild --clean
+          npm install --save-dev expo
+          npm ci
+          npx expo prebuild --clean --yes
           npx expo run:android --no-install --variant release
 
       # 8. Upload APK artifact
