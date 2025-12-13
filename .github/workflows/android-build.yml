@@ -21,11 +21,11 @@ jobs:
         with:
           node-version: 20
 
-      # 3. Install project dependencies
+      # 3. Install project dependencies (fresh install)
       - name: Install dependencies
         run: npm ci
 
-      # 4. Install Expo CLI locally (pinned version)
+      # 4. Install the new Expo CLI locally (avoid @expo/cli)
       - name: Install Expo CLI
         run: npm install --save-dev expo@48.0.18
 
@@ -35,7 +35,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx expo whoami || npx expo login --token $EXPO_TOKEN
 
-      # 6. Decode keystore
+      # 6. Decode Android keystore
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > alpha-battle-keystore.jks
