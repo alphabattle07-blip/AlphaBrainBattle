@@ -14,9 +14,9 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "@/src/navigation/types";
-import { useAppDispatch, useAppSelector } from "@/src/store/hooks"; // ✅ Import Redux hooks
-import { signInUser } from "@/src/store/thunks/authThunks"; // ✅ Import the Redux Thunk
+import { RootStackParamList } from "../../src/navigation/types";
+import { useAppDispatch, useAppSelector } from "../../src/store/hooks"; // ✅ Import Redux hooks
+import { signInUser } from "../../src/store/thunks/authThunks"; // ✅ Import the Redux Thunk
 
 type SignInNavProp = NativeStackNavigationProp<RootStackParamList, "SignIn">;
 

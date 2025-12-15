@@ -6,11 +6,11 @@ import { RootStackParamList } from './types';
 // Import all navigators and screens
 import AuthStack from './AuthStack';
 import MainTabNavigator from './MainTabNavigator';
-import SplashScreen from '@/src/screens/game/splashscreen';
-import GameLobby from '@/src/screens/game/GameLobbyScreen';
-import GameModeScreen from '@/src/screens/game/GameModeScreen';
-import WalletScreen from '@/src/screens/wallet/WalletScreen';
-import TransactionHistoryScreen from '@/src/screens/wallet/TransactionHistoryScreen';
+import SplashScreen from '../screens/game/splashscreen';
+import GameLobby from '../screens/game/GameLobbyScreen';
+import GameModeScreen from '../screens/game/GameModeScreen';
+import WalletScreen from '../screens/wallet/WalletScreen';
+import TransactionHistoryScreen from '../screens/wallet/TransactionHistoryScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 

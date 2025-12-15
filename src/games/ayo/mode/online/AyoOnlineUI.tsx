@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useAppDispatch, useAppSelector } from '@/src/store/hooks';
+import { useAppDispatch, useAppSelector } from '../../../../store/hooks';
 import {
   createOnlineGame,
   joinOnlineGame,
@@ -9,14 +9,14 @@ import {
   updateOnlineGameState,
   fetchGameState
 } from '@/src/store/thunks/onlineGameThunks';
-import { clearCurrentGame, setCurrentGame } from '@/src/store/slices/onlineGameSlice';
-import { usePlayerProfile } from '@/src/hooks/usePlayerProfile';
+import { clearCurrentGame, setCurrentGame } from '../../../../store/slices/onlineGameSlice';
+import { usePlayerProfile } from '../../../../hooks/usePlayerProfile';
 import { calculateMoveResult, Capture } from "../core/AyoCoreLogic";
 import { AyoSkiaImageBoard } from "../core/AyoSkiaBoard"; // Directly use the board component
 import GamePlayerProfile from "../core/GamePlayerProfile"; // Directly use the profile component
 import AyoGameOver from "../computer/AyoGameOver";
 import { Ionicons } from '@expo/vector-icons';
-import { matchmakingService } from '@/src/services/api/matchmakingService';
+import { matchmakingService } from '../../../../services/api/matchmakingService';
 
 // --- Board Rotation Helper ---
 // Rotates the board so that the player's side is always at the bottom (indices 6-11).

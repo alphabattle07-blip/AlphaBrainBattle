@@ -6,7 +6,7 @@ import WhotComputerGameScreen from "./computer/WhotComputerGameScreen";
 import WhotOnline from "./online/WhotOnline";
 import WhotBattleGroundUI from "./battleground/whotBattleGroundUI"
 
-import { useToast } from "@/src/hooks/useToast";
+import { useToast } from "../../../hooks/useToast";
 
 type WhotIndexProps = {
   mode: "computer" | "online" | "battle";

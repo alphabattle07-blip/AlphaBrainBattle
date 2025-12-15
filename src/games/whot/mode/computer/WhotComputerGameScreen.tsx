@@ -27,7 +27,7 @@ import WhotSuitSelector from "../core/ui/WhotSuitSelector";
 import { executeForcedDraw, initGame, pickCard, playCard } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
-import { usePlayerProfile } from "@/src/hooks/usePlayerProfile";
+import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import ActiveSuitCard from "../core/ui/ActiveSuitCard";
 import GameOverModal from "../core/ui/GameOverModal";

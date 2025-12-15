@@ -18,8 +18,8 @@ import Animated, {
   Easing,
   cancelAnimation,
 } from 'react-native-reanimated';
-import { useSound } from '@/src/hooks/useSound';
-import hopSound from '@/src/assets/sounds/hop.mp3';
+import { useSound } from '../../../../hooks/useSound';
+import hopSound from '../src/assets/sounds/hop.mp3';
 import captureSound from '@/src/assets/sounds/capture.mp3';
 import { useBackgroundSound } from "@/src/hooks/useBackgroundSound";
 import bgSound from "@/src/assets/sounds/background.mp3";

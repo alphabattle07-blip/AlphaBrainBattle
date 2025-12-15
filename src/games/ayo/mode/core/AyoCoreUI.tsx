@@ -10,9 +10,9 @@ import {
   getValidMoves,
   Capture,
 } from "./AyoCoreLogic";
-import { useGameTimer } from "@/src/hooks/useGameTimer";
+import { useGameTimer } from "../../../../hooks/useGameTimer";
 import AyoGameOver from "../computer/AyoGameOver"; // ✅ import overlay
-import { usePlayerProfile } from '@/src/hooks/usePlayerProfile';
+import { usePlayerProfile } from "../../../../hooks/usePlayerProfile"; // Import the hook
 
 type AyoGameProps = {
   initialGameState?: AyoGameState;

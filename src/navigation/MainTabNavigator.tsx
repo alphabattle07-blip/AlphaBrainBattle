@@ -7,11 +7,11 @@ import { Ionicons } from "@expo/vector-icons";
 
 // Import your screens
 import NotificationScreen from "@/src/screens/notification/Notification";
-import ProfileScreen from "@/src/screens/profile/ProfileScreen";
-import MarketScreen from "@/src/screens/market/MarketScreen";
-import WalletScreen from "@/src/screens/wallet/WalletScreen";
-import { useAppDispatch } from '@/src/store/hooks';
-import { logout } from '@/src/store/slices/authSlice';
+import ProfileScreen from ".././screens/profile/ProfileScreen";
+import MarketScreen from ".././screens/market/MarketScreen";
+import WalletScreen from ".././screens/wallet/WalletScreen";
+import { useAppDispatch } from '../store/hooks';
+import { logout } from '../store/slices/authSlice';
 
 const Tab = createBottomTabNavigator();
 

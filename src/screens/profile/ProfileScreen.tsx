@@ -12,14 +12,14 @@ import {
 } from 'react-native';
 import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { RootStackParamList } from '@/src/navigation/types';
-import { useAppDispatch, useAppSelector } from '@/src/store/hooks';
-import { fetchUserProfile } from '@/src/store/thunks/authThunks';
-import { fetchAllGameStatsThunk } from '@/src/store/thunks/gameStatsThunks';
+import { RootStackParamList } from '../../navigation/types';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { fetchUserProfile } from '../../store/thunks/authThunks';
+import { fetchAllGameStatsThunk } from '../../store/thunks/gameStatsThunks';
 import { getFlagEmoji } from '../../utils/flags';
 import { getRankFromRating } from '../../utils/rank';
 import { ArrowLeft, User } from 'lucide-react-native';
-import { UserProfile, GameStats } from '@/src/services/api/authService';
+import { UserProfile, GameStats } from '../../services/api/authService';
 
 type ProfileScreenProps = {
   isOwnProfile?: boolean;
