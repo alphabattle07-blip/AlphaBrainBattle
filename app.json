@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "alphabattle",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },
@@ -33,10 +33,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ],
-      "expo-secure-store",
-      "expo-router",
-      "expo-web-browser"
+      ]
     ],
     "experiments": {
       "typedRoutes": false

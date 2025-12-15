@@ -1,11 +1,10 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
+    presets: ["babel-preset-expo"],
     plugins: [
-      // ... other plugins you might have
-     ['react-native-worklets/plugin'],
- // This must be the last plugin
+      "expo-router/babel",
+      "react-native-reanimated/plugin",
     ],
   };
 };
