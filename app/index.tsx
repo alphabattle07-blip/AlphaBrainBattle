@@ -1,12 +1,12 @@
 // App.tsx
 import React from 'react';
 import { Provider } from "react-redux";
-import { store, persistor } from "@/src/store";
+import { store, persistor } from "../src/store";
 import { PersistGate } from "redux-persist/integration/react";
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import RootNavigator from '@/src/navigation/RootNavigator';
-import { WalletProvider } from '@/src/screens/wallet/WalletContext';
+import RootNavigator from '../src/navigation/RootNavigator';
+import { WalletProvider } from '../src/screens/wallet/WalletContext';
 
 export default function App() {
   return (
