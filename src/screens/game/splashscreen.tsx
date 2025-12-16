@@ -30,7 +30,7 @@ const SplashScreen = () => {
     <View style={styles.container}>
       {/* You can keep your background, logo, and animations here */}
       <Image
-        source={require("@/assets/images/splash-icon.png")}
+        source={require("../../../assets/images/splash-icon.png")}
         style={styles.logo}
       />
       <Text style={styles.title}>ALPHA BATTLE</Text>
