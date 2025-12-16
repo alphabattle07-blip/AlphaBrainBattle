@@ -8,7 +8,7 @@ import {
   fetchAvailableGames,
   updateOnlineGameState,
   fetchGameState
-} from '@/src/store/thunks/onlineGameThunks';
+} from '../../../../store/thunks/onlineGameThunks';
 import { clearCurrentGame, setCurrentGame } from '../../../../store/slices/onlineGameSlice';
 import { usePlayerProfile } from '../../../../hooks/usePlayerProfile';
 import { calculateMoveResult, Capture } from "../core/AyoCoreLogic";

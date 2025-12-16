@@ -3,7 +3,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, useWindowDimensions } from 'react-native';
 import CountryFlag from 'react-native-country-flag';
 import { Ionicons } from '@expo/vector-icons';
-import { getRankFromRating } from "@/src/utils/rank";
+import { getRankFromRating } from "../../../../utils/rank";
 
 interface GamePlayerProfileProps {
   name: string;

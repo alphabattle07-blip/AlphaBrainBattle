@@ -1,4 +1,4 @@
-import { getRankFromRating } from '@/src/utils/rank';
+import { getRankFromRating } from '../../../../../utils/rank';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useEffect } from 'react';
 import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';

@@ -19,13 +19,13 @@ import Animated, {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { useSound } from '../../../../hooks/useSound';
-import hopSound from '../src/assets/sounds/hop.mp3';
-import captureSound from '@/src/assets/sounds/capture.mp3';
-import { useBackgroundSound } from "@/src/hooks/useBackgroundSound";
-import bgSound from "@/src/assets/sounds/background.mp3";
+import hopSound from '../../../../../src/assets/sounds/hop.mp3';
+import captureSound from '../../../../assets/sounds/capture.mp3';
+import { useBackgroundSound } from "../../../../hooks/useBackgroundSound";
+import bgSound from "../../../../assets/sounds/background.mp3";
 
-const boardImageSource = require('@/src/assets/images/ayo-board.png');
-const seedImageSource = require('@/src/assets/images/ayo-seed.png');
+const boardImageSource = require('../../../../assets/images/ayo-board.png');
+const seedImageSource = require('../../../../assets/images/ayo-seed.png');
 const SEED_IMAGE_SIZE = 45;
 
 const getSeedPosition = (pitX: number, pitY: number, seedIndex: number, totalSeeds: number) => {

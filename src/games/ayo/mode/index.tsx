@@ -1,7 +1,7 @@
 import React from 'react';
 import AyoComputerUI from "./computer/AyoComputerUI";
 import AyoOnlineUI from "./online/AyoOnlineUI";
-import { useToast } from "@/src/hooks/useToast";
+import { useToast } from "../../../hooks/useToast";
 
 type AyoIndexProps = {
   mode: "computer" | "online" | "battle";

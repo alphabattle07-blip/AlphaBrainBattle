@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useAppDispatch, useAppSelector } from '@/src/store/hooks';
+import { useAppDispatch, useAppSelector } from '../../../../store/hooks';
 import {
   createOnlineGame,
   joinOnlineGame,
   fetchAvailableGames,
   updateOnlineGameState,
   fetchGameState
-} from '@/src/store/thunks/onlineGameThunks';
-import { clearCurrentGame, setCurrentGame } from '@/src/store/slices/onlineGameSlice';
+} from '../../../../store/thunks/onlineGameThunks';
+import { clearCurrentGame, setCurrentGame } from '../../../../store/slices/onlineGameSlice';
 import { Ionicons } from '@expo/vector-icons';
-import { matchmakingService } from '@/src/services/api/matchmakingService';
+import { matchmakingService } from '../../../../services/api/matchmakingService';
 
 const WhotOnlineUI = () => {
   const dispatch = useAppDispatch();

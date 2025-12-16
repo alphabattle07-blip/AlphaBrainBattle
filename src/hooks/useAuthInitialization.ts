@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '@/src/store';
-import { initializeAuthState } from '@/src/store';
-import storageService from '@/src/services/local/storageService';
+import { initializeAuthState, RootState, AppDispatch } from '../store';
+import storageService from '../services/local/storageService';
 
 export const useAuthInitialization = () => {
   const dispatch = useDispatch<AppDispatch>();
