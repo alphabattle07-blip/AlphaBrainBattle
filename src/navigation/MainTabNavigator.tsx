@@ -6,7 +6,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 // Import your screens
-import NotificationScreen from "@/src/screens/notification/Notification";
+import NotificationScreen from "../screens/notification/Notification";
 import ProfileScreen from ".././screens/profile/ProfileScreen";
 import MarketScreen from ".././screens/market/MarketScreen";
 import WalletScreen from ".././screens/wallet/WalletScreen";
