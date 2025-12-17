@@ -25,6 +25,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "@shopify/react-native-skia",
       [
         "expo-splash-screen",
         {
