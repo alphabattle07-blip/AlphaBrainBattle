@@ -103,15 +103,24 @@ const IndividualAnimatedCard = memo(
 
       // --- Stable Shared Value Props ---
       const cardSV = useSharedValue(card);
-      const onPressSV = useSharedValue(onPress);
+
+      // Store onPress in a ref (not SharedValue) to avoid worklet/JS thread issues
+      const onPressRef = useRef(onPress);
 
       useEffect(() => {
         cardSV.value = card;
       }, [card, cardSV]);
 
       useEffect(() => {
-        onPressSV.value = onPress;
-      }, [onPress, onPressSV]);
+        onPressRef.current = onPress;
+      }, [onPress]);
+
+      // Stable callback that worklet can safely call via runOnJS
+      const handleCardPress = useMemo(() => (cardData: Card) => {
+        if (onPressRef.current) {
+          onPressRef.current(cardData);
+        }
+      }, []);
 
       // --- Imperative Handle (for parent control) ---
       useImperativeHandle(ref, () => ({
@@ -149,21 +158,21 @@ const IndividualAnimatedCard = memo(
             const { cardIndex, handSize } = options || {};
 
             // ✅ --- START OF Z-INDEX FIX --- ✅
-           if (instant) {
-       // If instant, set the final z-index immediately
-       if (target === "player") {
-        zIndex.value = 100 + (cardIndex || 0);
-       } else if (target === "computer") {
-        zIndex.value = 200 + (cardIndex || 0); // <-- 200+
-       } else if (target === "pile") {
-        zIndex.value = 50 + (cardIndex || 0);
-       } else {
-        zIndex.value = 1;
-       }
-      } else {
-       // If ANIMATING, do NOT change zIndex here.
-       // Let it animate from its current layer.
-      }
+            if (instant) {
+              // If instant, set the final z-index immediately
+              if (target === "player") {
+                zIndex.value = 100 + (cardIndex || 0);
+              } else if (target === "computer") {
+                zIndex.value = 200 + (cardIndex || 0); // <-- 200+
+              } else if (target === "pile") {
+                zIndex.value = 50 + (cardIndex || 0);
+              } else {
+                zIndex.value = 1;
+              }
+            } else {
+              // If ANIMATING, do NOT change zIndex here.
+              // Let it animate from its current layer.
+            }
             // ✅ --- END OF Z-INDEX FIX --- ✅
 
             const {
@@ -186,24 +195,24 @@ const IndividualAnimatedCard = memo(
             }
 
             x.value = withTiming(newX, { duration });
-      y.value = withTiming(newY, { duration });
-      rotation.value = withTiming(newRot, { duration }, (finished) => {
-       if (finished) {
-        // ✅ --- START OF Z-INDEX FIX 2 --- ✅
-        // Animation is done, now "settle" the card
-        if (target === "player") {
-         zIndex.value = 100 + (cardIndex || 0);
-        } else if (target === "computer") {
-         zIndex.value = 200 + (cardIndex || 0); // <-- 200+
-        } else if (target === "pile") {
-         zIndex.value = 50 + (cardIndex || 0); // <-- THIS WAS MISSING IN YOURS
-        }
-        // ✅ --- END OF Z-INDEX FIX 2 --- ✅
-        runOnJS(resolve)();
-       }
-      });
-     });
-    },
+            y.value = withTiming(newY, { duration });
+            rotation.value = withTiming(newRot, { duration }, (finished) => {
+              if (finished) {
+                // ✅ --- START OF Z-INDEX FIX 2 --- ✅
+                // Animation is done, now "settle" the card
+                if (target === "player") {
+                  zIndex.value = 100 + (cardIndex || 0);
+                } else if (target === "computer") {
+                  zIndex.value = 200 + (cardIndex || 0); // <-- 200+
+                } else if (target === "pile") {
+                  zIndex.value = 50 + (cardIndex || 0); // <-- THIS WAS MISSING IN YOURS
+                }
+                // ✅ --- END OF Z-INDEX FIX 2 --- ✅
+                runOnJS(resolve)();
+              }
+            });
+          });
+        },
 
         async flip(show) {
           return new Promise((resolve) => {
@@ -228,7 +237,6 @@ const IndividualAnimatedCard = memo(
 
             const handIds = playerHandIdsSV.value;
             const currentCard = cardSV.value;
-            const currentOnPress = onPressSV.value;
 
             let isPlayerCard = false;
             for (let i = 0; i < handIds.length; i++) {
@@ -238,11 +246,11 @@ const IndividualAnimatedCard = memo(
               }
             }
 
-            if (isPlayerCard && currentOnPress) {
-              runOnJS(currentOnPress)(currentCard);
+            if (isPlayerCard) {
+              runOnJS(handleCardPress)(currentCard);
             }
           }),
-        [cardSV, onPressSV, playerHandIdsSV]
+        [cardSV, playerHandIdsSV, handleCardPress]
       );
 
       // --- Animated Style ---
