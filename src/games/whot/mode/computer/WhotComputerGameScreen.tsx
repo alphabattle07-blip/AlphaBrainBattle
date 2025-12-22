@@ -28,7 +28,7 @@ import { executeForcedDraw, initGame, pickCard, playCard } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
-import { runOnJS, useSharedValue } from "react-native-reanimated";
+import { useSharedValue } from "react-native-reanimated";
 import ActiveSuitCard from "../core/ui/ActiveSuitCard";
 import GameOverModal from "../core/ui/GameOverModal";
 import { MarketPile } from "../core/ui/MarketPile";
@@ -277,8 +277,8 @@ const WhotComputerGameScreen = () => {
           break;
         }
 
-        // 2. Set state logic
-        runOnJS(setGame)((prev) => {
+        // 2. Set state logic - this is a regular async function, NOT a worklet
+        setGame((prev) => {
           gameRef.current = prev ? { ...prev, gameState: newState } : null;
           return gameRef.current;
         });
@@ -840,7 +840,7 @@ const WhotComputerGameScreen = () => {
 
     if (game.gameState.currentPlayer === 1) {
       const timer = setTimeout(() => {
-        runOnJS(handleComputerTurn)();
+        handleComputerTurn();
       }, 1200);
       return () => clearTimeout(timer);
     }
@@ -918,8 +918,8 @@ const WhotComputerGameScreen = () => {
       await Promise.all(flipPromises);
       console.log("✅ Deal complete.");
       if (isMounted) {
-        runOnJS(setHasDealt)(true);
-        runOnJS(setIsAnimating)(false);
+        setHasDealt(true);
+        setIsAnimating(false);
       }
     };
     const timerId = setTimeout(dealSmoothly, 0);

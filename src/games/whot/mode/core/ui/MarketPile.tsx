@@ -1,4 +1,4 @@
-import React, { useMemo, memo } from "react"; 
+import React, { useMemo, memo, useRef, useEffect, useCallback } from "react";
 import { StyleSheet, View, Text } from "react-native";
 import { Canvas, Group, RoundedRect, DashPathEffect, vec } from "@shopify/react-native-skia"; // ✅ Added imports
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -12,8 +12,8 @@ interface MarketPileProps {
   font: any;
   smallFont: any;
   onPress?: () => void;
-  width: number; 
-  height: number; 
+  width: number;
+  height: number;
 }
 
 const MAX_STACK_CARDS = 15;
@@ -79,7 +79,20 @@ export const MarketPile = memo(
     height,
   }: MarketPileProps) => {
     // console.log("LOG: 🟡 MarketPile re-rendered.");
-    
+
+    // Store onPress in a ref to avoid stale closure in worklet
+    const onPressRef = useRef(onPress);
+    useEffect(() => {
+      onPressRef.current = onPress;
+    }, [onPress]);
+
+    // Stable callback for worklet to call via runOnJS
+    const handleMarketPress = useCallback(() => {
+      if (onPressRef.current) {
+        onPressRef.current();
+      }
+    }, []);
+
     const marketPos = useMemo(
       () => getCoords("market", {}, width, height),
       [width, height]
@@ -106,11 +119,10 @@ export const MarketPile = memo(
     const tapGesture = useMemo(
       () =>
         Gesture.Tap().onEnd(() => {
-          if (onPress) {
-            runOnJS(onPress)();
-          }
+          "worklet";
+          runOnJS(handleMarketPress)();
         }),
-      [onPress]
+      [handleMarketPress]
     );
 
     if (!font || !smallFont) {
@@ -120,7 +132,7 @@ export const MarketPile = memo(
     return (
       <GestureDetector gesture={tapGesture}>
         <Animated.View style={style}>
-          
+
           {/* ✅ LOGIC: If count is 0, show placeholder. If > 0, show cards. */}
           {count === 0 ? (
             <EmptyMarketPlaceholder />
@@ -148,7 +160,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: -12,
     top: 8,
-    backgroundColor: "#00008B", 
+    backgroundColor: "#00008B",
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,

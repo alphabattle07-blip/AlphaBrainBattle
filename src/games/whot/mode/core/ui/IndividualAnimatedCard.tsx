@@ -5,6 +5,7 @@ import React, {
   useMemo,
   memo,
   useEffect,
+  useRef,
 } from "react";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {

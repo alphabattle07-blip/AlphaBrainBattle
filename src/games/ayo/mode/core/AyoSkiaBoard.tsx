@@ -141,7 +141,7 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
 
     if (animationSteps.length === 0) {
       animatedOpacity.value = 0;
-      if (animationBoard) runOnJS(setAnimationBoard)(null);
+      if (animationBoard) setAnimationBoard(null);
       return;
     }
 
@@ -150,12 +150,12 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
         if (!prevBoard) return null;
         const newBoard = [...prevBoard];
         newBoard[pitIndex]++;
-        runOnJS(playHop)();
+        playHop();
         if (newBoard[pitIndex] === 4 && captures?.includes(pitIndex)) {
           newBoard[pitIndex] = 0;
           if (onCaptureDuringAnimation) {
-            runOnJS(playCapture)();
-            runOnJS(onCaptureDuringAnimation)(pitIndex);
+            playCapture();
+            onCaptureDuringAnimation(pitIndex);
           }
         }
         return newBoard;
@@ -171,7 +171,7 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
       }
 
       const { path, boardStateBeforeSow } = animationSteps[stepIndex];
-      runOnJS(setAnimationBoard)(boardStateBeforeSow);
+      setAnimationBoard(boardStateBeforeSow);
       const startPit = PIT_POSITIONS.find(p => p.index === path[0]);
 
       const scheduleNextStep = () => {
@@ -209,14 +209,17 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
         animatedX.value = withSequence(...xSeq);
         animatedY.value = withSequence(...ySeq);
       } else {
-        runOnJS(scheduleNextStep)();
+        scheduleNextStep();
       }
     };
 
     playAnimationForStep(0);
   }, [animationSteps]);
 
-  const animatedMatrix = useDerivedValue(() => Skia.Matrix().translate(animatedX.value * scale, animatedY.value * scale));
+  const animatedTransform = useDerivedValue(() => [
+    { translateX: animatedX.value * scale },
+    { translateY: animatedY.value * scale }
+  ]);
   const derivedAnimatedOpacity = useDerivedValue(() => animatedOpacity.value);
   const currentBoard = isAnimating ? animationBoard ?? boardBeforeMove : board;
 
@@ -235,7 +238,7 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
             return <SkiaImage key={`${pitIndex}-${seedIndex}`} image={seedImage} x={x * scale} y={y * scale} width={SEED_IMAGE_SIZE * scale} height={SEED_IMAGE_SIZE * scale} />;
           });
         })}
-        <Group matrix={animatedMatrix} opacity={derivedAnimatedOpacity}>
+        <Group transform={animatedTransform} opacity={derivedAnimatedOpacity}>
           <SkiaImage image={seedImage} x={0} y={0} width={SEED_IMAGE_SIZE * scale} height={SEED_IMAGE_SIZE * scale} />
         </Group>
       </Canvas>
