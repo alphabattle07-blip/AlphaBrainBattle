@@ -243,13 +243,24 @@ export const pickCard = (
   }
 
   // --- Rule 1 Logic ---
-  if (
+ if (
     pendingAction?.type === "defend" &&
     pendingAction.playerIndex === playerIndex
   ) {
-    // The UI now handles the conversion from "defend" to "draw".
-    // This logic is now redundant. We just return the state as is.
-    return { newState: state, drawnCards: [] };
+    // ✅ FIX: Convert "defend" to "draw" logic
+    // This tells the UI: "The player accepted defeat, now force them to draw."
+    const newState: GameState = {
+      ...state,
+      pendingAction: {
+        ...pendingAction,
+        type: "draw", // Switch type
+        // Preserve count, playerIndex, and returnTurnTo
+      } as any, 
+    };
+    
+    // We return drawnCards as empty [] because the UI's 
+    // runForcedDrawSequence will handle the actual drawing animation.
+    return { newState, drawnCards: [] };
   }
 
   if (

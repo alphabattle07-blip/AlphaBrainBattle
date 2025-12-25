@@ -24,7 +24,7 @@ import AnimatedCardList, {
 } from "../core/ui/AnimatedCardList";
 import MemoizedBackground from "../core/ui/MemoizedBackground";
 import WhotSuitSelector from "../core/ui/WhotSuitSelector";
-import { executeForcedDraw, initGame, pickCard, playCard } from "../core/game";
+import { executeForcedDraw, getReshuffledState, initGame, pickCard, playCard } from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
@@ -222,26 +222,25 @@ const WhotComputerGameScreen = () => {
 
     const cardsToMove = pile.slice(0, pile.length - 1);
 
-    const movePromises = cardsToMove.map((card) => {
+    const promises = cardsToMove.map(async (card) => {
       const randomRot = Math.floor(Math.random() * 4 - 2);
-      return dealer.dealCard(
-        card,
-        "market",
-        {
-          cardIndex: 0,
-          rotation: randomRot,
-        },
-        false
-      );
+
+      // ✅ FIX: Move AND Flip concurrently so it lands face-down
+      await Promise.all([
+        dealer.dealCard(
+          card,
+          "market",
+          {
+            cardIndex: 0,
+            rotation: randomRot,
+          },
+          false
+        ),
+        dealer.flipCard(card, false),
+      ]);
     });
 
-    await Promise.all(movePromises);
-
-    const flipPromises = cardsToMove.map((card) =>
-      dealer.flipCard(card, false)
-    );
-
-    await Promise.all(flipPromises);
+    await Promise.all(promises);
     await new Promise((r) => setTimeout(r, 200));
   }, []);
 
@@ -267,6 +266,11 @@ const WhotComputerGameScreen = () => {
         // ✅ 1. PRE-CHECK: If market empty, animate reshuffle FIRST
         if (currentState.market.length === 0 && currentState.pile.length > 1) {
           await animateReshuffle();
+          currentState = getReshuffledState(currentState);
+          setGame((prev) => {
+            gameRef.current = prev ? { ...prev, gameState: currentState } : null;
+            return gameRef.current;
+          });
         }
 
         const { newState, drawnCard } = executeForcedDraw(currentState);
@@ -478,19 +482,51 @@ const WhotComputerGameScreen = () => {
           );
         }
       } else {
-        // CASE B: PICK
+        // ... inside the else { // CASE B: PICK block
+
         console.log("🤖 Computer chose to PICK");
 
+        // 1. Reshuffle check
+        let stateToPickFrom = oldState;
         if (oldState.market.length === 0 && oldState.pile.length > 1) {
           await animateReshuffle();
+          stateToPickFrom = getReshuffledState(oldState);
+          setGame((prev) => {
+            gameRef.current = prev ? { ...prev, gameState: stateToPickFrom } : null;
+            return gameRef.current;
+          });
         }
 
-        const { newState, drawnCards } = pickCard(
-          oldState,
-          computerPlayerIndex
-        );
+        // 2. Call the updated pickCard logic
+        const { newState, drawnCards } = pickCard(stateToPickFrom, computerPlayerIndex);
+
+        // ✅ FIX: Check if we just surrendered a defense (Pick 2/3)
+        // If pickCard returned NO cards, but the state changed to "draw", 
+        // it means the computer gave up on defending.
+        if (
+          drawnCards.length === 0 &&
+          newState.pendingAction?.type === "draw"
+        ) {
+          console.log("🏳️ Computer surrenders defense -> Triggering Forced Draw");
+
+          // Update state to "draw" mode
+          setGame((prev) => (prev ? { ...prev, gameState: newState } : null));
+
+          // Slight delay for state to settle
+          await new Promise((r) => setTimeout(r, 200));
+
+          // 🚀 Trigger the forced draw animation sequence
+          const finalState = await runForcedDrawSequence(newState);
+
+          setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+          setIsAnimating(false);
+          return;
+        }
+
+        // ... [The rest of the standard pick logic continues below] ...
 
         if (drawnCards.length === 0) {
+          // Standard empty market case
           setGame((prevGame) =>
             prevGame ? { ...prevGame, gameState: newState } : null
           );
@@ -548,16 +584,41 @@ const WhotComputerGameScreen = () => {
     setIsAnimating(true);
 
     // 1. VISUAL RESHUFFLE CHECK
-    if (currentGame.gameState.market.length === 0) {
-      if (currentGame.gameState.pile.length > 1) {
+    let logicalState = currentGame.gameState;
+    if (logicalState.market.length === 0) {
+      if (logicalState.pile.length > 1) {
         await animateReshuffle();
+        logicalState = getReshuffledState(logicalState);
+        setGame((prev) => {
+          const updated = prev ? { ...prev, gameState: logicalState } : null;
+          gameRef.current = updated;
+          return updated;
+        });
       }
     }
 
     // 2. LOGIC PICK
-    const oldState = gameRef.current!.gameState;
+    const oldState = logicalState;
     const { newState: stateAfterPick, drawnCards } = pickCard(oldState, 0);
 
+    // ✅ FIX: Handle Player Surrender (Defend -> Draw)
+    if (
+      drawnCards.length === 0 &&
+      stateAfterPick.pendingAction?.type === "draw"
+    ) {
+      console.log("🏳️ Player surrenders defense -> Triggering Forced Draw");
+
+      setGame((prev) => (prev ? { ...prev, gameState: stateAfterPick } : null));
+
+      // 🚀 Trigger the forced draw animation sequence
+      const finalState = await runForcedDrawSequence(stateAfterPick);
+
+      setGame((prev) => (prev ? { ...prev, gameState: finalState } : null));
+      setIsAnimating(false);
+      return;
+    }
+
+    // Standard "Nothing to pick" case
     if (drawnCards.length === 0) {
       setGame((prevGame) =>
         prevGame ? { ...prevGame, gameState: stateAfterPick } : null
@@ -641,7 +702,7 @@ const WhotComputerGameScreen = () => {
 
     await Promise.all(animationPromises);
     setIsAnimating(false);
-  }, [animateReshuffle, playerHandLimit, layoutHandSize]);
+  }, [animateReshuffle, playerHandLimit, layoutHandSize, runForcedDrawSequence]);
 
   const handlePagingPress = useCallback(async () => {
     const dealer = cardListRef.current;

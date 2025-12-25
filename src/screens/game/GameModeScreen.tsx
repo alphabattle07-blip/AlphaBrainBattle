@@ -11,7 +11,7 @@ import { ToastProvider } from '../../hooks/useToast';
 // import { ChessGameScreen } from '../../games/chess/screens/ChessGameScreen';
 import AyoIndex from '../../games/ayo/mode/index';
 import WhotIndex from "../../games/whot/mode/index";
-// import LudoScreen from '../../games/ludo/screens/LudoScreen';
+import LudoIndexProps from "../../games/ludo/index"
 // import DraughtsScreen from '../../games/droughts/screens/DraughtsScreen';
 // import CardsScreen from '../../games/cards/screens/CardsScreen';
 
@@ -36,9 +36,8 @@ export default function GameModeScreen() {
       case 'ayo':
         return <AyoIndex mode={mode} />;
       // Add cases for other games here
-
-      // case 'ludo':
-      //   return <LudoScreen mode={mode} />;
+      case 'ludo':
+        return <LudoIndexProps mode={mode} />;
       // case 'droughts':
       //   return <DraughtsScreen mode={mode} />;
       // case 'cards':
@@ -46,7 +45,7 @@ export default function GameModeScreen() {
       default:
         return (
           <View style={styles.container}>
-            <Text style={styles.text}>Game not found: {gameId}</Text>
+            <Text style={styles.text}>Game not faound: {gameId}</Text>
           </View>
         );
     }

@@ -1,3 +1,4 @@
+// rule
 import { Card, GameState, CardSuit } from "./types";
 
 /**
