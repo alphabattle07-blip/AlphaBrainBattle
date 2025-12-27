@@ -11,9 +11,11 @@ import {
     applyMove,
     LudoGameState,
     LudoSeed,
-    MoveAction
+    MoveAction,
+    passTurn
 } from "./LudoGameLogic"; // Adapting imports based on LudoGameLogic.ts
 import { getComputerMove } from "../../computer/LudoComputerLogic";
+import { Ludo3DDie } from "./Ludo3DDie";
 
 const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll }: { dice: number[], diceUsed: boolean[], onPress: () => void, waitingForRoll: boolean }) => (
     <TouchableOpacity
@@ -27,9 +29,12 @@ const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll }: { dice: number[]
         ) : (
             <View style={styles.diceRow}>
                 {dice.map((d, i) => (
-                    <View key={i} style={[styles.die, diceUsed[i] && styles.dieUsed]}>
-                        <Text style={styles.dieText}>{d}</Text>
-                    </View>
+                    <Ludo3DDie
+                        key={i}
+                        value={d}
+                        size={45}
+                        isUsed={diceUsed[i]}
+                    />
                 ))}
             </View>
         )}
@@ -86,7 +91,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
             pauseTimer();
             Alert.alert("Game Over", `Winner: ${gameState.winner}`);
         } else {
-            setLastActivePlayer(gameState.currentPlayerIndex + 1); // 1 or 2
+            setLastActivePlayer((gameState.currentPlayerIndex + 1) as 1 | 2); // 1 or 2
             if (gameState.currentPlayerIndex === 0) startTimer(); // Player 1
             else pauseTimer(); // Player 2 (or second timer)
         }
@@ -98,6 +103,21 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
         if (gameState.winner) return;
         setGameState(prev => rollDice(prev));
     }, [gameState.winner]);
+
+    // --- Auto Pass & Turn Logic ---
+    useEffect(() => {
+        if (!gameState.waitingForRoll && !gameState.winner) {
+            const moves = getValidMoves(gameState);
+            if (moves.length === 0) {
+                // No valid moves available - Auto Pass
+                // Add delay so user sees digits
+                const timer = setTimeout(() => {
+                    setGameState(prev => passTurn(prev));
+                }, 1000);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [gameState, gameState.dice, gameState.diceUsed, gameState.waitingForRoll]);
 
     // AI Turn Loop
     useEffect(() => {
@@ -222,21 +242,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center'
     },
     diceRow: { flexDirection: 'row', gap: 7 },
-    die: {
-        width: 45,
-        height: 45,
-        backgroundColor: 'white',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: 8,
-        elevation: 5,
-        shadowColor: 'black',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 2
-    },
-    dieUsed: { opacity: 0.4, backgroundColor: '#ddd' },
-    dieText: { fontSize: 24, fontWeight: 'bold', color: '#333' },
     rollPrompt: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 }
 });
 

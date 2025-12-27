@@ -1,9 +1,8 @@
 // LudoComputerGameScreen.tsx
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-
-
-import { LudoCoreUI } from '../core/ui/LudoCoreUI'; // Assuming you saved that component here
+import { LudoCoreUI } from '../core/ui/LudoCoreUI'; 
+// import { BoardMapper } from './TemporaryMapper'; 
 
 const LudoComputerGameScreen = () => {
     return (
@@ -12,9 +11,8 @@ const LudoComputerGameScreen = () => {
                 <Text style={styles.title}>Ludo vs Computer</Text>
             </View>
             
-            {/* The Game Component */}
             <LudoCoreUI 
-                level={2} // AI Level
+                level={2} 
                 player={{ name: "You", isAI: false }}
                 opponent={{ name: "CPU", isAI: true }}
             />
