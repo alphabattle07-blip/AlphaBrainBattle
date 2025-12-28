@@ -64,7 +64,7 @@ export const LudoBoardData = {
         { "x": 0.3822, "y": 0.534 }, { "x": 0.3245, "y": 0.534 }, { "x": 0.2666, "y": 0.534 }, { "x": 0.2086, "y": 0.534 }, { "x": 0.1491, "y": 0.534 }, { "x": 0.0873, "y": 0.534 },
 
         // 51: Left Turn (The Corner Tile)
-        { "x": 0.067, "y": 0.475 },
+        { "x": 0.0873, "y": 0.475 },
     ] as NormalizedPoint[],
 
     victoryPaths: {

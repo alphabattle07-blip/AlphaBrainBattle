@@ -1,15 +1,9 @@
 // LudoGameLogic.ts
-
 export type PlayerColor = 'red' | 'yellow' | 'green' | 'blue';
 
 export interface LudoSeed {
-    id: string;
-    // NEW MEANING: 
-    // -1 = House
-    // 0 to 50 = On Board (Local path)
-    // 51 to 57 = Victory Lane
-    // 999 = Finished
-    position: number;
+    id: string; 
+    position: number; // -1 = House, 0-51 = Board, 999 = Finished, >=52 = Victory Lane
 }
 
 export interface LudoPlayer {
@@ -21,102 +15,156 @@ export interface LudoPlayer {
 export interface LudoGameState {
     players: LudoPlayer[];
     currentPlayerIndex: number;
-    dice: number[];
-    diceUsed: boolean[];
+    dice: number[]; 
+    diceUsed: boolean[]; 
     waitingForRoll: boolean;
     winner: string | null;
-    log: string[];
+    log: string[]; 
 }
 
+const BOARD_SIZE = 52;
+const VICTORY_START_INDEX = 52; // Indices 52-57 represent the victory lane
 const FINISH_POS = 999;
 const HOUSE_POS = -1;
-const PATH_LENGTH = 57; // 0 to 50 (Board) + 51 to 57 (Victory)
 
-// Used ONLY for collision detection
-// Reverting to original offsets: Red=0
-const GLOBAL_OFFSETS: Record<PlayerColor, number> = {
-    red: 0, green: 13, yellow: 26, blue: 39
+// Starting indices on the main path (0-51)
+const START_OFFSETS: Record<PlayerColor, number> = {
+    red: 0,
+    green: 13,
+    yellow: 26,
+    blue: 39,
+};
+
+// FIX: The Turn-Off point is the tile immediately preceding the Start.
+// Red starts at 0, so it walks 0->51. Turn off is 51.
+const TURN_OFF_POINTS: Record<PlayerColor, number> = {
+    red: 51,     // 0 - 1 = 51 (wrapped)
+    green: 12,   // 13 - 1 = 12
+    yellow: 25,  // 26 - 1 = 25
+    blue: 38     // 39 - 1 = 38
+};
+
+const normalizePos = (pos: number) => {
+    return pos % BOARD_SIZE;
 };
 
 export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColor = 'yellow'): LudoGameState => {
     return {
         players: [
-            { id: 'p1', color: p1Color, seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p1Color}-${i}`, position: HOUSE_POS })) },
-            { id: 'p2', color: p2Color, seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p2Color}-${i}`, position: HOUSE_POS })) },
+            {
+                id: 'p1',
+                color: p1Color,
+                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p1Color}-${i}`, position: HOUSE_POS })),
+            },
+            {
+                id: 'p2',
+                color: p2Color,
+                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p2Color}-${i}`, position: HOUSE_POS })),
+            },
         ],
-        currentPlayerIndex: 0, dice: [], diceUsed: [], waitingForRoll: true, winner: null, log: ['Game Started']
+        currentPlayerIndex: 0,
+        dice: [],
+        diceUsed: [],
+        waitingForRoll: true,
+        winner: null,
+        log: ['Game Started'],
     };
 };
 
 export const rollDice = (state: LudoGameState): LudoGameState => {
-    if (!state.waitingForRoll) return state;
-    // TEST WITH 1s IF NEEDED
-    const d1 = 6;
-    const d2 = 20;
-    return { ...state, dice: [d1, d2], diceUsed: [false, false], waitingForRoll: false, log: [...state.log, `Rolled [${d1}, ${d2}]`] };
+    if (!state.waitingForRoll) return state; 
+
+    const d1 = 1;
+    const d2 = 0;
+
+    return {
+        ...state,
+        dice: [d1, d2],
+        diceUsed: [false, false],
+        waitingForRoll: false,
+        log: [...state.log, `Player ${state.players[state.currentPlayerIndex].color} rolled [${d1}, ${d2}]`],
+    };
 };
 
 export interface MoveAction {
-    seedIndex: number; diceIndices: number[]; targetPos: number; isCapture: boolean;
+    seedIndex: number;
+    diceIndices: number[]; 
+    targetPos: number; 
+    isCapture: boolean;
 }
-
-// Helper: Convert Local Path Index to Global Board Index (0-51) for collisions
-const toGlobal = (localPos: number, color: PlayerColor): number => {
-    if (localPos < 0 || localPos > 50) return -99; // Not on main board
-    return (localPos + GLOBAL_OFFSETS[color]) % 52;
-};
 
 export const getValidMoves = (state: LudoGameState): MoveAction[] => {
     if (state.waitingForRoll || state.winner) return [];
 
     const player = state.players[state.currentPlayerIndex];
     const moves: MoveAction[] = [];
+    const startOffset = START_OFFSETS[player.color];
 
-    // Collision Check Helper
-    const opponent = state.players[(state.currentPlayerIndex + 1) % 2];
+    // Helper: Calculate Target
+    const calcTarget = (currentPos: number, steps: number): number | null => {
+        // 1. Exit House
+        if (currentPos === HOUSE_POS) {
+            return steps === 6 ? startOffset : null;
+        }
+        
+        // 2. Already Finished
+        if (currentPos === FINISH_POS) return null;
 
-    // Check if we hit an opponent
-    const checkCapture = (localTarget: number) => {
-        if (localTarget > 50) return false; // Can't capture in victory lane
-        const globalTarget = toGlobal(localTarget, player.color);
-        return opponent.seeds.some(s => toGlobal(s.position, opponent.color) === globalTarget);
+        // 3. Already in Victory Lane (Indices 52 - 57)
+        if (currentPos >= VICTORY_START_INDEX) {
+            const currentStepInVictory = currentPos - VICTORY_START_INDEX;
+            const targetStep = currentStepInVictory + steps;
+            
+            if (targetStep === 6) return FINISH_POS; // Hit the center (Goal)
+            if (targetStep < 6) return VICTORY_START_INDEX + targetStep; // Move forward
+            return null; // Overshot
+        }
+
+        // 4. On Main Board - Calculate Relative Distance
+        // Relative Distance: 0 = Start Tile, 51 = Last Tile before home.
+        // Total Board Size = 52.
+        
+        let distanceTraveled = (currentPos - startOffset + BOARD_SIZE) % BOARD_SIZE;
+        const potentialDistance = distanceTraveled + steps;
+
+        // FIX: If potential distance > 51, we are entering Victory Lane.
+        // (Previously checked > 50, which caused early entry)
+        if (potentialDistance > 51) {
+            const stepsIntoVictory = potentialDistance - 52; // Index 0 of victory is step 52
+            
+            if (stepsIntoVictory === 6) return FINISH_POS;
+            if (stepsIntoVictory < 6) return VICTORY_START_INDEX + stepsIntoVictory;
+            return null; // Overshot
+        }
+
+        // 5. Standard Move on Board
+        return (currentPos + steps) % BOARD_SIZE;
     };
 
-    // Check if we hit ourselves (Block)
-    const isBlocked = (localTarget: number) => {
-        if (localTarget === FINISH_POS) return false;
-        // Strict blocking: Can't land on same tile
-        return player.seeds.some(s => s.position === localTarget);
+    const opponent = state.players[(state.currentPlayerIndex + 1) % 2];
+
+    const checkCapture = (pos: number) => {
+        if (pos >= VICTORY_START_INDEX) return false;
+        return opponent.seeds.some(s => s.position === pos);
+    };
+
+    const isBlocked = (pos: number) => {
+        // Simple blocking rule: None for now
+        return false; 
     };
 
     state.dice.forEach((die, dIdx) => {
-        if (state.diceUsed[dIdx] || die === 0) return;
+        if (state.diceUsed[dIdx]) return;
 
         player.seeds.forEach((seed, sIdx) => {
-            let target = -1;
-
-            // 1. Exit House
-            if (seed.position === HOUSE_POS) {
-                if (die === 6) target = 0; // Move to Start (Local Index 0)
-            }
-            // 2. Already Finished
-            else if (seed.position === FINISH_POS) {
-                return;
-            }
-            // 3. Move on Board/Victory
-            else {
-                const potential = seed.position + die;
-                if (potential === PATH_LENGTH) target = FINISH_POS; // Hit Home
-                else if (potential < PATH_LENGTH) target = potential; // Move normally
-                // If potential > PATH_LENGTH, we bounce/stay put (logic: do nothing)
-            }
-
-            if (target !== -1 && !isBlocked(target)) {
-                moves.push({
-                    seedIndex: sIdx,
-                    diceIndices: [dIdx],
-                    targetPos: target,
-                    isCapture: checkCapture(target)
+            const target = calcTarget(seed.position, die);
+            
+            if (target !== null && !isBlocked(target)) {
+                moves.push({ 
+                    seedIndex: sIdx, 
+                    diceIndices: [dIdx], 
+                    targetPos: target, 
+                    isCapture: checkCapture(target) 
                 });
             }
         });
@@ -127,44 +175,66 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
 
 export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState => {
     const player = state.players[state.currentPlayerIndex];
+    
+    // 1. Mark Dice Used
     const newDiceUsed = [...state.diceUsed];
     move.diceIndices.forEach(idx => newDiceUsed[idx] = true);
+
+    // 2. Clone State
     const newPlayers = JSON.parse(JSON.stringify(state.players));
     const activePlayer = newPlayers[state.currentPlayerIndex];
     const targetSeed = activePlayer.seeds[move.seedIndex];
 
-    // Handle Capture
+    // 3. Handle Capture
     if (move.isCapture) {
         const oppPlayer = newPlayers[(state.currentPlayerIndex + 1) % 2];
-        const globalHit = toGlobal(move.targetPos, activePlayer.color);
-        // Find opponent seed at this global location
-        const victimSeed = oppPlayer.seeds.find((s: LudoSeed) => toGlobal(s.position, oppPlayer.color) === globalHit);
-        if (victimSeed) victimSeed.position = HOUSE_POS;
+        const victimSeed = oppPlayer.seeds.find((s: LudoSeed) => s.position === move.targetPos);
+        if (victimSeed) {
+            victimSeed.position = HOUSE_POS;
+        }
     }
 
+    // 4. Update Position
     targetSeed.position = move.targetPos;
 
     // Check Win
-    const checkWin = activePlayer.seeds.every((s: LudoSeed) => s.position === FINISH_POS);
     let winner = state.winner;
-    if (checkWin) winner = activePlayer.id;
+    if (activePlayer.seeds.every((s: LudoSeed) => s.position === FINISH_POS)) {
+        winner = activePlayer.color;
+    }
 
+    // 5. Turn Logic
     let nextTurn = state.currentPlayerIndex;
     let waiting = state.waitingForRoll;
     let resetDice = newDiceUsed;
-
-    // Auto Pass Turn logic
+    
     if (resetDice.every(u => u)) {
-        if (state.dice.includes(6) && !state.dice.every(d => d === 6)) {
-            nextTurn = (state.currentPlayerIndex + 1) % 2; waiting = true; resetDice = [false, false];
-        } else {
-            nextTurn = (state.currentPlayerIndex + 1) % 2; waiting = true; resetDice = [false, false];
-        }
-    } else { waiting = false; }
+        // Simplified Pass Turn Logic
+        nextTurn = (state.currentPlayerIndex + 1) % 2;
+        waiting = true;
+        resetDice = [false, false];
+    } else {
+        waiting = false; 
+    }
 
-    return { ...state, players: newPlayers, currentPlayerIndex: nextTurn, diceUsed: resetDice, waitingForRoll: waiting, winner, log: [...state.log, `Moved to ${move.targetPos}`] };
+    return {
+        ...state,
+        players: newPlayers,
+        currentPlayerIndex: nextTurn,
+        diceUsed: resetDice,
+        waitingForRoll: waiting,
+        winner: winner,
+        log: [...state.log, `Moved seed ${move.seedIndex} to ${move.targetPos}`],
+    };
 };
 
 export const passTurn = (state: LudoGameState): LudoGameState => {
-    return { ...state, currentPlayerIndex: (state.currentPlayerIndex + 1) % 2, waitingForRoll: true, diceUsed: [false, false], dice: [], log: [...state.log, `Turn passed`] };
+    return {
+        ...state,
+        currentPlayerIndex: (state.currentPlayerIndex + 1) % 2,
+        waitingForRoll: true,
+        diceUsed: [false, false],
+        dice: [], 
+        log: [...state.log, `Turn passed`],
+    };
 };
