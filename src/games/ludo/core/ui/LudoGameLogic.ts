@@ -1,8 +1,8 @@
 export type PlayerColor = 'red' | 'yellow' | 'green' | 'blue';
 
 export interface LudoSeed {
-    id: string; 
-    position: number; 
+    id: string;
+    position: number;
     // -1 = House
     // 0 - 57 = Active Path (Unique to the player color)
     // 58 = Finished (Goal)
@@ -17,11 +17,11 @@ export interface LudoPlayer {
 export interface LudoGameState {
     players: LudoPlayer[];
     currentPlayerIndex: number;
-    dice: number[]; 
-    diceUsed: boolean[]; 
+    dice: number[];
+    diceUsed: boolean[];
     waitingForRoll: boolean;
     winner: string | null;
-    log: string[]; 
+    log: string[];
 }
 
 const HOUSE_POS = -1;
@@ -51,11 +51,11 @@ export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColo
 };
 
 export const rollDice = (state: LudoGameState): LudoGameState => {
-    if (!state.waitingForRoll) return state; 
-    
+    if (!state.waitingForRoll) return state;
+
     // RANDOM DICE (Required for game to work)
-    const d1 = 5;
-    const d2 =1;
+    const d1 = 6;
+    const d2 = 2;
 
     return {
         ...state,
@@ -68,8 +68,8 @@ export const rollDice = (state: LudoGameState): LudoGameState => {
 
 export interface MoveAction {
     seedIndex: number;
-    diceIndices: number[]; 
-    targetPos: number; 
+    diceIndices: number[];
+    targetPos: number;
     isCapture: boolean;
 }
 
@@ -78,12 +78,12 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
 
     const player = state.players[state.currentPlayerIndex];
     const moves: MoveAction[] = [];
-    
+
     state.dice.forEach((die, dIdx) => {
         if (state.diceUsed[dIdx]) return;
 
         player.seeds.forEach((seed, sIdx) => {
-            
+
             // 1. Move out of House (Needs a 6)
             if (seed.position === HOUSE_POS) {
                 if (die === 6) {
@@ -116,7 +116,47 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
     const activePlayer = newPlayers[state.currentPlayerIndex];
     const targetSeed = activePlayer.seeds[move.seedIndex];
 
+    // Store old position for logging
+    const oldPosition = targetSeed.position;
+
+    // Set the new position for the moving seed
     targetSeed.position = move.targetPos;
+
+    // --- CAPTURE LOGIC ---
+    // Only check for captures on the main track (positions 0-51), not in victory lane (52-57) or finish (58)
+    if (move.targetPos >= 0 && move.targetPos <= 51) {
+        const opponentIndex = (state.currentPlayerIndex + 1) % 2;
+        const opponent = newPlayers[opponentIndex];
+
+        // Get the physical coordinates of the capturing seed's target position
+        const { LudoBoardData } = require('./LudoCoordinates');
+        const activePlayerPath = LudoBoardData.getPathForColor(activePlayer.color);
+        const targetCoord = activePlayerPath[move.targetPos];
+
+        if (targetCoord) {
+            // Check each opponent seed
+            opponent.seeds.forEach((oppSeed: LudoSeed, oppSeedIdx: number) => {
+                // Skip seeds in house, finished, or in victory lane
+                if (oppSeed.position < 0 || oppSeed.position >= 52) return;
+
+                // Get opponent seed's physical coordinates
+                const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                const oppCoord = opponentPath[oppSeed.position];
+
+                if (oppCoord) {
+                    // Compare physical coordinates (with small tolerance for floating point)
+                    const tolerance = 0.01;
+                    const sameX = Math.abs(targetCoord.x - oppCoord.x) < tolerance;
+                    const sameY = Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+
+                    if (sameX && sameY) {
+                        console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${oppSeedIdx} at position ${oppSeed.position} (coords: ${oppCoord.x}, ${oppCoord.y})`);
+                        oppSeed.position = HOUSE_POS; // Send opponent seed back to house
+                    }
+                }
+            });
+        }
+    }
 
     // Check Win
     let winner = state.winner;
@@ -128,27 +168,27 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
     let nextTurn = state.currentPlayerIndex;
     let waiting = state.waitingForRoll;
     let resetDice = newDiceUsed;
-    
+
     // If all dice are used:
     if (resetDice.every(u => u)) {
-        
+
         // --- NEW RULE: ONLY 6 AND 6 GIVES ANOTHER TURN ---
         const rolledDoubleSix = state.dice[0] === 6 && state.dice[1] === 6;
 
         if (rolledDoubleSix && !winner) {
-             // BONUS TURN (Same Player)
-             waiting = true;
-             resetDice = [false, false];
-             // nextTurn remains current
+            // BONUS TURN (Same Player)
+            waiting = true;
+            resetDice = [false, false];
+            // nextTurn remains current
         } else {
-             // PASS TURN
-             nextTurn = (state.currentPlayerIndex + 1) % 2;
-             waiting = true;
-             resetDice = [false, false];
+            // PASS TURN
+            nextTurn = (state.currentPlayerIndex + 1) % 2;
+            waiting = true;
+            resetDice = [false, false];
         }
     } else {
         // STILL MOVING (One die remaining)
-        waiting = false; 
+        waiting = false;
     }
 
     return {
@@ -168,7 +208,7 @@ export const passTurn = (state: LudoGameState): LudoGameState => {
         currentPlayerIndex: (state.currentPlayerIndex + 1) % 2,
         waitingForRoll: true,
         diceUsed: [false, false],
-        dice: [], 
+        dice: [],
         log: [...state.log, `Turn passed`],
     };
 };

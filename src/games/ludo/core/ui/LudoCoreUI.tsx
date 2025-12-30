@@ -160,25 +160,43 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
         }
     }, [gameState, handleRollDice, level]);
 
-    const handleBoardPress = useCallback((x: number, y: number) => {
-        // TODO: LudoSkiaBoard returns x,y. We need to hit-test to find the seed.
-        // Since LudoSkiaBoard doesn't export hit-testing yet, we might need to 
-        // rely on visual selection logic or upgrade LudoSkiaBoard.
-        // For now, we will assume we can't click board to move yet without logic,
-        // OR we implement a simple "Pick Move" UI if multiple moves are available.
+    const handleBoardPress = useCallback((x: number, y: number, tappedSeed?: { playerId: string; seedIndex: number; position: number } | null) => {
+        // If a seed was tapped, log it and try to move that specific seed
+        if (tappedSeed) {
+            console.log("Seed pressed:", tappedSeed.playerId, "seed", tappedSeed.seedIndex, "at position", tappedSeed.position);
 
-        console.log("Board pressed at:", x, y);
-
-        // TEMPORARY: If we have valid moves, just pick the first one for testing interaction
-        // In a real implementation, we map (x,y) -> Seed Index.
-        if (!gameState.waitingForRoll) {
-            const moves = getValidMoves(gameState);
-            if (moves.length > 0) {
-                // AUTO-MOVE for now if clicked anywhere, just to demonstrate loop
-                // ideally we find WHICH seed was clicked.
-                const chosenMove = moves[0];
-                setGameState(prev => applyMove(prev, chosenMove));
+            // Only allow player 1 (human) to move their seeds
+            if (tappedSeed.playerId !== 'p1') {
+                console.log("Cannot move opponent's seed");
+                return;
             }
+
+            // Check if it's player 1's turn
+            if (gameState.currentPlayerIndex !== 0) {
+                console.log("Not player 1's turn, current player:", gameState.currentPlayerIndex);
+                return;
+            }
+
+            // Debug: Log game state
+            console.log("Game state - waitingForRoll:", gameState.waitingForRoll, "dice:", gameState.dice, "diceUsed:", gameState.diceUsed);
+
+            if (!gameState.waitingForRoll) {
+                const moves = getValidMoves(gameState);
+                console.log("Valid moves:", JSON.stringify(moves));
+
+                // Find a move for the tapped seed
+                const matchingMove = moves.find(move => move.seedIndex === tappedSeed.seedIndex);
+                if (matchingMove) {
+                    console.log("Applying move for seed", tappedSeed.seedIndex, "->", matchingMove);
+                    setGameState(prev => applyMove(prev, matchingMove));
+                } else {
+                    console.log("No valid move for seed", tappedSeed.seedIndex);
+                }
+            } else {
+                console.log("Waiting for roll, cannot move");
+            }
+        } else {
+            console.log("Board pressed at:", x, y, "(no seed hit)");
         }
 
     }, [gameState]);
