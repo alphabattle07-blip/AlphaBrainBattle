@@ -1,9 +1,27 @@
 // LudoCoreUI.tsx
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigation } from "@react-navigation/native";
-import { useGameTimer } from "../../../../hooks/useGameTimer"; // Restore import
-import { View, StyleSheet, Text, TouchableOpacity, Alert } from "react-native";
+import { useWindowDimensions, View, StyleSheet, Text, TouchableOpacity, Alert } from "react-native";
 import { LudoSkiaBoard } from "./LudoSkiaBoard";
+
+const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: "#222" },
+    boardContainer: { flex: 1, justifyContent: "center", alignItems: 'center' },
+
+    // Dice House Styles
+    diceHouse: {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        padding: 4,
+        borderRadius: 15,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        minWidth: 80,
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    diceRow: { flexDirection: 'row', gap: 5 },
+    rollPrompt: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 }
+});
 import {
     initializeGame,
     rollDice,
@@ -67,9 +85,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     const player = propPlayer ?? defaultPlayer;
     const opponent = propOpponent ?? defaultOpponent;
 
-    // Timer Hook
-    const { player1Time, player2Time, startTimer, pauseTimer, formatTime, setLastActivePlayer } =
-        useGameTimer(300);
+
     // --- Derived State for Board ---
     const boardPositions = useMemo(() => {
         // Map gameState to { [playerId]: [pos1, pos2, pos3, pos4] }
@@ -88,12 +104,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     // (Simplified for now: Just standard turns)
     useEffect(() => {
         if (gameState.winner) {
-            pauseTimer();
             Alert.alert("Game Over", `Winner: ${gameState.winner}`);
-        } else {
-            setLastActivePlayer((gameState.currentPlayerIndex + 1) as 1 | 2); // 1 or 2
-            if (gameState.currentPlayerIndex === 0) startTimer(); // Player 1
-            else pauseTimer(); // Player 2 (or second timer)
         }
     }, [gameState.currentPlayerIndex, gameState.winner]);
 
@@ -198,29 +209,34 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
         } else {
             console.log("Board pressed at:", x, y, "(no seed hit)");
         }
-
     }, [gameState]);
 
-    // --- Render ---
+    // --- Dice Positioning Configuration ---
+    // Normalized coordinates (0-1) relative to screen size
+    const DICE_POS_CONFIG = {
+        blue: { x: 0.38, y: 0.710 },   // P1 (User) - Bottom Right
+        green: { x: 0.62, y: 0.216 },  // P2 (AI) - Top Left
+        red: { x: 0.15, y: 0.85 },    // Placeholder
+        yellow: { x: 0.85, y: 0.15 }  // Placeholder
+    };
 
-    const isCurrentPlayerTurn = gameState.currentPlayerIndex === 0; // Assuming p1 is user
-    const currentTurnPlayer = gameState.players[gameState.currentPlayerIndex];
+    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+    const getDicePositionStyle = (playerColor: 'blue' | 'green') => {
+        const checkPos = DICE_POS_CONFIG[playerColor];
+        // Ensure we have a valid position, fallback to center if missing
+        const pos = checkPos || { x: 0.5, y: 0.5 };
+
+        return {
+            position: 'absolute' as const,
+            left: pos.x * windowWidth - 40, // Center the typically 80px wide house
+            top: pos.y * windowHeight - 40,
+        };
+    };
 
     return (
         <View style={styles.container}>
-            {/* Top Area (Player 2 / AI) */}
-            <View style={styles.playerArea}>
-                {gameState.currentPlayerIndex === 1 && !gameState.winner && (
-                    <DiceHouse
-                        dice={gameState.dice}
-                        diceUsed={gameState.diceUsed}
-                        waitingForRoll={gameState.waitingForRoll}
-                        onPress={handleRollDice}
-                    />
-                )}
-            </View>
-
-            {/* Game Board */}
+            {/* Game Board - Centered */}
             <View style={styles.boardContainer}>
                 <LudoSkiaBoard
                     onBoardPress={handleBoardPress}
@@ -228,39 +244,33 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 />
             </View>
 
-            {/* Bottom Area (Player 1 / User) */}
-            <View style={styles.playerArea}>
-                {gameState.currentPlayerIndex === 0 && !gameState.winner && (
+            {/* Dice Houses - Absolutely Positioned */}
+
+            {/* Player 2 (Green) */}
+            {gameState.currentPlayerIndex === 1 && !gameState.winner && (
+                <View style={getDicePositionStyle('green')}>
                     <DiceHouse
                         dice={gameState.dice}
                         diceUsed={gameState.diceUsed}
                         waitingForRoll={gameState.waitingForRoll}
                         onPress={handleRollDice}
                     />
-                )}
-            </View>
+                </View>
+            )}
+
+            {/* Player 1 (Blue) */}
+            {gameState.currentPlayerIndex === 0 && !gameState.winner && (
+                <View style={getDicePositionStyle('blue')}>
+                    <DiceHouse
+                        dice={gameState.dice}
+                        diceUsed={gameState.diceUsed}
+                        waitingForRoll={gameState.waitingForRoll}
+                        onPress={handleRollDice}
+                    />
+                </View>
+            )}
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: { flex: 1, justifyContent: "space-between", padding: 10, backgroundColor: "#222" },
-    playerArea: { height: 80, justifyContent: 'center', alignItems: 'center', width: '100%' },
-    boardContainer: { flex: 1, justifyContent: "center", alignItems: 'center' },
-
-    // Dice House Styles
-    diceHouse: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        padding: 4,
-        borderRadius: 15,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
-        minWidth: 80,
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    diceRow: { flexDirection: 'row', gap: 5 },
-    rollPrompt: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 }
-});
 
 export default LudoCoreUI;

@@ -15,9 +15,9 @@ const yellowImageSource = require('../../../../assets/images/yellow.png');
 // Adjusted to be outside the board but flush against the edges
 const COLOR_IMAGE_POSITIONS = {
     red: { x: 0.1090, y: 0.009 },    // Left side
-    green: { x: 0.670, y: 0.009 },  // Top side
+    green: { x: 0.740, y: 0.00000001},  // Top side
     yellow: { x: 0.670, y: 0.850 }, // Right side
-    blue: { x: 0.1090, y: 0.850 },   // Bottom side
+    blue: { x: 0.0390, y: 0.8650 },   // Bottom side
 };
 
 // Configuration for sizes (relative to canvas width)
