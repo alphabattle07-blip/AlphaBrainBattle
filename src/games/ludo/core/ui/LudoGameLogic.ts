@@ -54,8 +54,8 @@ export const rollDice = (state: LudoGameState): LudoGameState => {
     if (!state.waitingForRoll) return state;
 
     // RANDOM DICE (Required for game to work)
-    const d1 = 0;
-    const d2 =57;
+    const d1 = 5;
+    const d2 =1;
 
     return {
         ...state,

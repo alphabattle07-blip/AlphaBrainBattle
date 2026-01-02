@@ -17,12 +17,44 @@ const COLOR_IMAGE_POSITIONS = {
     red: { x: 0.1090, y: 0.009 },    // Left side
     green: { x: 0.740, y: 0.00000001 },  // Top side
     yellow: { x: 0.670, y: 0.850 }, // Right side
-    blue: { x: 0.0390, y: 0.8650 },   // Bottom side
+    blue: { x: 0.0190, y: 0.8550 },   // Bottom side
+};
+
+// Distinct positions for 4 seeds in each home base
+// Arranged in a small 2x2 grid around the image center
+const HOME_OFFSET = 0.025; // Spacing offset
+const HOME_SEED_POSITIONS = {
+    red: [
+        { x: 0.1090 - HOME_OFFSET, y: 0.009 - HOME_OFFSET },
+        { x: 0.1090 + HOME_OFFSET, y: 0.009 - HOME_OFFSET },
+        { x: 0.1090 - HOME_OFFSET, y: 0.009 + HOME_OFFSET },
+        { x: 0.1090 + HOME_OFFSET, y: 0.009 + HOME_OFFSET },
+    ],
+    green: [
+        { x: 0.740 - HOME_OFFSET, y: 0.00000001 - HOME_OFFSET },
+        { x: 0.740 + HOME_OFFSET, y: 0.00000001 - HOME_OFFSET },
+        { x: 0.740 - HOME_OFFSET, y: 0.00000001 + HOME_OFFSET },
+        { x: 0.740 + HOME_OFFSET, y: 0.00000001 + HOME_OFFSET },
+    ],
+    yellow: [
+        { x: 0.670 - HOME_OFFSET, y: 0.850 - HOME_OFFSET },
+        { x: 0.670 + HOME_OFFSET, y: 0.850 - HOME_OFFSET },
+        { x: 0.670 - HOME_OFFSET, y: 0.850 + HOME_OFFSET },
+        { x: 0.670 + HOME_OFFSET, y: 0.850 + HOME_OFFSET },
+    ],
+    blue: [
+        // Tweaked Blue positions to be slightly better centered if needed
+        // Keeping symmetrical for now, but editable
+        { x: 0.2690 - HOME_OFFSET, y: 0.9670 - HOME_OFFSET },
+        { x: 0.1700 + HOME_OFFSET, y: 0.9670 - HOME_OFFSET },
+        { x: 0.1700 - HOME_OFFSET, y: 0.9170 + HOME_OFFSET },
+        { x: 0.0680 + HOME_OFFSET, y: 0.9170 + HOME_OFFSET },
+    ],
 };
 
 // Configuration for sizes (relative to canvas width)
 const BOARD_SCALE = 0.90;      // REDUCED from 0.76 to make room for big images
-const SIDE_IMAGE_SCALE = 0.11; // Size of the side images relative to canvas (approx 11%)
+const SIDE_IMAGE_SCALE = 0.127; // Size of the side images relative to canvas (approx 11%)
 
 const BOARD_IMAGE_WIDTH = 1024;
 const BOARD_IMAGE_HEIGHT = 1024;
@@ -48,8 +80,9 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
             const yardArr = LudoBoardData.yards[colorName];
             norm = yardArr[seedSubIndex % 4];
         } else if (stepIndex >= 58) {
-            // Use COLOR_IMAGE_POSITIONS for home
-            const pos = COLOR_IMAGE_POSITIONS[colorName];
+            // Use HOME_SEED_POSITIONS for home with sub-index
+            const posArray = HOME_SEED_POSITIONS[colorName];
+            const pos = posArray[seedSubIndex % 4];
             return {
                 x: pos.x * canvasWidth,
                 y: pos.y * canvasHeight
@@ -123,8 +156,9 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
         const yardArr = LudoBoardData.yards[colorName];
         norm = yardArr[seedSubIndex % 4];
     } else if (seedPos >= 58) {
-        // Use COLOR_IMAGE_POSITIONS for home
-        const pos = COLOR_IMAGE_POSITIONS[colorName];
+        // Use HOME_SEED_POSITIONS for home with sub-index
+        const posArray = HOME_SEED_POSITIONS[colorName];
+        const pos = posArray[seedSubIndex % 4];
         return {
             x: pos.x * canvasWidth,
             y: pos.y * canvasHeight
