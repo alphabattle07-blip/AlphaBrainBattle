@@ -14,14 +14,14 @@ const yellowImageSource = require('../../../../assets/images/yellow.png');
 // Normalized positions for color images (center of each yard)
 // Adjusted to be outside the board but flush against the edges
 const COLOR_IMAGE_POSITIONS = {
-    red: { x: 0.160, y: 0.1 },    // Left side
-    green: { x: 0.85, y: 0.1 },  // Top side
-    yellow: { x: 0.850, y: 0.9 }, // Right side
-    blue: { x: 0.160, y: 0.900 },   // Bottom side
+    red: { x: 0.1090, y: 0.009 },    // Left side
+    green: { x: 0.670, y: 0.009 },  // Top side
+    yellow: { x: 0.670, y: 0.850 }, // Right side
+    blue: { x: 0.1090, y: 0.850 },   // Bottom side
 };
 
 // Configuration for sizes (relative to canvas width)
-const BOARD_SCALE = 0.76;      // Size of the board relative to canvas (0.76 = 76%)
+const BOARD_SCALE = 0.90;      // REDUCED from 0.76 to make room for big images
 const SIDE_IMAGE_SCALE = 0.11; // Size of the side images relative to canvas (approx 11%)
 
 const BOARD_IMAGE_WIDTH = 1024;
@@ -31,18 +31,21 @@ const TILE_ANIMATION_DURATION = 200;
 // Cache paths
 const RED_PATH = LudoBoardData.getPathForColor('red');
 const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
+const BLUE_PATH = LudoBoardData.getPathForColor('blue');
+const GREEN_PATH = LudoBoardData.getPathForColor('green');
 
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number }) => {
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius, colorName }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green' }) => {
     const getTargetPixels = (stepIndex: number) => {
         let norm = { x: 0.5, y: 0.5 };
 
-        // Select path based on color/player
-        const isYellow = color === '#FFCC00' || color === 'yellow' || playerId === 'p2';
-        const path = isYellow ? YELLOW_PATH : RED_PATH;
+        // Select path based on colorName
+        let path = RED_PATH;
+        if (colorName === 'yellow') path = YELLOW_PATH;
+        else if (colorName === 'blue') path = BLUE_PATH;
+        else if (colorName === 'green') path = GREEN_PATH;
 
         if (stepIndex === -1) {
-            const yardKey = isYellow ? 'yellow' : 'red';
-            const yardArr = LudoBoardData.yards[yardKey];
+            const yardArr = LudoBoardData.yards[colorName];
             norm = yardArr[seedSubIndex % 4];
         } else if (stepIndex >= 58) {
             norm = LudoBoardData.homeBase;
@@ -103,14 +106,16 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
 };
 
 // Helper to get pixel position for a seed
-const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number) => {
-    const isYellow = playerId === 'p2';
-    const path = isYellow ? YELLOW_PATH : RED_PATH;
+const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number, colorName: 'red' | 'yellow' | 'blue' | 'green') => {
+    let path = RED_PATH;
+    if (colorName === 'yellow') path = YELLOW_PATH;
+    else if (colorName === 'blue') path = BLUE_PATH;
+    else if (colorName === 'green') path = GREEN_PATH;
+
     let norm = { x: 0.5, y: 0.5 };
 
     if (seedPos === -1) {
-        const yardKey = isYellow ? 'yellow' : 'red';
-        const yardArr = LudoBoardData.yards[yardKey];
+        const yardArr = LudoBoardData.yards[colorName];
         norm = yardArr[seedSubIndex % 4];
     } else if (seedPos >= 58) {
         norm = LudoBoardData.homeBase;
@@ -132,14 +137,15 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
 
     const { width } = useWindowDimensions();
     const canvasWidth = width * 0.95;
-    const canvasHeight = canvasWidth;
+    const canvasHeight = canvasWidth * 1.2; // Increase height to give more room top/bottom
 
     // Scale board to make room for outer images
     // Using BOARD_SCALE constant
     const boardSize = canvasWidth * BOARD_SCALE;
-    const margin = (canvasWidth - boardSize) / 2;
-    const boardX = margin;
-    const boardY = margin;
+    const marginX = (canvasWidth - boardSize) / 2;
+    const marginY = (canvasHeight - boardSize) / 2;
+    const boardX = marginX;
+    const boardY = marginY;
 
     const seedRadius = (boardSize / 15) * 0.35;
 
@@ -151,9 +157,20 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
         const list: any[] = [];
         Object.entries(positions).forEach(([playerId, seedPositions]) => {
             const isP1 = playerId === 'p1';
-            const color = isP1 ? '#FF3B30' : '#FFCC00';
-            seedPositions.forEach((pos, index) => {
-                list.push({ id: `${playerId}-${index}`, playerId, seedSubIndex: index, currentPos: pos, color });
+            // P1 = Blue (User), P2 = Green (Computer)
+            const colorName = isP1 ? 'blue' : 'green';
+            const color = isP1 ? '#007AFF' : '#34C759';
+
+            // Cast seedPositions to array
+            (seedPositions as number[]).forEach((pos, index) => {
+                list.push({
+                    id: `${playerId}-${index}`,
+                    playerId,
+                    seedSubIndex: index,
+                    currentPos: pos,
+                    color,
+                    colorName
+                });
             });
         });
         return list;
@@ -168,7 +185,8 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                 seed.currentPos,
                 seed.playerId,
                 seed.seedSubIndex,
-                boardX, boardY, boardSize
+                boardX, boardY, boardSize,
+                seed.colorName
             );
 
             const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
@@ -207,17 +225,17 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                   This allows manual tweaking of positions.
                 */}
 
-                {/* RED */}
-                {redImage && (
+                {/* RED - HIDDEN */}
+                {/* {redImage && (
                     <SkiaImage
                         image={redImage}
                         x={COLOR_IMAGE_POSITIONS.red.x * canvasWidth - sideImageSize / 2}
                         y={COLOR_IMAGE_POSITIONS.red.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize}
-                        height={sideImageSize}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
                         fit="contain"
                     />
-                )}
+                )} */}
 
                 {/* GREEN */}
                 {greenImage && (
@@ -225,23 +243,23 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                         image={greenImage}
                         x={COLOR_IMAGE_POSITIONS.green.x * canvasWidth - sideImageSize / 2}
                         y={COLOR_IMAGE_POSITIONS.green.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize}
-                        height={sideImageSize}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
                         fit="contain"
                     />
                 )}
 
-                {/* YELLOW */}
-                {yellowImage && (
+                {/* YELLOW - HIDDEN */}
+                {/* {yellowImage && (
                     <SkiaImage
                         image={yellowImage}
                         x={COLOR_IMAGE_POSITIONS.yellow.x * canvasWidth - sideImageSize / 2}
                         y={COLOR_IMAGE_POSITIONS.yellow.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize}
-                        height={sideImageSize}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
                         fit="contain"
                     />
-                )}
+                )} */}
 
                 {/* BLUE */}
                 {blueImage && (
@@ -249,8 +267,8 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                         image={blueImage}
                         x={COLOR_IMAGE_POSITIONS.blue.x * canvasWidth - sideImageSize / 2}
                         y={COLOR_IMAGE_POSITIONS.blue.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize}
-                        height={sideImageSize}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
                         fit="contain"
                     />
                 )}
@@ -263,6 +281,7 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                         boardY={boardY}
                         boardSize={boardSize}
                         radius={seedRadius}
+                        colorName={s.colorName}
                     />
                 ))}
             </Canvas>

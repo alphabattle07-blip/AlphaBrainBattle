@@ -1,140 +1,561 @@
-export type NormalizedPoint = { x: number; y: number };
+import React, { useMemo, useEffect, useRef } from 'react';
+import { useWindowDimensions } from 'react-native';
+import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } from '@shopify/react-native-skia';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSharedValue, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
+import { LudoBoardData } from './LudoCoordinates';
 
-// Helper for Victory Lane Rotation
-const rotate = (p: NormalizedPoint, angle: number): NormalizedPoint => {
-    const rad = (angle * Math.PI) / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-    const dx = p.x - 0.5;
-    const dy = p.y - 0.5;
+const boardImageSource = require('../../../../assets/images/ludoBoard.png');
+const blueImageSource = require('../../../../assets/images/blue.png');
+const greenImageSource = require('../../../../assets/images/green.png');
+const redImageSource = require('../../../../assets/images/red.png');
+const yellowImageSource = require('../../../../assets/images/yellow.png');
+
+// Normalized positions for color images (center of each yard)
+// Adjusted to be outside the board but flush against the edges
+const COLOR_IMAGE_POSITIONS = {
+    red: { x: 0.1090, y: 0.009 },    // Left side
+    green: { x: 0.670, y: 0.009},  // Top side
+    yellow: { x: 0.670, y: 0.850 }, // Right side
+    blue: { x: 0.1090, y: 0.850 },   // Bottom side
+};
+
+// Normalized positions for the Dice House (center) 
+// You can adjust these x/y values (0-1) to move the dice location for each player turn.
+export const DICE_POSITIONS = {
+    red: { x: 0.48, y: 0.09},     // P1 Turn -> Show near Yellow (Opposite)
+    yellow: { x: 0.52, y: 0.1 },  // P2 Turn -> Show near Red (Opposite)
+    green: { x: 0.12, y: 0.9 },   // Placeholder for Green
+    blue: { x: 0.88, y: 0.1 },    // Placeholder for Blue
+};
+
+// Configuration for sizes (relative to canvas width)
+const BOARD_SCALE = 0.76;      // Size of the board relative to canvas (0.76 = 76%)
+const SIDE_IMAGE_SCALE = 0.11; // Size of the side images relative to canvas (approx 11%)
+
+const BOARD_IMAGE_WIDTH = 1024;
+const BOARD_IMAGE_HEIGHT = 1024;
+const TILE_ANIMATION_DURATION = 200;
+
+// Cache paths
+const RED_PATH = LudoBoardData.getPathForColor('red');
+const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
+
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number }) => {
+    const getTargetPixels = (stepIndex: number) => {
+        let norm = { x: 0.5, y: 0.5 };
+
+        // Select path based on color/player
+        const isYellow = color === '#FFCC00' || color === 'yellow' || playerId === 'p2';
+        const path = isYellow ? YELLOW_PATH : RED_PATH;
+
+        if (stepIndex === -1) {
+            const yardKey = isYellow ? 'yellow' : 'red';
+            const yardArr = LudoBoardData.yards[yardKey];
+            norm = yardArr[seedSubIndex % 4];
+        } else if (stepIndex >= 58) {
+            norm = LudoBoardData.homeBase;
+        } else {
+            if (path[stepIndex]) norm = path[stepIndex];
+        }
+        return {
+            x: boardX + norm.x * boardSize,
+            y: boardY + norm.y * boardSize
+        };
+    };
+
+    const target = getTargetPixels(currentPos);
+    const cx = useSharedValue(target.x);
+    const cy = useSharedValue(target.y);
+    const prevPosRef = useRef(currentPos);
+
+    useEffect(() => {
+        const oldPos = prevPosRef.current;
+        const newPos = currentPos;
+        prevPosRef.current = newPos;
+
+        if (oldPos === newPos) {
+            cx.value = target.x;
+            cy.value = target.y;
+            return;
+        }
+
+        if (oldPos === -1 || newPos >= 58) {
+            cx.value = withTiming(target.x, { duration: 400 });
+            cy.value = withTiming(target.y, { duration: 400 });
+            return;
+        }
+
+        const steps = [];
+        const diff = newPos - oldPos;
+        if (diff > 0 && diff <= 6) {
+            for (let i = oldPos + 1; i <= newPos; i++) steps.push(i);
+        } else {
+            steps.push(newPos);
+        }
+
+        const xSequence = steps.map(i => withTiming(getTargetPixels(i).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
+        const ySequence = steps.map(i => withTiming(getTargetPixels(i).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
+        cx.value = withSequence(...xSequence);
+        cy.value = withSequence(...ySequence);
+
+    }, [currentPos, boardX, boardY, boardSize]);
+
+    return (
+        <Group>
+            <Circle cx={cx} cy={cy} r={radius} color={color}>
+                <Paint style="stroke" strokeWidth={1.5} color="white" />
+                <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
+            </Circle>
+        </Group>
+    );
+};
+
+// Helper to get pixel position for a seed
+const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number) => {
+    const isYellow = playerId === 'p2';
+    const path = isYellow ? YELLOW_PATH : RED_PATH;
+    let norm = { x: 0.5, y: 0.5 };
+
+    if (seedPos === -1) {
+        const yardKey = isYellow ? 'yellow' : 'red';
+        const yardArr = LudoBoardData.yards[yardKey];
+        norm = yardArr[seedSubIndex % 4];
+    } else if (seedPos >= 58) {
+        norm = LudoBoardData.homeBase;
+    } else {
+        if (path[seedPos]) norm = path[seedPos];
+    }
     return {
-        x: parseFloat((0.5 + (dx * cos - dy * sin)).toFixed(4)),
-        y: parseFloat((0.5 + (dx * sin + dy * cos)).toFixed(4))
+        x: boardX + norm.x * boardSize,
+        y: boardY + norm.y * boardSize
     };
 };
 
-// --- VICTORY LANES (Home Stretch) ---
-const VICTORY_RED = [
-    { "x": 0.1100, "y": 0.475 }, { "x": 0.1800, "y": 0.475 }, { "x": 0.2300, "y": 0.475 },
-    { "x": 0.2800, "y": 0.475 }, { "x": 0.3435, "y": 0.475 }, { "x": 0.3931, "y": 0.475 },
-    { "x": 0.4400, "y": 0.475 } 
-];
-const VICTORY_GREEN = VICTORY_RED.map(p => rotate(p, 90));
-const VICTORY_YELLOW = VICTORY_RED.map(p => rotate(p, 180));
-const VICTORY_BLUE = VICTORY_RED.map(p => rotate(p, 270));
+export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
+    const boardImage = useImage(boardImageSource);
+    const blueImage = useImage(blueImageSource);
+    const greenImage = useImage(greenImageSource);
+    const redImage = useImage(redImageSource);
+    const yellowImage = useImage(yellowImageSource);
 
-// =========================================================
-// 1. RED RAW BOARD (Fixed to exactly 52 items)
-// =========================================================
-const RED_RAW_BOARD = [
-    // Red Lane (0-4)
-    { "x": 0.1505, "y": 0.420 }, { "x": 0.2106, "y": 0.420 }, { "x": 0.2674, "y": 0.420 }, { "x": 0.3255, "y": 0.420 }, { "x": 0.3813, "y": 0.420 },
-    // Up towards Green (5-10)
-    { "x": 0.440, "y": 0.3616 }, { "x": 0.440, "y": 0.3082 }, { "x": 0.440, "y": 0.2518 }, { "x": 0.440, "y": 0.1956 }, { "x": 0.440, "y": 0.1412 }, { "x": 0.440, "y": 0.0854 },
-    // Top Turn (11-12)
-    { "x": 0.4991, "y": 0.0869 }, { "x": 0.5570, "y": 0.0853 },
-    // Down from Green (13-17) - 5 items
-    { "x": 0.5570, "y": 0.1389 }, { "x": 0.5570, "y": 0.1969 }, { "x": 0.5570, "y": 0.2521 }, { "x": 0.5570, "y": 0.3079 }, { "x": 0.5570, "y": 0.364 },
-    // Right towards Yellow (18-23)
-    { "x": 0.6149, "y": 0.421 }, { "x": 0.6707, "y": 0.421 }, { "x": 0.7299, "y": 0.421 }, { "x": 0.789, "y": 0.421 }, { "x": 0.848, "y": 0.421 }, { "x": 0.9099, "y": 0.421 },
-    // Right Turn (24-25)
-    { "x": 0.9099, "y": 0.4770 }, { "x": 0.9099, "y": 0.5348 },
-    // Left from Yellow (26-30)
-    { "x": 0.8484, "y": 0.535 }, { "x": 0.7898, "y": 0.535 }, { "x": 0.7301, "y": 0.535 }, { "x": 0.6707, "y": 0.535 }, { "x": 0.6149, "y": 0.535 },
-    // Down towards Blue (31-36)
-    { "x": 0.557, "y": 0.5905 }, { "x": 0.557, "y": 0.6452 }, { "x": 0.557, "y": 0.6999 }, { "x": 0.557, "y": 0.7546 }, { "x": 0.557, "y": 0.8063 }, { "x": 0.557, "y": 0.859 },
-    // Bottom Turn (37-38)
-    { "x": 0.557, "y": 0.9099 }, { "x": 0.4974, "y": 0.9130 },
-    // Up from Blue (39-44) - FIXED: Reduced from 7 to 6 items to align board count
-    { "x": 0.439, "y": 0.9130 }, { "x": 0.439, "y": 0.8583 }, { "x": 0.439, "y": 0.8063 }, { "x": 0.439, "y": 0.7546 }, { "x": 0.439, "y": 0.7001 }, { "x": 0.439, "y": 0.6449 }, 
-    // Left towards Red (45-50)
-    { "x": 0.3822, "y": 0.534 }, { "x": 0.3245, "y": 0.534 }, { "x": 0.2666, "y": 0.534 }, { "x": 0.2086, "y": 0.534 }, { "x": 0.1491, "y": 0.534 }, { "x": 0.0873, "y": 0.534 },
-    // Final Tile before Red Home (51)
-    { "x": 0.067, "y": 0.475 }
-];
+    const { width } = useWindowDimensions();
+    const canvasWidth = width * 0.95;
+    const canvasHeight = canvasWidth;
 
-// =========================================================
-// 2. YELLOW RAW BOARD (Aligned to 52 items)
-// =========================================================
-const YELLOW_RAW_BOARD = [
-    // --- PART 1: Starts at Yellow Start (Red Index 26) ---
-    { "x": 0.8484, "y": 0.535 }, { "x": 0.7898, "y": 0.535 }, { "x": 0.7301, "y": 0.535 }, { "x": 0.6707, "y": 0.535 }, { "x": 0.6149, "y": 0.535 }, 
-    { "x": 0.557, "y": 0.5905 }, { "x": 0.557, "y": 0.6452 }, { "x": 0.557, "y": 0.6999 }, { "x": 0.557, "y": 0.7546 }, { "x": 0.557, "y": 0.8063 }, { "x": 0.557, "y": 0.859 }, 
-    { "x": 0.557, "y": 0.9099 }, { "x": 0.4974, "y": 0.9130 }, 
-    // Corrected Up Blue Section (6 items)
-    { "x": 0.439, "y": 0.9130 }, { "x": 0.439, "y": 0.8583 }, { "x": 0.439, "y": 0.8063 }, { "x": 0.439, "y": 0.7546 }, { "x": 0.439, "y": 0.7001 }, { "x": 0.439, "y": 0.6449 }, 
-    { "x": 0.3822, "y": 0.534 }, { "x": 0.3245, "y": 0.534 }, { "x": 0.2666, "y": 0.534 }, { "x": 0.2086, "y": 0.534 }, { "x": 0.1491, "y": 0.534 }, { "x": 0.0873, "y": 0.534 }, 
-    { "x": 0.067, "y": 0.475 }, {"x": 0.067, "y": 0.420},
+    // Scale board to make room for outer images
+    // Using BOARD_SCALE constant
+    const boardSize = canvasWidth * BOARD_SCALE;
+    const margin = (canvasWidth - boardSize) / 2;
+    const boardX = margin;
+    const boardY = margin;
 
-    // --- PART 2: Wraps to Red Start ---
-    { "x": 0.1505, "y": 0.420 }, { "x": 0.2106, "y": 0.420 }, { "x": 0.2674, "y": 0.420 }, { "x": 0.3255, "y": 0.420 }, { "x": 0.3813, "y": 0.420 }, 
-    { "x": 0.440, "y": 0.3616 }, { "x": 0.440, "y": 0.3082 }, { "x": 0.440, "y": 0.2518 }, { "x": 0.440, "y": 0.1956 }, { "x": 0.440, "y": 0.1412 }, { "x": 0.440, "y": 0.0854 }, 
-    { "x": 0.4991, "y": 0.0869 }, { "x": 0.5570, "y": 0.0853 }, 
-    { "x": 0.5570, "y": 0.1389 }, { "x": 0.5570, "y": 0.1969 }, { "x": 0.5570, "y": 0.2521 }, { "x": 0.5570, "y": 0.3079 }, { "x": 0.5570, "y": 0.364 }, 
-    { "x": 0.6149, "y": 0.421 }, { "x": 0.6707, "y": 0.421 }, { "x": 0.7299, "y": 0.421 }, { "x": 0.789, "y": 0.421 }, { "x": 0.848, "y": 0.421 }, { "x": 0.9099, "y": 0.421 }, 
-   
-];
+    const seedRadius = (boardSize / 15) * 0.35;
 
-// =========================================================
-// 3. GREEN RAW BOARD (Aligned to 52 items)
-// =========================================================
-const GREEN_RAW_BOARD = [
-    { "x": 0.5570, "y": 0.1389 }, { "x": 0.5570, "y": 0.1969 }, { "x": 0.5570, "y": 0.2521 }, { "x": 0.5570, "y": 0.3079 }, { "x": 0.5570, "y": 0.364 },
-    { "x": 0.6149, "y": 0.421 }, { "x": 0.6707, "y": 0.421 }, { "x": 0.7299, "y": 0.421 }, { "x": 0.789, "y": 0.421 }, { "x": 0.848, "y": 0.421 }, { "x": 0.9099, "y": 0.421 },
-    { "x": 0.9099, "y": 0.4770 }, { "x": 0.9099, "y": 0.5348 },
-    { "x": 0.8484, "y": 0.535 }, { "x": 0.7898, "y": 0.535 }, { "x": 0.7301, "y": 0.535 }, { "x": 0.6707, "y": 0.535 }, { "x": 0.6149, "y": 0.535 },
-    { "x": 0.557, "y": 0.5905 }, { "x": 0.557, "y": 0.6452 }, { "x": 0.557, "y": 0.6999 }, { "x": 0.557, "y": 0.7546 }, { "x": 0.557, "y": 0.8063 }, { "x": 0.557, "y": 0.859 },
-    { "x": 0.557, "y": 0.9099 }, { "x": 0.4974, "y": 0.9130 },
-    // Corrected Up Blue Section (6 items)
-    { "x": 0.439, "y": 0.9130 }, { "x": 0.439, "y": 0.8583 }, { "x": 0.439, "y": 0.8063 }, { "x": 0.439, "y": 0.7546 }, { "x": 0.439, "y": 0.7001 }, { "x": 0.439, "y": 0.6449 },
-    { "x": 0.3822, "y": 0.534 }, { "x": 0.3245, "y": 0.534 }, { "x": 0.2666, "y": 0.534 }, { "x": 0.2086, "y": 0.534 }, { "x": 0.1491, "y": 0.534 }, { "x": 0.0873, "y": 0.534 },
-    { "x": 0.067, "y": 0.475 },
-    { "x": 0.1505, "y": 0.420 }, { "x": 0.2106, "y": 0.420 }, { "x": 0.2674, "y": 0.420 }, { "x": 0.3255, "y": 0.420 }, { "x": 0.3813, "y": 0.420 },
-    { "x": 0.440, "y": 0.3616 }, { "x": 0.440, "y": 0.3082 }, { "x": 0.440, "y": 0.2518 }, { "x": 0.440, "y": 0.1956 }, { "x": 0.440, "y": 0.1412 }, { "x": 0.440, "y": 0.0854 },
-    { "x": 0.4991, "y": 0.0869 }, { "x": 0.5570, "y": 0.0853 }
-];
+    // Size for colored images attached to the ends
+    // Using SIDE_IMAGE_SCALE constant
+    const sideImageSize = canvasWidth * SIDE_IMAGE_SCALE;
 
-// =========================================================
-// 4. BLUE RAW BOARD (Aligned to 52 items)
-// =========================================================
-const BLUE_RAW_BOARD = [
-    // Corrected Up Blue Section (6 items)
-    { "x": 0.439, "y": 0.9130 }, { "x": 0.439, "y": 0.8583 }, { "x": 0.439, "y": 0.8063 }, { "x": 0.439, "y": 0.7546 }, { "x": 0.439, "y": 0.7001 }, { "x": 0.439, "y": 0.6449 },
-    { "x": 0.3822, "y": 0.534 }, { "x": 0.3245, "y": 0.534 }, { "x": 0.2666, "y": 0.534 }, { "x": 0.2086, "y": 0.534 }, { "x": 0.1491, "y": 0.534 }, { "x": 0.0873, "y": 0.534 },
-    { "x": 0.067, "y": 0.475 },
-    { "x": 0.1505, "y": 0.420 }, { "x": 0.2106, "y": 0.420 }, { "x": 0.2674, "y": 0.420 }, { "x": 0.3255, "y": 0.420 }, { "x": 0.3813, "y": 0.420 },
-    { "x": 0.440, "y": 0.3616 }, { "x": 0.440, "y": 0.3082 }, { "x": 0.440, "y": 0.2518 }, { "x": 0.440, "y": 0.1956 }, { "x": 0.440, "y": 0.1412 }, { "x": 0.440, "y": 0.0854 },
-    { "x": 0.4991, "y": 0.0869 }, { "x": 0.5570, "y": 0.0853 },
-    { "x": 0.5570, "y": 0.1389 }, { "x": 0.5570, "y": 0.1969 }, { "x": 0.5570, "y": 0.2521 }, { "x": 0.5570, "y": 0.3079 }, { "x": 0.5570, "y": 0.364 },
-    { "x": 0.6149, "y": 0.421 }, { "x": 0.6707, "y": 0.421 }, { "x": 0.7299, "y": 0.421 }, { "x": 0.789, "y": 0.421 }, { "x": 0.848, "y": 0.421 }, { "x": 0.9099, "y": 0.421 },
-    { "x": 0.9099, "y": 0.4770 }, { "x": 0.9099, "y": 0.5348 },
-    { "x": 0.8484, "y": 0.535 }, { "x": 0.7898, "y": 0.535 }, { "x": 0.7301, "y": 0.535 }, { "x": 0.6707, "y": 0.535 }, { "x": 0.6149, "y": 0.535 },
-    { "x": 0.557, "y": 0.5905 }, { "x": 0.557, "y": 0.6452 }, { "x": 0.557, "y": 0.6999 }, { "x": 0.557, "y": 0.7546 }, { "x": 0.557, "y": 0.8063 }, { "x": 0.557, "y": 0.859 },
-    { "x": 0.557, "y": 0.9099 }, { "x": 0.4974, "y": 0.9130 }
-];
+    const seedsData = useMemo(() => {
+        const list: any[] = [];
+        Object.entries(positions).forEach(([playerId, seedPositions]) => {
+            const isP1 = playerId === 'p1';
+            const color = isP1 ? '#FF3B30' : '#FFCC00';
+            seedPositions.forEach((pos, index) => {
+                list.push({ id: `${playerId}-${index}`, playerId, seedSubIndex: index, currentPos: pos, color });
+            });
+        });
+        return list;
+    }, [positions]);
 
-// --- COMBINED PATHS (Board + Victory) ---
-const RED_FULL_PATH = [...RED_RAW_BOARD, ...VICTORY_RED];
-const YELLOW_FULL_PATH = [...YELLOW_RAW_BOARD, ...VICTORY_YELLOW];
-const GREEN_FULL_PATH = [...GREEN_RAW_BOARD, ...VICTORY_GREEN];
-const BLUE_FULL_PATH = [...BLUE_RAW_BOARD, ...VICTORY_BLUE];
+    // Hit-test function to find which seed was tapped
+    const findTappedSeed = (tapX: number, tapY: number) => {
+        const hitRadius = seedRadius * 1.5; // Slightly larger for easier tapping
 
-export const LudoBoardData = {
-    yards: {
-        red: [{ x: 0.18, y: 0.18 }, { x: 0.25, y: 0.18 }, { x: 0.18, y: 0.25 }, { x: 0.25, y: 0.25 }],
-        green: [{ x: 0.75, y: 0.18 }, { x: 0.82, y: 0.18 }, { x: 0.75, y: 0.25 }, { x: 0.82, y: 0.25 }],
-        yellow: [{ x: 0.75, y: 0.75 }, { x: 0.82, y: 0.75 }, { x: 0.75, y: 0.82 }, { x: 0.82, y: 0.82 }],
-        blue: [{ x: 0.18, y: 0.75 }, { x: 0.25, y: 0.75 }, { x: 0.18, y: 0.82 }, { x: 0.25, y: 0.82 }],
-    },
-    homeBase: { x: 0.500, y: 0.500 },
-    
-    getPathForColor: (color: string) => {
-        switch (color) {
-            case 'red': return RED_FULL_PATH;
-            case 'yellow': return YELLOW_FULL_PATH;
-            case 'green': return GREEN_FULL_PATH;
-            case 'blue': return BLUE_FULL_PATH;
-            default: return RED_FULL_PATH;
+        for (const seed of seedsData) {
+            const { x: seedX, y: seedY } = getSeedPixelPosition(
+                seed.currentPos,
+                seed.playerId,
+                seed.seedSubIndex,
+                boardX, boardY, boardSize
+            );
+
+            const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
+            if (distance <= hitRadius) {
+                return {
+                    playerId: seed.playerId,
+                    seedIndex: seed.seedSubIndex,
+                    position: seed.currentPos
+                };
+            }
         }
+        return null;
+    };
+
+    const handleTap = (x: number, y: number) => {
+        const tappedSeed = findTappedSeed(x, y);
+        onBoardPress(x, y, tappedSeed);
+    };
+
+    if (!boardImage) return null;
+
+    return (
+        <GestureDetector gesture={Gesture.Tap().onEnd(({ x, y }) => runOnJS(handleTap)(x, y))}>
+            <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
+                <SkiaImage
+                    image={boardImage}
+                    x={boardX}
+                    y={boardY}
+                    width={boardSize}
+                    height={boardSize}
+                    fit="fill"
+                />
+
+                {/* 
+                  Color images positioned using COLOR_IMAGE_POSITIONS constant.
+                  This allows manual tweaking of positions.
+                */}
+
+                {/* RED */}
+                {redImage && (
+                    <SkiaImage
+                        image={redImage}
+                        x={COLOR_IMAGE_POSITIONS.red.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.red.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {/* GREEN */}
+                {greenImage && (
+                    <SkiaImage
+                        image={greenImage}
+                        x={COLOR_IMAGE_POSITIONS.green.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.green.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {/* YELLOW */}
+                {yellowImage && (
+                    <SkiaImage
+                        image={yellowImage}
+                        x={COLOR_IMAGE_POSITIONS.yellow.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.yellow.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {/* BLUE */}
+                {blueImage && (
+                    <SkiaImage
+                        image={blueImage}
+                        x={COLOR_IMAGE_POSITIONS.blue.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.blue.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {seedsData.map(s => (
+                    <AnimatedSeed
+                        key={s.id}
+                        {...s}
+                        boardX={boardX}
+                        boardY={boardY}
+                        boardSize={boardSize}
+                        radius={seedRadius}
+                    />
+                ))}
+            </Canvas>
+        </GestureDetector>
+    );
+};
+
+import React, { useMemo, useEffect, useRef } from 'react';
+import { useWindowDimensions } from 'react-native';
+import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } from '@shopify/react-native-skia';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSharedValue, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
+import { LudoBoardData } from './LudoCoordinates';
+
+const boardImageSource = require('../../../../assets/images/ludoBoard.png');
+const blueImageSource = require('../../../../assets/images/blue.png');
+const greenImageSource = require('../../../../assets/images/green.png');
+const redImageSource = require('../../../../assets/images/red.png');
+const yellowImageSource = require('../../../../assets/images/yellow.png');
+
+// Normalized positions for color images (center of each yard)
+// Adjusted to be outside the board but flush against the edges
+const COLOR_IMAGE_POSITIONS = {
+    red: { x: 0.1090, y: 0.009 },    // Left side
+    green: { x: 0.670, y: 0.009},  // Top side
+    yellow: { x: 0.670, y: 0.850 }, // Right side
+    blue: { x: 0.1090, y: 0.850 },   // Bottom side
+};
+
+// Normalized positions for the Dice House (center) 
+// You can adjust these x/y values (0-1) to move the dice location for each player turn.
+export const DICE_POSITIONS = {
+    red: { x: 0.48, y: 0.09},     // P1 Turn -> Show near Yellow (Opposite)
+    yellow: { x: 0.52, y: 0.1 },  // P2 Turn -> Show near Red (Opposite)
+    green: { x: 0.12, y: 0.9 },   // Placeholder for Green
+    blue: { x: 0.88, y: 0.1 },    // Placeholder for Blue
+};
+
+// Configuration for sizes (relative to canvas width)
+const BOARD_SCALE = 0.76;      // Size of the board relative to canvas (0.76 = 76%)
+const SIDE_IMAGE_SCALE = 0.11; // Size of the side images relative to canvas (approx 11%)
+
+const BOARD_IMAGE_WIDTH = 1024;
+const BOARD_IMAGE_HEIGHT = 1024;
+const TILE_ANIMATION_DURATION = 200;
+
+// Cache paths
+const RED_PATH = LudoBoardData.getPathForColor('red');
+const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
+
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number }) => {
+    const getTargetPixels = (stepIndex: number) => {
+        let norm = { x: 0.5, y: 0.5 };
+
+        // Select path based on color/player
+        const isYellow = color === '#FFCC00' || color === 'yellow' || playerId === 'p2';
+        const path = isYellow ? YELLOW_PATH : RED_PATH;
+
+        if (stepIndex === -1) {
+            const yardKey = isYellow ? 'yellow' : 'red';
+            const yardArr = LudoBoardData.yards[yardKey];
+            norm = yardArr[seedSubIndex % 4];
+        } else if (stepIndex >= 58) {
+            norm = LudoBoardData.homeBase;
+        } else {
+            if (path[stepIndex]) norm = path[stepIndex];
+        }
+        return {
+            x: boardX + norm.x * boardSize,
+            y: boardY + norm.y * boardSize
+        };
+    };
+
+    const target = getTargetPixels(currentPos);
+    const cx = useSharedValue(target.x);
+    const cy = useSharedValue(target.y);
+    const prevPosRef = useRef(currentPos);
+
+    useEffect(() => {
+        const oldPos = prevPosRef.current;
+        const newPos = currentPos;
+        prevPosRef.current = newPos;
+
+        if (oldPos === newPos) {
+            cx.value = target.x;
+            cy.value = target.y;
+            return;
+        }
+
+        if (oldPos === -1 || newPos >= 58) {
+            cx.value = withTiming(target.x, { duration: 400 });
+            cy.value = withTiming(target.y, { duration: 400 });
+            return;
+        }
+
+        const steps = [];
+        const diff = newPos - oldPos;
+        if (diff > 0 && diff <= 6) {
+            for (let i = oldPos + 1; i <= newPos; i++) steps.push(i);
+        } else {
+            steps.push(newPos);
+        }
+
+        const xSequence = steps.map(i => withTiming(getTargetPixels(i).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
+        const ySequence = steps.map(i => withTiming(getTargetPixels(i).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
+        cx.value = withSequence(...xSequence);
+        cy.value = withSequence(...ySequence);
+
+    }, [currentPos, boardX, boardY, boardSize]);
+
+    return (
+        <Group>
+            <Circle cx={cx} cy={cy} r={radius} color={color}>
+                <Paint style="stroke" strokeWidth={1.5} color="white" />
+                <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
+            </Circle>
+        </Group>
+    );
+};
+
+// Helper to get pixel position for a seed
+const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number) => {
+    const isYellow = playerId === 'p2';
+    const path = isYellow ? YELLOW_PATH : RED_PATH;
+    let norm = { x: 0.5, y: 0.5 };
+
+    if (seedPos === -1) {
+        const yardKey = isYellow ? 'yellow' : 'red';
+        const yardArr = LudoBoardData.yards[yardKey];
+        norm = yardArr[seedSubIndex % 4];
+    } else if (seedPos >= 58) {
+        norm = LudoBoardData.homeBase;
+    } else {
+        if (path[seedPos]) norm = path[seedPos];
     }
+    return {
+        x: boardX + norm.x * boardSize,
+        y: boardY + norm.y * boardSize
+    };
+};
+
+export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
+    const boardImage = useImage(boardImageSource);
+    const blueImage = useImage(blueImageSource);
+    const greenImage = useImage(greenImageSource);
+    const redImage = useImage(redImageSource);
+    const yellowImage = useImage(yellowImageSource);
+
+    const { width } = useWindowDimensions();
+    const canvasWidth = width * 0.95;
+    const canvasHeight = canvasWidth;
+
+    // Scale board to make room for outer images
+    // Using BOARD_SCALE constant
+    const boardSize = canvasWidth * BOARD_SCALE;
+    const margin = (canvasWidth - boardSize) / 2;
+    const boardX = margin;
+    const boardY = margin;
+
+    const seedRadius = (boardSize / 15) * 0.35;
+
+    // Size for colored images attached to the ends
+    // Using SIDE_IMAGE_SCALE constant
+    const sideImageSize = canvasWidth * SIDE_IMAGE_SCALE;
+
+    const seedsData = useMemo(() => {
+        const list: any[] = [];
+        Object.entries(positions).forEach(([playerId, seedPositions]) => {
+            const isP1 = playerId === 'p1';
+            const color = isP1 ? '#FF3B30' : '#FFCC00';
+            seedPositions.forEach((pos, index) => {
+                list.push({ id: `${playerId}-${index}`, playerId, seedSubIndex: index, currentPos: pos, color });
+            });
+        });
+        return list;
+    }, [positions]);
+
+    // Hit-test function to find which seed was tapped
+    const findTappedSeed = (tapX: number, tapY: number) => {
+        const hitRadius = seedRadius * 1.5; // Slightly larger for easier tapping
+
+        for (const seed of seedsData) {
+            const { x: seedX, y: seedY } = getSeedPixelPosition(
+                seed.currentPos,
+                seed.playerId,
+                seed.seedSubIndex,
+                boardX, boardY, boardSize
+            );
+
+            const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
+            if (distance <= hitRadius) {
+                return {
+                    playerId: seed.playerId,
+                    seedIndex: seed.seedSubIndex,
+                    position: seed.currentPos
+                };
+            }
+        }
+        return null;
+    };
+
+    const handleTap = (x: number, y: number) => {
+        const tappedSeed = findTappedSeed(x, y);
+        onBoardPress(x, y, tappedSeed);
+    };
+
+    if (!boardImage) return null;
+
+    return (
+        <GestureDetector gesture={Gesture.Tap().onEnd(({ x, y }) => runOnJS(handleTap)(x, y))}>
+            <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
+                <SkiaImage
+                    image={boardImage}
+                    x={boardX}
+                    y={boardY}
+                    width={boardSize}
+                    height={boardSize}
+                    fit="fill"
+                />
+
+                {/* 
+                  Color images positioned using COLOR_IMAGE_POSITIONS constant.
+                  This allows manual tweaking of positions.
+                */}
+
+                {/* RED */}
+                {redImage && (
+                    <SkiaImage
+                        image={redImage}
+                        x={COLOR_IMAGE_POSITIONS.red.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.red.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {/* GREEN */}
+                {greenImage && (
+                    <SkiaImage
+                        image={greenImage}
+                        x={COLOR_IMAGE_POSITIONS.green.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.green.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {/* YELLOW */}
+                {yellowImage && (
+                    <SkiaImage
+                        image={yellowImage}
+                        x={COLOR_IMAGE_POSITIONS.yellow.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.yellow.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {/* BLUE */}
+                {blueImage && (
+                    <SkiaImage
+                        image={blueImage}
+                        x={COLOR_IMAGE_POSITIONS.blue.x * canvasWidth - sideImageSize / 2}
+                        y={COLOR_IMAGE_POSITIONS.blue.y * canvasHeight - sideImageSize / 2}
+                        width={sideImageSize * 3}
+                        height={sideImageSize * 2.5}
+                        fit="contain"
+                    />
+                )}
+
+                {seedsData.map(s => (
+                    <AnimatedSeed
+                        key={s.id}
+                        {...s}
+                        boardX={boardX}
+                        boardY={boardY}
+                        boardSize={boardSize}
+                        radius={seedRadius}
+                    />
+                ))}
+            </Canvas>
+        </GestureDetector>
+    );
 };

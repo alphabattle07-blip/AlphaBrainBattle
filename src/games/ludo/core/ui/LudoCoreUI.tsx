@@ -25,14 +25,14 @@ const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll }: { dice: number[]
         activeOpacity={0.8}
     >
         {waitingForRoll && dice.length === 0 ? (
-            <Text style={styles.rollPrompt}>TAP TO ROLL</Text>
+            <Text style={styles.rollPrompt}> ROLL</Text>
         ) : (
             <View style={styles.diceRow}>
                 {dice.map((d, i) => (
                     <Ludo3DDie
                         key={i}
                         value={d}
-                        size={45}
+                        size={35}
                         isUsed={diceUsed[i]}
                     />
                 ))}
@@ -251,15 +251,15 @@ const styles = StyleSheet.create({
     // Dice House Styles
     diceHouse: {
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        padding: 5,
+        padding: 4,
         borderRadius: 15,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)',
-        minWidth: 110,
+        minWidth: 80,
         alignItems: 'center',
         justifyContent: 'center'
     },
-    diceRow: { flexDirection: 'row', gap: 7 },
+    diceRow: { flexDirection: 'row', gap: 5 },
     rollPrompt: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 }
 });
 
