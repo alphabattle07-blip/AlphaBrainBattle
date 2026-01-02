@@ -15,7 +15,7 @@ const yellowImageSource = require('../../../../assets/images/yellow.png');
 // Adjusted to be outside the board but flush against the edges
 const COLOR_IMAGE_POSITIONS = {
     red: { x: 0.1090, y: 0.009 },    // Left side
-    green: { x: 0.740, y: 0.00000001},  // Top side
+    green: { x: 0.740, y: 0.00000001 },  // Top side
     yellow: { x: 0.670, y: 0.850 }, // Right side
     blue: { x: 0.0390, y: 0.8650 },   // Bottom side
 };
@@ -34,7 +34,7 @@ const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
 const BLUE_PATH = LudoBoardData.getPathForColor('blue');
 const GREEN_PATH = LudoBoardData.getPathForColor('green');
 
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius, colorName }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green' }) => {
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number }) => {
     const getTargetPixels = (stepIndex: number) => {
         let norm = { x: 0.5, y: 0.5 };
 
@@ -48,7 +48,12 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
             const yardArr = LudoBoardData.yards[colorName];
             norm = yardArr[seedSubIndex % 4];
         } else if (stepIndex >= 58) {
-            norm = LudoBoardData.homeBase;
+            // Use COLOR_IMAGE_POSITIONS for home
+            const pos = COLOR_IMAGE_POSITIONS[colorName];
+            return {
+                x: pos.x * canvasWidth,
+                y: pos.y * canvasHeight
+            };
         } else {
             if (path[stepIndex]) norm = path[stepIndex];
         }
@@ -106,7 +111,7 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
 };
 
 // Helper to get pixel position for a seed
-const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number, colorName: 'red' | 'yellow' | 'blue' | 'green') => {
+const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number) => {
     let path = RED_PATH;
     if (colorName === 'yellow') path = YELLOW_PATH;
     else if (colorName === 'blue') path = BLUE_PATH;
@@ -118,7 +123,12 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
         const yardArr = LudoBoardData.yards[colorName];
         norm = yardArr[seedSubIndex % 4];
     } else if (seedPos >= 58) {
-        norm = LudoBoardData.homeBase;
+        // Use COLOR_IMAGE_POSITIONS for home
+        const pos = COLOR_IMAGE_POSITIONS[colorName];
+        return {
+            x: pos.x * canvasWidth,
+            y: pos.y * canvasHeight
+        };
     } else {
         if (path[seedPos]) norm = path[seedPos];
     }
@@ -186,7 +196,8 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                 seed.playerId,
                 seed.seedSubIndex,
                 boardX, boardY, boardSize,
-                seed.colorName
+                seed.colorName,
+                canvasWidth, canvasHeight
             );
 
             const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
@@ -282,6 +293,8 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
                         boardSize={boardSize}
                         radius={seedRadius}
                         colorName={s.colorName}
+                        canvasWidth={canvasWidth}
+                        canvasHeight={canvasHeight}
                     />
                 ))}
             </Canvas>
