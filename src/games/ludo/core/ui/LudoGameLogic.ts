@@ -6,6 +6,8 @@ export interface LudoSeed {
     // -1 = House
     // 0 - 55 = Active Path (Unique to the player color)
     // 56 = Finished (Goal)
+    landingPos: number; // The tile index it lands on before any rules like "Capture" jump it to another spot
+    animationDelay: number; // Delay in ms before starting the movement animation
 }
 
 export interface LudoPlayer {
@@ -33,12 +35,12 @@ export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColo
             {
                 id: 'p1',
                 color: p1Color,
-                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p1Color}-${i}`, position: HOUSE_POS })),
+                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p1Color}-${i}`, position: HOUSE_POS, landingPos: HOUSE_POS, animationDelay: 0 })),
             },
             {
                 id: 'p2',
                 color: p2Color,
-                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p2Color}-${i}`, position: HOUSE_POS })),
+                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p2Color}-${i}`, position: HOUSE_POS, landingPos: HOUSE_POS, animationDelay: 0 })),
             },
         ],
         currentPlayerIndex: 0,
@@ -55,7 +57,7 @@ export const rollDice = (state: LudoGameState): LudoGameState => {
 
     // RANDOM DICE (Required for game to work)
     const d1 = 6;
-    const d2 = 56;
+    const d2 = 5;
 
     return {
         ...state,
@@ -116,9 +118,10 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
     const activePlayer = newPlayers[state.currentPlayerIndex];
     const targetSeed = activePlayer.seeds[move.seedIndex];
 
-    // Store old position for logging
+    // Always track landing position (where the move logically ends)
     const oldPosition = targetSeed.position;
-
+    targetSeed.landingPos = move.targetPos;
+    targetSeed.animationDelay = 0; // Reset delay for the moving seed
     // Set the new position for the moving seed
     targetSeed.position = move.targetPos;
 
@@ -152,6 +155,15 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
                     if (sameX && sameY) {
                         console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${oppSeedIdx} at position ${oppSeed.position} (coords: ${oppCoord.x}, ${oppCoord.y})`);
                         oppSeed.position = HOUSE_POS; // Send opponent seed back to house
+                        oppSeed.landingPos = HOUSE_POS;
+
+                        // Calculate delay based on how many steps the capturing seed takes
+                        // HOUSE_POS (-1) -> 0 is 1 step, then targetPos steps
+                        const steps = oldPosition === HOUSE_POS ? 1 : Math.max(0, move.targetPos - oldPosition);
+                        // 200ms per tile (TILE_ANIMATION_DURATION)
+                        oppSeed.animationDelay = steps * 200;
+
+                        targetSeed.position = FINISH_POS; // AS PER AGGRESSIVE MODE: Capturing seed moves to finish!
                     }
                 }
             });

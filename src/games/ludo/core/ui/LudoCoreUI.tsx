@@ -88,13 +88,10 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
 
     // --- Derived State for Board ---
     const boardPositions = useMemo(() => {
-        // Map gameState to { [playerId]: [pos1, pos2, pos3, pos4] }
-        // But LudoSkiaBoard uses LudoSeed directly? 
-        // LudoSkiaBoard props: positions?: { [key: string]: number[] };
-        // We need to transform LudoGameState to this format.
-        const posMap: { [key: string]: number[] } = {};
+        // Map gameState to { [playerId]: { pos: number, land: number, delay: number }[] }
+        const posMap: { [key: string]: { pos: number, land: number, delay: number }[] } = {};
         gameState.players.forEach(p => {
-            posMap[p.id] = p.seeds.map(s => s.position);
+            posMap[p.id] = p.seeds.map(s => ({ pos: s.position, land: s.landingPos, delay: s.animationDelay || 0 }));
         });
         return posMap;
     }, [gameState]);

@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useRef } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSharedValue, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
+import { useSharedValue, withTiming, withSequence, withDelay, Easing, runOnJS, useDerivedValue } from 'react-native-reanimated';
 import { LudoBoardData } from './LudoCoordinates';
 
 const boardImageSource = require('../../../../assets/images/ludoBoard.png');
@@ -66,7 +66,7 @@ const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
 const BLUE_PATH = LudoBoardData.getPathForColor('blue');
 const GREEN_PATH = LudoBoardData.getPathForColor('green');
 
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number }) => {
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, animationDelay, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, landingPos: number, animationDelay: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number }) => {
     const getTargetPixels = (stepIndex: number) => {
         let norm = { x: 0.5, y: 0.5 };
 
@@ -100,6 +100,7 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
     const target = getTargetPixels(currentPos);
     const cx = useSharedValue(target.x);
     const cy = useSharedValue(target.y);
+    const scale = useSharedValue(1);
     const prevPosRef = useRef(currentPos);
 
     useEffect(() => {
@@ -113,29 +114,70 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
             return;
         }
 
-        if (oldPos === -1 || newPos >= 56) {
+        if (oldPos === -1) {
             cx.value = withTiming(target.x, { duration: 400 });
             cy.value = withTiming(target.y, { duration: 400 });
+            // Small hop when leaving house
+            scale.value = withSequence(
+                withTiming(1.3, { duration: 200 }),
+                withTiming(1, { duration: 200 })
+            );
+            return;
+        }
+
+        if (newPos === -1) {
+            // Captured seed returning home. Wait for capturing seed to land!
+            const delay = animationDelay || 0;
+            const houseAnim = withTiming(1, { duration: 400 }); // Normal speed for house return
+            cx.value = withSequence(withDelay(delay, withTiming(target.x, { duration: 400 })));
+            cy.value = withSequence(withDelay(delay, withTiming(target.y, { duration: 400 })));
+            // Pulse on return
+            scale.value = withSequence(
+                withDelay(delay, withTiming(1.2, { duration: 200 })),
+                withTiming(1, { duration: 200 })
+            );
             return;
         }
 
         const steps = [];
-        const diff = newPos - oldPos;
+        const diff = landingPos - oldPos;
         if (diff > 0 && diff <= 6) {
-            for (let i = oldPos + 1; i <= newPos; i++) steps.push(i);
+            for (let i = oldPos + 1; i <= landingPos; i++) steps.push(i);
         } else {
-            steps.push(newPos);
+            steps.push(landingPos);
         }
 
         const xSequence = steps.map(i => withTiming(getTargetPixels(i).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
         const ySequence = steps.map(i => withTiming(getTargetPixels(i).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
-        cx.value = withSequence(...xSequence);
-        cy.value = withSequence(...ySequence);
 
-    }, [currentPos, boardX, boardY, boardSize]);
+        // Generate scale sequence for hopping
+        const scaleSequence: any[] = [];
+        steps.forEach(() => {
+            scaleSequence.push(withTiming(1.25, { duration: TILE_ANIMATION_DURATION / 2, easing: Easing.out(Easing.quad) }));
+            scaleSequence.push(withTiming(1.0, { duration: TILE_ANIMATION_DURATION / 2, easing: Easing.in(Easing.quad) }));
+        });
+
+        if (landingPos !== newPos) {
+            // Capture! Add a jump to final position at the end of the sequence
+            xSequence.push(withTiming(getTargetPixels(newPos).x, { duration: 400, easing: Easing.out(Easing.quad) }));
+            ySequence.push(withTiming(getTargetPixels(newPos).y, { duration: 400, easing: Easing.out(Easing.quad) }));
+
+            // Big Hop for victory jump
+            scaleSequence.push(withTiming(1.5, { duration: 200, easing: Easing.out(Easing.quad) }));
+            scaleSequence.push(withTiming(1.0, { duration: 200, easing: Easing.in(Easing.quad) }));
+        }
+
+        cx.value = withSequence(...(xSequence as [any, ...any[]]));
+        cy.value = withSequence(...(ySequence as [any, ...any[]]));
+        scale.value = withSequence(...(scaleSequence as [any, ...any[]]));
+
+    }, [currentPos, landingPos, animationDelay, boardX, boardY, boardSize]);
+
+    const transform = useDerivedValue(() => [{ scale: scale.value }]);
+    const origin = useDerivedValue(() => ({ x: cx.value, y: cy.value }));
 
     return (
-        <Group>
+        <Group transform={transform} origin={origin}>
             <Circle cx={cx} cy={cy} r={radius} color={color}>
                 <Paint style="stroke" strokeWidth={1.5} color="white" />
                 <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
@@ -173,7 +215,7 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
     };
 };
 
-export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
+export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, positions: { [key: string]: { pos: number, land: number, delay: number }[] } }) => {
     const boardImage = useImage(boardImageSource);
     const blueImage = useImage(blueImageSource);
     const greenImage = useImage(greenImageSource);
@@ -207,12 +249,14 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
             const color = isP1 ? '#007AFF' : '#34C759';
 
             // Cast seedPositions to array
-            (seedPositions as number[]).forEach((pos, index) => {
+            (seedPositions as { pos: number, land: number, delay: number }[]).forEach((item, index) => {
                 list.push({
                     id: `${playerId}-${index}`,
                     playerId,
                     seedSubIndex: index,
-                    currentPos: pos,
+                    currentPos: item.pos,
+                    landingPos: item.land,
+                    animationDelay: item.delay,
                     color,
                     colorName
                 });
