@@ -1,561 +1,214 @@
-import React, { useMemo, useEffect, useRef } from 'react';
-import { useWindowDimensions } from 'react-native';
-import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } from '@shopify/react-native-skia';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSharedValue, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
-import { LudoBoardData } from './LudoCoordinates';
+export type PlayerColor = 'red' | 'yellow' | 'green' | 'blue';
 
-const boardImageSource = require('../../../../assets/images/ludoBoard.png');
-const blueImageSource = require('../../../../assets/images/blue.png');
-const greenImageSource = require('../../../../assets/images/green.png');
-const redImageSource = require('../../../../assets/images/red.png');
-const yellowImageSource = require('../../../../assets/images/yellow.png');
+export interface LudoSeed {
+    id: string;
+    position: number;
+    // -1 = House
+    // 0 - 57 = Active Path (Unique to the player color)
+    // 58 = Finished (Goal)
+}
 
-// Normalized positions for color images (center of each yard)
-// Adjusted to be outside the board but flush against the edges
-const COLOR_IMAGE_POSITIONS = {
-    red: { x: 0.1090, y: 0.009 },    // Left side
-    green: { x: 0.670, y: 0.009},  // Top side
-    yellow: { x: 0.670, y: 0.850 }, // Right side
-    blue: { x: 0.1090, y: 0.850 },   // Bottom side
-};
+export interface LudoPlayer {
+    id: string;
+    color: PlayerColor;
+    seeds: LudoSeed[];
+}
 
-// Normalized positions for the Dice House (center) 
-// You can adjust these x/y values (0-1) to move the dice location for each player turn.
-export const DICE_POSITIONS = {
-    red: { x: 0.48, y: 0.09},     // P1 Turn -> Show near Yellow (Opposite)
-    yellow: { x: 0.52, y: 0.1 },  // P2 Turn -> Show near Red (Opposite)
-    green: { x: 0.12, y: 0.9 },   // Placeholder for Green
-    blue: { x: 0.88, y: 0.1 },    // Placeholder for Blue
-};
+export interface LudoGameState {
+    players: LudoPlayer[];
+    currentPlayerIndex: number;
+    dice: number[];
+    diceUsed: boolean[];
+    waitingForRoll: boolean;
+    winner: string | null;
+    log: string[];
+}
 
-// Configuration for sizes (relative to canvas width)
-const BOARD_SCALE = 0.76;      // Size of the board relative to canvas (0.76 = 76%)
-const SIDE_IMAGE_SCALE = 0.11; // Size of the side images relative to canvas (approx 11%)
+const HOUSE_POS = -1;
+const FINISH_POS = 58;
 
-const BOARD_IMAGE_WIDTH = 1024;
-const BOARD_IMAGE_HEIGHT = 1024;
-const TILE_ANIMATION_DURATION = 200;
-
-// Cache paths
-const RED_PATH = LudoBoardData.getPathForColor('red');
-const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
-
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number }) => {
-    const getTargetPixels = (stepIndex: number) => {
-        let norm = { x: 0.5, y: 0.5 };
-
-        // Select path based on color/player
-        const isYellow = color === '#FFCC00' || color === 'yellow' || playerId === 'p2';
-        const path = isYellow ? YELLOW_PATH : RED_PATH;
-
-        if (stepIndex === -1) {
-            const yardKey = isYellow ? 'yellow' : 'red';
-            const yardArr = LudoBoardData.yards[yardKey];
-            norm = yardArr[seedSubIndex % 4];
-        } else if (stepIndex >= 58) {
-            norm = LudoBoardData.homeBase;
-        } else {
-            if (path[stepIndex]) norm = path[stepIndex];
-        }
-        return {
-            x: boardX + norm.x * boardSize,
-            y: boardY + norm.y * boardSize
-        };
-    };
-
-    const target = getTargetPixels(currentPos);
-    const cx = useSharedValue(target.x);
-    const cy = useSharedValue(target.y);
-    const prevPosRef = useRef(currentPos);
-
-    useEffect(() => {
-        const oldPos = prevPosRef.current;
-        const newPos = currentPos;
-        prevPosRef.current = newPos;
-
-        if (oldPos === newPos) {
-            cx.value = target.x;
-            cy.value = target.y;
-            return;
-        }
-
-        if (oldPos === -1 || newPos >= 58) {
-            cx.value = withTiming(target.x, { duration: 400 });
-            cy.value = withTiming(target.y, { duration: 400 });
-            return;
-        }
-
-        const steps = [];
-        const diff = newPos - oldPos;
-        if (diff > 0 && diff <= 6) {
-            for (let i = oldPos + 1; i <= newPos; i++) steps.push(i);
-        } else {
-            steps.push(newPos);
-        }
-
-        const xSequence = steps.map(i => withTiming(getTargetPixels(i).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
-        const ySequence = steps.map(i => withTiming(getTargetPixels(i).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
-        cx.value = withSequence(...xSequence);
-        cy.value = withSequence(...ySequence);
-
-    }, [currentPos, boardX, boardY, boardSize]);
-
-    return (
-        <Group>
-            <Circle cx={cx} cy={cy} r={radius} color={color}>
-                <Paint style="stroke" strokeWidth={1.5} color="white" />
-                <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
-            </Circle>
-        </Group>
-    );
-};
-
-// Helper to get pixel position for a seed
-const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number) => {
-    const isYellow = playerId === 'p2';
-    const path = isYellow ? YELLOW_PATH : RED_PATH;
-    let norm = { x: 0.5, y: 0.5 };
-
-    if (seedPos === -1) {
-        const yardKey = isYellow ? 'yellow' : 'red';
-        const yardArr = LudoBoardData.yards[yardKey];
-        norm = yardArr[seedSubIndex % 4];
-    } else if (seedPos >= 58) {
-        norm = LudoBoardData.homeBase;
-    } else {
-        if (path[seedPos]) norm = path[seedPos];
-    }
+export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColor = 'yellow'): LudoGameState => {
     return {
-        x: boardX + norm.x * boardSize,
-        y: boardY + norm.y * boardSize
+        players: [
+            {
+                id: 'p1',
+                color: p1Color,
+                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p1Color}-${i}`, position: HOUSE_POS })),
+            },
+            {
+                id: 'p2',
+                color: p2Color,
+                seeds: Array.from({ length: 4 }).map((_, i) => ({ id: `${p2Color}-${i}`, position: HOUSE_POS })),
+            },
+        ],
+        currentPlayerIndex: 0,
+        dice: [],
+        diceUsed: [],
+        waitingForRoll: true,
+        winner: null,
+        log: ['Game Started'],
     };
 };
 
-export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
-    const boardImage = useImage(boardImageSource);
-    const blueImage = useImage(blueImageSource);
-    const greenImage = useImage(greenImageSource);
-    const redImage = useImage(redImageSource);
-    const yellowImage = useImage(yellowImageSource);
+export const rollDice = (state: LudoGameState): LudoGameState => {
+    if (!state.waitingForRoll) return state;
 
-    const { width } = useWindowDimensions();
-    const canvasWidth = width * 0.95;
-    const canvasHeight = canvasWidth;
+    // RANDOM DICE (Required for game to work)
+    const d1 = 1;
+    const d2 =1;
 
-    // Scale board to make room for outer images
-    // Using BOARD_SCALE constant
-    const boardSize = canvasWidth * BOARD_SCALE;
-    const margin = (canvasWidth - boardSize) / 2;
-    const boardX = margin;
-    const boardY = margin;
-
-    const seedRadius = (boardSize / 15) * 0.35;
-
-    // Size for colored images attached to the ends
-    // Using SIDE_IMAGE_SCALE constant
-    const sideImageSize = canvasWidth * SIDE_IMAGE_SCALE;
-
-    const seedsData = useMemo(() => {
-        const list: any[] = [];
-        Object.entries(positions).forEach(([playerId, seedPositions]) => {
-            const isP1 = playerId === 'p1';
-            const color = isP1 ? '#FF3B30' : '#FFCC00';
-            seedPositions.forEach((pos, index) => {
-                list.push({ id: `${playerId}-${index}`, playerId, seedSubIndex: index, currentPos: pos, color });
-            });
-        });
-        return list;
-    }, [positions]);
-
-    // Hit-test function to find which seed was tapped
-    const findTappedSeed = (tapX: number, tapY: number) => {
-        const hitRadius = seedRadius * 1.5; // Slightly larger for easier tapping
-
-        for (const seed of seedsData) {
-            const { x: seedX, y: seedY } = getSeedPixelPosition(
-                seed.currentPos,
-                seed.playerId,
-                seed.seedSubIndex,
-                boardX, boardY, boardSize
-            );
-
-            const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
-            if (distance <= hitRadius) {
-                return {
-                    playerId: seed.playerId,
-                    seedIndex: seed.seedSubIndex,
-                    position: seed.currentPos
-                };
-            }
-        }
-        return null;
-    };
-
-    const handleTap = (x: number, y: number) => {
-        const tappedSeed = findTappedSeed(x, y);
-        onBoardPress(x, y, tappedSeed);
-    };
-
-    if (!boardImage) return null;
-
-    return (
-        <GestureDetector gesture={Gesture.Tap().onEnd(({ x, y }) => runOnJS(handleTap)(x, y))}>
-            <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
-                <SkiaImage
-                    image={boardImage}
-                    x={boardX}
-                    y={boardY}
-                    width={boardSize}
-                    height={boardSize}
-                    fit="fill"
-                />
-
-                {/* 
-                  Color images positioned using COLOR_IMAGE_POSITIONS constant.
-                  This allows manual tweaking of positions.
-                */}
-
-                {/* RED */}
-                {redImage && (
-                    <SkiaImage
-                        image={redImage}
-                        x={COLOR_IMAGE_POSITIONS.red.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.red.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {/* GREEN */}
-                {greenImage && (
-                    <SkiaImage
-                        image={greenImage}
-                        x={COLOR_IMAGE_POSITIONS.green.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.green.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {/* YELLOW */}
-                {yellowImage && (
-                    <SkiaImage
-                        image={yellowImage}
-                        x={COLOR_IMAGE_POSITIONS.yellow.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.yellow.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {/* BLUE */}
-                {blueImage && (
-                    <SkiaImage
-                        image={blueImage}
-                        x={COLOR_IMAGE_POSITIONS.blue.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.blue.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {seedsData.map(s => (
-                    <AnimatedSeed
-                        key={s.id}
-                        {...s}
-                        boardX={boardX}
-                        boardY={boardY}
-                        boardSize={boardSize}
-                        radius={seedRadius}
-                    />
-                ))}
-            </Canvas>
-        </GestureDetector>
-    );
-};
-
-import React, { useMemo, useEffect, useRef } from 'react';
-import { useWindowDimensions } from 'react-native';
-import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } from '@shopify/react-native-skia';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSharedValue, withTiming, withSequence, Easing, runOnJS } from 'react-native-reanimated';
-import { LudoBoardData } from './LudoCoordinates';
-
-const boardImageSource = require('../../../../assets/images/ludoBoard.png');
-const blueImageSource = require('../../../../assets/images/blue.png');
-const greenImageSource = require('../../../../assets/images/green.png');
-const redImageSource = require('../../../../assets/images/red.png');
-const yellowImageSource = require('../../../../assets/images/yellow.png');
-
-// Normalized positions for color images (center of each yard)
-// Adjusted to be outside the board but flush against the edges
-const COLOR_IMAGE_POSITIONS = {
-    red: { x: 0.1090, y: 0.009 },    // Left side
-    green: { x: 0.670, y: 0.009},  // Top side
-    yellow: { x: 0.670, y: 0.850 }, // Right side
-    blue: { x: 0.1090, y: 0.850 },   // Bottom side
-};
-
-// Normalized positions for the Dice House (center) 
-// You can adjust these x/y values (0-1) to move the dice location for each player turn.
-export const DICE_POSITIONS = {
-    red: { x: 0.48, y: 0.09},     // P1 Turn -> Show near Yellow (Opposite)
-    yellow: { x: 0.52, y: 0.1 },  // P2 Turn -> Show near Red (Opposite)
-    green: { x: 0.12, y: 0.9 },   // Placeholder for Green
-    blue: { x: 0.88, y: 0.1 },    // Placeholder for Blue
-};
-
-// Configuration for sizes (relative to canvas width)
-const BOARD_SCALE = 0.76;      // Size of the board relative to canvas (0.76 = 76%)
-const SIDE_IMAGE_SCALE = 0.11; // Size of the side images relative to canvas (approx 11%)
-
-const BOARD_IMAGE_WIDTH = 1024;
-const BOARD_IMAGE_HEIGHT = 1024;
-const TILE_ANIMATION_DURATION = 200;
-
-// Cache paths
-const RED_PATH = LudoBoardData.getPathForColor('red');
-const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
-
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, boardSize, color, radius }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number }) => {
-    const getTargetPixels = (stepIndex: number) => {
-        let norm = { x: 0.5, y: 0.5 };
-
-        // Select path based on color/player
-        const isYellow = color === '#FFCC00' || color === 'yellow' || playerId === 'p2';
-        const path = isYellow ? YELLOW_PATH : RED_PATH;
-
-        if (stepIndex === -1) {
-            const yardKey = isYellow ? 'yellow' : 'red';
-            const yardArr = LudoBoardData.yards[yardKey];
-            norm = yardArr[seedSubIndex % 4];
-        } else if (stepIndex >= 58) {
-            norm = LudoBoardData.homeBase;
-        } else {
-            if (path[stepIndex]) norm = path[stepIndex];
-        }
-        return {
-            x: boardX + norm.x * boardSize,
-            y: boardY + norm.y * boardSize
-        };
-    };
-
-    const target = getTargetPixels(currentPos);
-    const cx = useSharedValue(target.x);
-    const cy = useSharedValue(target.y);
-    const prevPosRef = useRef(currentPos);
-
-    useEffect(() => {
-        const oldPos = prevPosRef.current;
-        const newPos = currentPos;
-        prevPosRef.current = newPos;
-
-        if (oldPos === newPos) {
-            cx.value = target.x;
-            cy.value = target.y;
-            return;
-        }
-
-        if (oldPos === -1 || newPos >= 58) {
-            cx.value = withTiming(target.x, { duration: 400 });
-            cy.value = withTiming(target.y, { duration: 400 });
-            return;
-        }
-
-        const steps = [];
-        const diff = newPos - oldPos;
-        if (diff > 0 && diff <= 6) {
-            for (let i = oldPos + 1; i <= newPos; i++) steps.push(i);
-        } else {
-            steps.push(newPos);
-        }
-
-        const xSequence = steps.map(i => withTiming(getTargetPixels(i).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
-        const ySequence = steps.map(i => withTiming(getTargetPixels(i).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
-        cx.value = withSequence(...xSequence);
-        cy.value = withSequence(...ySequence);
-
-    }, [currentPos, boardX, boardY, boardSize]);
-
-    return (
-        <Group>
-            <Circle cx={cx} cy={cy} r={radius} color={color}>
-                <Paint style="stroke" strokeWidth={1.5} color="white" />
-                <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
-            </Circle>
-        </Group>
-    );
-};
-
-// Helper to get pixel position for a seed
-const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number) => {
-    const isYellow = playerId === 'p2';
-    const path = isYellow ? YELLOW_PATH : RED_PATH;
-    let norm = { x: 0.5, y: 0.5 };
-
-    if (seedPos === -1) {
-        const yardKey = isYellow ? 'yellow' : 'red';
-        const yardArr = LudoBoardData.yards[yardKey];
-        norm = yardArr[seedSubIndex % 4];
-    } else if (seedPos >= 58) {
-        norm = LudoBoardData.homeBase;
-    } else {
-        if (path[seedPos]) norm = path[seedPos];
-    }
     return {
-        x: boardX + norm.x * boardSize,
-        y: boardY + norm.y * boardSize
+        ...state,
+        dice: [d1, d2],
+        diceUsed: [false, false],
+        waitingForRoll: false,
+        log: [...state.log, `Rolled [${d1}, ${d2}]`],
     };
 };
 
-export const LudoSkiaBoard = ({ onBoardPress, positions }) => {
-    const boardImage = useImage(boardImageSource);
-    const blueImage = useImage(blueImageSource);
-    const greenImage = useImage(greenImageSource);
-    const redImage = useImage(redImageSource);
-    const yellowImage = useImage(yellowImageSource);
+export interface MoveAction {
+    seedIndex: number;
+    diceIndices: number[];
+    targetPos: number;
+    isCapture: boolean;
+}
 
-    const { width } = useWindowDimensions();
-    const canvasWidth = width * 0.95;
-    const canvasHeight = canvasWidth;
+export const getValidMoves = (state: LudoGameState): MoveAction[] => {
+    if (state.waitingForRoll || state.winner) return [];
 
-    // Scale board to make room for outer images
-    // Using BOARD_SCALE constant
-    const boardSize = canvasWidth * BOARD_SCALE;
-    const margin = (canvasWidth - boardSize) / 2;
-    const boardX = margin;
-    const boardY = margin;
+    const player = state.players[state.currentPlayerIndex];
+    const moves: MoveAction[] = [];
 
-    const seedRadius = (boardSize / 15) * 0.35;
+    state.dice.forEach((die, dIdx) => {
+        if (state.diceUsed[dIdx]) return;
 
-    // Size for colored images attached to the ends
-    // Using SIDE_IMAGE_SCALE constant
-    const sideImageSize = canvasWidth * SIDE_IMAGE_SCALE;
+        player.seeds.forEach((seed, sIdx) => {
 
-    const seedsData = useMemo(() => {
-        const list: any[] = [];
-        Object.entries(positions).forEach(([playerId, seedPositions]) => {
-            const isP1 = playerId === 'p1';
-            const color = isP1 ? '#FF3B30' : '#FFCC00';
-            seedPositions.forEach((pos, index) => {
-                list.push({ id: `${playerId}-${index}`, playerId, seedSubIndex: index, currentPos: pos, color });
-            });
-        });
-        return list;
-    }, [positions]);
-
-    // Hit-test function to find which seed was tapped
-    const findTappedSeed = (tapX: number, tapY: number) => {
-        const hitRadius = seedRadius * 1.5; // Slightly larger for easier tapping
-
-        for (const seed of seedsData) {
-            const { x: seedX, y: seedY } = getSeedPixelPosition(
-                seed.currentPos,
-                seed.playerId,
-                seed.seedSubIndex,
-                boardX, boardY, boardSize
-            );
-
-            const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
-            if (distance <= hitRadius) {
-                return {
-                    playerId: seed.playerId,
-                    seedIndex: seed.seedSubIndex,
-                    position: seed.currentPos
-                };
+            // 1. Move out of House (Needs a 6)
+            if (seed.position === HOUSE_POS) {
+                if (die === 6) {
+                    moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: 0, isCapture: false });
+                }
+                return;
             }
-        }
-        return null;
-    };
 
-    const handleTap = (x: number, y: number) => {
-        const tappedSeed = findTappedSeed(x, y);
-        onBoardPress(x, y, tappedSeed);
-    };
+            // 2. Already Finished
+            if (seed.position === FINISH_POS) return;
 
-    if (!boardImage) return null;
+            // 3. Move on Track
+            const nextPos = seed.position + die;
 
-    return (
-        <GestureDetector gesture={Gesture.Tap().onEnd(({ x, y }) => runOnJS(handleTap)(x, y))}>
-            <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
-                <SkiaImage
-                    image={boardImage}
-                    x={boardX}
-                    y={boardY}
-                    width={boardSize}
-                    height={boardSize}
-                    fit="fill"
-                />
+            if (nextPos <= FINISH_POS) {
+                moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: nextPos, isCapture: false });
+            }
+        });
+    });
 
-                {/* 
-                  Color images positioned using COLOR_IMAGE_POSITIONS constant.
-                  This allows manual tweaking of positions.
-                */}
-
-                {/* RED */}
-                {redImage && (
-                    <SkiaImage
-                        image={redImage}
-                        x={COLOR_IMAGE_POSITIONS.red.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.red.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {/* GREEN */}
-                {greenImage && (
-                    <SkiaImage
-                        image={greenImage}
-                        x={COLOR_IMAGE_POSITIONS.green.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.green.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {/* YELLOW */}
-                {yellowImage && (
-                    <SkiaImage
-                        image={yellowImage}
-                        x={COLOR_IMAGE_POSITIONS.yellow.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.yellow.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {/* BLUE */}
-                {blueImage && (
-                    <SkiaImage
-                        image={blueImage}
-                        x={COLOR_IMAGE_POSITIONS.blue.x * canvasWidth - sideImageSize / 2}
-                        y={COLOR_IMAGE_POSITIONS.blue.y * canvasHeight - sideImageSize / 2}
-                        width={sideImageSize * 3}
-                        height={sideImageSize * 2.5}
-                        fit="contain"
-                    />
-                )}
-
-                {seedsData.map(s => (
-                    <AnimatedSeed
-                        key={s.id}
-                        {...s}
-                        boardX={boardX}
-                        boardY={boardY}
-                        boardSize={boardSize}
-                        radius={seedRadius}
-                    />
-                ))}
-            </Canvas>
-        </GestureDetector>
-    );
+    return moves;
 };
+
+export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState => {
+    const player = state.players[state.currentPlayerIndex];
+    const newDiceUsed = [...state.diceUsed];
+    move.diceIndices.forEach(idx => newDiceUsed[idx] = true);
+
+    const newPlayers = JSON.parse(JSON.stringify(state.players));
+    const activePlayer = newPlayers[state.currentPlayerIndex];
+    const targetSeed = activePlayer.seeds[move.seedIndex];
+
+    // Store old position for logging
+    const oldPosition = targetSeed.position;
+
+    // Set the new position for the moving seed
+    targetSeed.position = move.targetPos;
+
+    // --- CAPTURE LOGIC ---
+    // Only check for captures on the main track (positions 0-51), not in victory lane (52-57) or finish (58)
+    if (move.targetPos >= 0 && move.targetPos <= 51) {
+        const opponentIndex = (state.currentPlayerIndex + 1) % 2;
+        const opponent = newPlayers[opponentIndex];
+
+        // Get the physical coordinates of the capturing seed's target position
+        const { LudoBoardData } = require('./LudoCoordinates');
+        const activePlayerPath = LudoBoardData.getPathForColor(activePlayer.color);
+        const targetCoord = activePlayerPath[move.targetPos];
+
+        if (targetCoord) {
+            // Check each opponent seed
+            opponent.seeds.forEach((oppSeed: LudoSeed, oppSeedIdx: number) => {
+                // Skip seeds in house, finished, or in victory lane
+                if (oppSeed.position < 0 || oppSeed.position >= 52) return;
+
+                // Get opponent seed's physical coordinates
+                const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                const oppCoord = opponentPath[oppSeed.position];
+
+                if (oppCoord) {
+                    // Compare physical coordinates (with small tolerance for floating point)
+                    const tolerance = 0.01;
+                    const sameX = Math.abs(targetCoord.x - oppCoord.x) < tolerance;
+                    const sameY = Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+
+                    if (sameX && sameY) {
+                        console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${oppSeedIdx} at position ${oppSeed.position} (coords: ${oppCoord.x}, ${oppCoord.y})`);
+                        oppSeed.position = HOUSE_POS; // Send opponent seed back to house
+                    }
+                }
+            });
+        }
+    }
+
+    // Check Win
+    let winner = state.winner;
+    if (activePlayer.seeds.every((s: LudoSeed) => s.position === FINISH_POS)) {
+        winner = activePlayer.color;
+    }
+
+    // Turn Logic
+    let nextTurn = state.currentPlayerIndex;
+    let waiting = state.waitingForRoll;
+    let resetDice = newDiceUsed;
+
+    // If all dice are used:
+    if (resetDice.every(u => u)) {
+
+        // --- NEW RULE: ONLY 6 AND 6 GIVES ANOTHER TURN ---
+        const rolledDoubleSix = state.dice[0] === 6 && state.dice[1] === 6;
+
+        if (rolledDoubleSix && !winner) {
+            // BONUS TURN (Same Player)
+            waiting = true;
+            resetDice = [false, false];
+            // nextTurn remains current
+        } else {
+            // PASS TURN
+            nextTurn = (state.currentPlayerIndex + 1) % 2;
+            waiting = true;
+            resetDice = [false, false];
+        }
+    } else {
+        // STILL MOVING (One die remaining)
+        waiting = false;
+    }
+
+    return {
+        ...state,
+        players: newPlayers,
+        currentPlayerIndex: nextTurn,
+        diceUsed: resetDice,
+        waitingForRoll: waiting,
+        winner: winner,
+        log: [...state.log, `Moved seed`],
+    };
+};
+
+export const passTurn = (state: LudoGameState): LudoGameState => {
+    return {
+        ...state,
+        currentPlayerIndex: (state.currentPlayerIndex + 1) % 2,
+        waitingForRoll: true,
+        diceUsed: [false, false],
+        dice: [],
+        log: [...state.log, `Turn passed`],
+    };
+};       

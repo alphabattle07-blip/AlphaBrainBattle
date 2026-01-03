@@ -4,8 +4,8 @@ export interface LudoSeed {
     id: string;
     position: number;
     // -1 = House
-    // 0 - 57 = Active Path (Unique to the player color)
-    // 58 = Finished (Goal)
+    // 0 - 55 = Active Path (Unique to the player color)
+    // 56 = Finished (Goal)
 }
 
 export interface LudoPlayer {
@@ -25,7 +25,7 @@ export interface LudoGameState {
 }
 
 const HOUSE_POS = -1;
-const FINISH_POS = 58;
+const FINISH_POS = 56;
 
 export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColor = 'yellow'): LudoGameState => {
     return {
@@ -54,8 +54,8 @@ export const rollDice = (state: LudoGameState): LudoGameState => {
     if (!state.waitingForRoll) return state;
 
     // RANDOM DICE (Required for game to work)
-    const d1 = 5;
-    const d2 =1;
+    const d1 = 6;
+    const d2 = 56;
 
     return {
         ...state,
@@ -211,4 +211,4 @@ export const passTurn = (state: LudoGameState): LudoGameState => {
         dice: [],
         log: [...state.log, `Turn passed`],
     };
-};
+};       

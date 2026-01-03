@@ -76,7 +76,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
 }) => {
     const navigation = useNavigation();
     const [gameState, setGameState] = useState<LudoGameState>(
-        initialGameState ?? initializeGame()
+        initialGameState ?? initializeGame('blue', 'green')
     );
 
     const defaultPlayer = { name: "Player", country: "NG", rating: 1200, isAI: false };

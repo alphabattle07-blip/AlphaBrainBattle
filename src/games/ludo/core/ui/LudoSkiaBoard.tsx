@@ -31,10 +31,10 @@ const HOME_SEED_POSITIONS = {
         { x: 0.1090 + HOME_OFFSET, y: 0.009 + HOME_OFFSET },
     ],
     green: [
-        { x: 0.740 - HOME_OFFSET, y: 0.00000001 - HOME_OFFSET },
-        { x: 0.740 + HOME_OFFSET, y: 0.00000001 - HOME_OFFSET },
-        { x: 0.740 - HOME_OFFSET, y: 0.00000001 + HOME_OFFSET },
-        { x: 0.740 + HOME_OFFSET, y: 0.00000001 + HOME_OFFSET },
+        { x: 0.814 - HOME_OFFSET, y: 0.103 - HOME_OFFSET },
+        { x: 0.814 + HOME_OFFSET, y: 0.103 - HOME_OFFSET },
+        { x: 0.915 - HOME_OFFSET, y: 0.052 + HOME_OFFSET },
+        { x: 0.917 + HOME_OFFSET, y: 0.052 + HOME_OFFSET },
     ],
     yellow: [
         { x: 0.670 - HOME_OFFSET, y: 0.850 - HOME_OFFSET },
@@ -45,10 +45,10 @@ const HOME_SEED_POSITIONS = {
     blue: [
         // Tweaked Blue positions to be slightly better centered if needed
         // Keeping symmetrical for now, but editable
-        { x: 0.2690 - HOME_OFFSET, y: 0.9670 - HOME_OFFSET },
-        { x: 0.1700 + HOME_OFFSET, y: 0.9670 - HOME_OFFSET },
-        { x: 0.1700 - HOME_OFFSET, y: 0.9170 + HOME_OFFSET },
-        { x: 0.0680 + HOME_OFFSET, y: 0.9170 + HOME_OFFSET },
+        { x: 0.2490 - HOME_OFFSET, y: 0.9590 - HOME_OFFSET },
+        { x: 0.1500 + HOME_OFFSET, y: 0.9590 - HOME_OFFSET },
+        { x: 0.1500 - HOME_OFFSET, y: 0.9080 + HOME_OFFSET },
+        { x: 0.0480 + HOME_OFFSET, y: 0.9080 + HOME_OFFSET },
     ],
 };
 
@@ -79,8 +79,9 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
         if (stepIndex === -1) {
             const yardArr = LudoBoardData.yards[colorName];
             norm = yardArr[seedSubIndex % 4];
-        } else if (stepIndex >= 58) {
+        } else if (stepIndex >= 56) {
             // Use HOME_SEED_POSITIONS for home with sub-index
+            // This applies to index 56 (Center) and above
             const posArray = HOME_SEED_POSITIONS[colorName];
             const pos = posArray[seedSubIndex % 4];
             return {
@@ -112,7 +113,7 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, boardX, boardY, 
             return;
         }
 
-        if (oldPos === -1 || newPos >= 58) {
+        if (oldPos === -1 || newPos >= 56) {
             cx.value = withTiming(target.x, { duration: 400 });
             cy.value = withTiming(target.y, { duration: 400 });
             return;
@@ -155,7 +156,7 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
     if (seedPos === -1) {
         const yardArr = LudoBoardData.yards[colorName];
         norm = yardArr[seedSubIndex % 4];
-    } else if (seedPos >= 58) {
+    } else if (seedPos >= 56) {
         // Use HOME_SEED_POSITIONS for home with sub-index
         const posArray = HOME_SEED_POSITIONS[colorName];
         const pos = posArray[seedSubIndex % 4];
