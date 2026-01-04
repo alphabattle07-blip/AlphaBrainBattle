@@ -7,10 +7,10 @@ import LudoGameOver from "./LudoGameOver";
 
 const levels = [
     { label: "Apprentice (Easy)", value: 1, rating: 1250, reward: 10 },
-    { label: "Knight (Normal)", value: 2, rating: 1500, reward: 15 },
-    { label: "Warrior (Hard)", value: 3, rating: 1700, reward: 20 },
-    { label: "Master (Expert)", value: 4, rating: 1900, reward: 25 },
-    { label: "Alpha (Legend)", value: 5, rating: 2100, reward: 30 },
+    { label: "Knight (Normal)", value: 2, rating: 1700, reward: 15 },
+    { label: "Warrior (Hard)", value: 3, rating: 1900, reward: 20 },
+    { label: "Master (Expert)", value: 4, rating: 2000, reward: 25 },
+    { label: "Alpha (Legend)", value: 5, rating: 2250, reward: 30 },
 ];
 
 export default function LudoComputerUI() {

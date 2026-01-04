@@ -283,8 +283,8 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     // --- Dice Positioning Configuration ---
     // Normalized coordinates (0-1) relative to screen size
     const DICE_POS_CONFIG = {
-        blue: { x: 0.38, y: 0.710 },   // P1 (User) - Bottom Right
-        green: { x: 0.62, y: 0.216 },  // P2 (AI) - Top Left
+        blue: { x: 0.385, y: 0.770 },   // P1 (User) - Bottom Right
+        green: { x: 0.617, y: 0.276 },  // P2 (AI) - Top Left
         red: { x: 0.15, y: 0.85 },    // Placeholder
         yellow: { x: 0.85, y: 0.15 }  // Placeholder
     };

@@ -101,7 +101,28 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
             const nextPos = seed.position + die;
 
             if (nextPos <= FINISH_POS) {
-                moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: nextPos, isCapture: false });
+                // Check if this move is a capture
+                let isCapture = false;
+                if (nextPos >= 0 && nextPos <= 51) {
+                    const opponentIndex = (state.currentPlayerIndex + 1) % 2;
+                    const opponent = state.players[opponentIndex];
+                    const { LudoBoardData } = require('./LudoCoordinates');
+                    const activePlayerPath = LudoBoardData.getPathForColor(player.color);
+                    const targetCoord = activePlayerPath[nextPos];
+
+                    if (targetCoord) {
+                        isCapture = opponent.seeds.some(oppSeed => {
+                            if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
+                            const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                            const oppCoord = opponentPath[oppSeed.position];
+                            if (!oppCoord) return false;
+                            const tolerance = 0.01;
+                            return Math.abs(targetCoord.x - oppCoord.x) < tolerance &&
+                                Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+                        });
+                    }
+                }
+                moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: nextPos, isCapture });
             }
         });
     });
@@ -137,10 +158,10 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
         const targetCoord = activePlayerPath[move.targetPos];
 
         if (targetCoord) {
-            // Check each opponent seed
-            opponent.seeds.forEach((oppSeed: LudoSeed, oppSeedIdx: number) => {
+            // Check each opponent seed - find only the first one to capture
+            const capturedOpponentSeed = opponent.seeds.find((oppSeed: LudoSeed) => {
                 // Skip seeds in house, finished, or in victory lane
-                if (oppSeed.position < 0 || oppSeed.position >= 52) return;
+                if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
 
                 // Get opponent seed's physical coordinates
                 const opponentPath = LudoBoardData.getPathForColor(opponent.color);
@@ -151,22 +172,23 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
                     const tolerance = 0.01;
                     const sameX = Math.abs(targetCoord.x - oppCoord.x) < tolerance;
                     const sameY = Math.abs(targetCoord.y - oppCoord.y) < tolerance;
-
-                    if (sameX && sameY) {
-                        console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${oppSeedIdx} at position ${oppSeed.position} (coords: ${oppCoord.x}, ${oppCoord.y})`);
-                        oppSeed.position = HOUSE_POS; // Send opponent seed back to house
-                        oppSeed.landingPos = HOUSE_POS;
-
-                        // Calculate delay based on how many steps the capturing seed takes
-                        // HOUSE_POS (-1) -> 0 is 1 step, then targetPos steps
-                        const steps = oldPosition === HOUSE_POS ? 1 : Math.max(0, move.targetPos - oldPosition);
-                        // 200ms per tile (TILE_ANIMATION_DURATION)
-                        oppSeed.animationDelay = steps * 200;
-
-                        targetSeed.position = FINISH_POS; // AS PER AGGRESSIVE MODE: Capturing seed moves to finish!
-                    }
+                    return sameX && sameY;
                 }
+                return false;
             });
+
+            if (capturedOpponentSeed) {
+                console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${capturedOpponentSeed.id} at position ${capturedOpponentSeed.position}`);
+                capturedOpponentSeed.position = HOUSE_POS; // Send opponent seed back to house
+                capturedOpponentSeed.landingPos = HOUSE_POS;
+
+                // Calculate delay based on how many steps the capturing seed takes
+                const steps = oldPosition === HOUSE_POS ? 1 : Math.max(0, move.targetPos - oldPosition);
+                // 200ms per tile (TILE_ANIMATION_DURATION)
+                capturedOpponentSeed.animationDelay = steps * 200;
+
+                targetSeed.position = FINISH_POS; // AS PER AGGRESSIVE MODE: Capturing seed moves to finish!
+            }
         }
     }
 
