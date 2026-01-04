@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigation } from "@react-navigation/native";
 import { useWindowDimensions, View, StyleSheet, Text, TouchableOpacity, Alert } from "react-native";
 import { LudoSkiaBoard } from "./LudoSkiaBoard";
+import LudoPlayerProfile from "./LudoPlayerProfile";
+
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#222" },
@@ -20,7 +22,35 @@ const styles = StyleSheet.create({
         justifyContent: 'center'
     },
     diceRow: { flexDirection: 'row', gap: 5 },
-    rollPrompt: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 }
+    rollPrompt: { color: '#FFD700', fontWeight: 'bold', fontSize: 16 },
+    diceOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    rankIconOverlay: {
+        fontSize: 28,
+    },
+
+
+    // Whot-style Profile Arrangement
+    opponentUIContainer: {
+        position: 'absolute',
+        top: 40,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    playerUIContainer: {
+        position: 'absolute',
+        bottom: 50,
+        right: 20,
+        alignItems: 'flex-end',
+        zIndex: 10,
+    }
 });
 import {
     initializeGame,
@@ -32,38 +62,48 @@ import {
     MoveAction,
     passTurn
 } from "./LudoGameLogic"; // Adapting imports based on LudoGameLogic.ts
+import { getRankFromRating } from '../../../../utils/rank';
 import { getComputerMove } from "../../computer/LudoComputerLogic";
 import { Ludo3DDie } from "./Ludo3DDie";
 
-const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll }: { dice: number[], diceUsed: boolean[], onPress: () => void, waitingForRoll: boolean }) => (
+const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll, rankIcon }: { dice: number[], diceUsed: boolean[], onPress: () => void, waitingForRoll: boolean, rankIcon: string }) => (
     <TouchableOpacity
         style={styles.diceHouse}
         onPress={onPress}
         disabled={!waitingForRoll}
         activeOpacity={0.8}
     >
-        {waitingForRoll && dice.length === 0 ? (
-            <Text style={styles.rollPrompt}> ROLL</Text>
-        ) : (
-            <View style={styles.diceRow}>
-                {dice.map((d, i) => (
+        <View style={styles.diceRow}>
+            {dice.length > 0 ? (
+                dice.map((d, i) => (
                     <Ludo3DDie
                         key={i}
                         value={d}
                         size={35}
                         isUsed={diceUsed[i]}
                     />
-                ))}
+                ))
+            ) : (
+                // Placeholder to keep the house size consistent when empty
+                <View style={{ width: 35, height: 35 }} />
+            )}
+        </View>
+
+        {waitingForRoll && (
+            <View style={styles.diceOverlay}>
+                <Text style={styles.rankIconOverlay}>{rankIcon}</Text>
             </View>
         )}
     </TouchableOpacity>
 );
 
+
 type LudoGameProps = {
     initialGameState?: LudoGameState;
-    player?: { name: string; country?: string; rating?: number; isAI?: boolean };
-    opponent?: { name: string; country?: string; rating?: number; isAI?: boolean };
+    player?: { name: string; country?: string; rating?: number; isAI?: boolean; avatar?: string | null };
+    opponent?: { name: string; country?: string; rating?: number; isAI?: boolean; avatar?: string | null };
     onGameStatsUpdate?: (result: "win" | "loss" | "draw", newRating: number) => void;
+    onGameOver?: (winnerId: string) => void;
     level?: any; // Placeholder for AI level
 };
 
@@ -72,6 +112,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     player: propPlayer,
     opponent: propOpponent,
     onGameStatsUpdate,
+    onGameOver,
     level,
 }) => {
     const navigation = useNavigation();
@@ -79,8 +120,8 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
         initialGameState ?? initializeGame('blue', 'green')
     );
 
-    const defaultPlayer = { name: "Player", country: "NG", rating: 1200, isAI: false };
-    const defaultOpponent = { name: "Opponent", country: "US", rating: 1500, isAI: true };
+    const defaultPlayer = { name: "Player", country: "NG", rating: 1200, isAI: false, avatar: null as string | null };
+    const defaultOpponent = { name: "Opponent", country: "US", rating: 1500, isAI: true, avatar: null as string | null };
 
     const player = propPlayer ?? defaultPlayer;
     const opponent = propOpponent ?? defaultOpponent;
@@ -88,22 +129,53 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
 
     // --- Derived State for Board ---
     const boardPositions = useMemo(() => {
-        // Map gameState to { [playerId]: { pos: number, land: number, delay: number }[] }
-        const posMap: { [key: string]: { pos: number, land: number, delay: number }[] } = {};
-        gameState.players.forEach(p => {
-            posMap[p.id] = p.seeds.map(s => ({ pos: s.position, land: s.landingPos, delay: s.animationDelay || 0 }));
+        const posMap: { [key: string]: { pos: number, land: number, delay: number, isActive: boolean }[] } = {};
+
+        // Human player is at index 0 (p1)
+        const isHumanTurn = gameState.currentPlayerIndex === 0;
+        // Indicators only show:
+        // 1. If it's the human's turn
+        // 2. If the human has already rolled the dice
+        // 3. If there are dice values remaining to be used
+        const showHumanIndicators = isHumanTurn && !gameState.waitingForRoll && gameState.dice.length > 0 && !gameState.winner;
+
+        const currentValidMoves = showHumanIndicators ? getValidMoves(gameState) : [];
+
+        gameState.players.forEach((p, pIdx) => {
+            const isP1 = p.id === 'p1'; // P1 is the human
+
+            posMap[p.id] = p.seeds.map((s, idx) => {
+                // Determine if this specific seed could move with the current dice
+                const seedCanMove = showHumanIndicators && isP1 && currentValidMoves.some(m => m.seedIndex === idx);
+
+                return {
+                    pos: s.position,
+                    land: s.landingPos,
+                    delay: s.animationDelay || 0,
+                    isActive: !!seedCanMove
+                };
+            });
         });
         return posMap;
     }, [gameState]);
 
 
-    // --- Game Loop / AI ---
-    // (Simplified for now: Just standard turns)
     useEffect(() => {
         if (gameState.winner) {
-            Alert.alert("Game Over", `Winner: ${gameState.winner}`);
+            // Alert.alert("Game Over", `Winner: ${gameState.winner}`);
+            onGameOver?.(gameState.winner);
         }
-    }, [gameState.currentPlayerIndex, gameState.winner]);
+    }, [gameState.currentPlayerIndex, gameState.winner, onGameOver]);
+
+    // Calculate finished seeds for each player (score)
+    const p1Score = useMemo(() => gameState.players[0].seeds.filter(s => s.position === 56).length, [gameState.players[0].seeds]);
+    const p2Score = useMemo(() => gameState.players[1].seeds.filter(s => s.position === 56).length, [gameState.players[1].seeds]);
+
+    // Rank Icons for overlay
+    const playerRank = useMemo(() => getRankFromRating(player.rating || 1200) || { icon: '🌱' }, [player.rating]);
+    const opponentRank = useMemo(() => getRankFromRating(opponent.rating || 1500) || { icon: '🌱' }, [opponent.rating]);
+
+
 
     // --- Handlers ---
 
@@ -233,6 +305,18 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
 
     return (
         <View style={styles.container}>
+            {/* 1. Opponent Profile (Top) */}
+            <View style={styles.opponentUIContainer}>
+                <LudoPlayerProfile
+                    name={opponent.name}
+                    rating={opponent.rating || 1500}
+                    isAI={true}
+                    isActive={gameState.currentPlayerIndex === 1}
+                    color="#00FF00" // Green
+                    score={p2Score}
+                />
+            </View>
+
             {/* Game Board - Centered */}
             <View style={styles.boardContainer}>
                 <LudoSkiaBoard
@@ -241,7 +325,20 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 />
             </View>
 
+            {/* 2. Player Profile (Bottom Right) */}
+            <View style={styles.playerUIContainer}>
+                <LudoPlayerProfile
+                    name={player.name}
+                    rating={player.rating || 1200}
+                    isActive={gameState.currentPlayerIndex === 0}
+                    color="#0000FF" // Blue
+                    avatar={player.avatar}
+                    score={p1Score}
+                />
+            </View>
+
             {/* Dice Houses - Absolutely Positioned */}
+
 
             {/* Player 2 (Green) */}
             {gameState.currentPlayerIndex === 1 && !gameState.winner && (
@@ -251,6 +348,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                         diceUsed={gameState.diceUsed}
                         waitingForRoll={gameState.waitingForRoll}
                         onPress={handleRollDice}
+                        rankIcon={opponentRank.icon}
                     />
                 </View>
             )}
@@ -263,9 +361,11 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                         diceUsed={gameState.diceUsed}
                         waitingForRoll={gameState.waitingForRoll}
                         onPress={handleRollDice}
+                        rankIcon={playerRank.icon}
                     />
                 </View>
             )}
+
         </View>
     );
 };

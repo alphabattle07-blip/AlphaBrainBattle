@@ -7,7 +7,7 @@ import { setGameStats } from '../store/slices/gameStatsSlice';
 import { storage } from '../utils/storage';
 
 // Define the types for game IDs for better type safety
-export type GameID = 'ayo' | 'whot';
+export type GameID = 'ayo' | 'whot' | 'ludo';
 
 // CHANGED: The hook now accepts an optional gameId for general profile usage
 export const usePlayerProfile = (gameId?: GameID) => {

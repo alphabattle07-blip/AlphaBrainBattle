@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useRef } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSharedValue, withTiming, withSequence, withDelay, Easing, runOnJS, useDerivedValue } from 'react-native-reanimated';
+import { useSharedValue, withTiming, withSequence, withDelay, withRepeat, Easing, runOnJS, useDerivedValue } from 'react-native-reanimated';
 import { LudoBoardData } from './LudoCoordinates';
 
 const boardImageSource = require('../../../../assets/images/ludoBoard.png');
@@ -66,7 +66,7 @@ const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
 const BLUE_PATH = LudoBoardData.getPathForColor('blue');
 const GREEN_PATH = LudoBoardData.getPathForColor('green');
 
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, animationDelay, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, landingPos: number, animationDelay: number, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number }) => {
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, animationDelay, isActive, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, landingPos: number, animationDelay: number, isActive: boolean, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number }) => {
     const getTargetPixels = (stepIndex: number) => {
         let norm = { x: 0.5, y: 0.5 };
 
@@ -101,7 +101,21 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
     const cx = useSharedValue(target.x);
     const cy = useSharedValue(target.y);
     const scale = useSharedValue(1);
+    const pulse = useSharedValue(0);
     const prevPosRef = useRef(currentPos);
+
+    useEffect(() => {
+        if (isActive) {
+            pulse.value = withRepeat(
+                withTiming(1, { duration: 800, easing: Easing.inOut(Easing.quad) }),
+                -1,
+                true
+            );
+        } else {
+            // Cancel pulse INSTANTLY when not active
+            pulse.value = withTiming(0, { duration: 0 });
+        }
+    }, [isActive]);
 
     useEffect(() => {
         const oldPos = prevPosRef.current;
@@ -175,13 +189,27 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
 
     const transform = useDerivedValue(() => [{ scale: scale.value }]);
     const origin = useDerivedValue(() => ({ x: cx.value, y: cy.value }));
+    const indicatorScale = useDerivedValue(() => 1 + pulse.value * 0.4);
+    const indicatorOpacity = useDerivedValue(() => pulse.value);
 
     return (
-        <Group transform={transform} origin={origin}>
-            <Circle cx={cx} cy={cy} r={radius} color={color}>
-                <Paint style="stroke" strokeWidth={1.5} color="white" />
-                <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
-            </Circle>
+        <Group>
+            {/* Active Move Indicator */}
+            <Group opacity={indicatorOpacity}>
+                <Circle cx={cx} cy={cy} r={radius * 1.5} color={color}>
+                    <Paint style="stroke" strokeWidth={2} color={color} />
+                </Circle>
+                <Circle cx={cx} cy={cy} r={useDerivedValue(() => radius * (1.2 + pulse.value * 0.5))} color={color} opacity={useDerivedValue(() => (1 - pulse.value) * 0.5)}>
+                    <Paint style="stroke" strokeWidth={1} color={color} />
+                </Circle>
+            </Group>
+
+            <Group transform={transform} origin={origin}>
+                <Circle cx={cx} cy={cy} r={radius} color={color}>
+                    <Paint style="stroke" strokeWidth={1.5} color="white" />
+                    <Shadow dx={1} dy={2} blur={3} color="rgba(0,0,0,0.5)" />
+                </Circle>
+            </Group>
         </Group>
     );
 };
@@ -215,7 +243,7 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
     };
 };
 
-export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, positions: { [key: string]: { pos: number, land: number, delay: number }[] } }) => {
+export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, positions: { [key: string]: { pos: number, land: number, delay: number, isActive: boolean }[] } }) => {
     const boardImage = useImage(boardImageSource);
     const blueImage = useImage(blueImageSource);
     const greenImage = useImage(greenImageSource);
@@ -249,7 +277,7 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, 
             const color = isP1 ? '#007AFF' : '#34C759';
 
             // Cast seedPositions to array
-            (seedPositions as { pos: number, land: number, delay: number }[]).forEach((item, index) => {
+            (seedPositions as { pos: number, land: number, delay: number, isActive: boolean }[]).forEach((item, index) => {
                 list.push({
                     id: `${playerId}-${index}`,
                     playerId,
@@ -257,6 +285,7 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, 
                     currentPos: item.pos,
                     landingPos: item.land,
                     animationDelay: item.delay,
+                    isActive: item.isActive,
                     color,
                     colorName
                 });
