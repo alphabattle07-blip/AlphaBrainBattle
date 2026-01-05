@@ -4,6 +4,7 @@ import { Canvas, Image as SkiaImage, useImage, Circle, Group, Paint, Shadow } fr
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, withSequence, withDelay, withRepeat, Easing, runOnJS, useDerivedValue } from 'react-native-reanimated';
 import { LudoBoardData } from './LudoCoordinates';
+import { Path, Skia } from '@shopify/react-native-skia';
 
 const boardImageSource = require('../../../../assets/images/ludoBoard.png');
 const blueImageSource = require('../../../../assets/images/blue.png');
@@ -59,6 +60,14 @@ const SIDE_IMAGE_SCALE = 0.127; // Size of the side images relative to canvas (a
 const BOARD_IMAGE_WIDTH = 1024;
 const BOARD_IMAGE_HEIGHT = 1024;
 const TILE_ANIMATION_DURATION = 200;
+
+const SHIELD_PATH = "M 12 2 L 4 5 L 4 11 C 4 16.1 7.4 20.8 12 22 C 16.6 20.8 20 16.1 20 11 L 20 5 L 12 2 Z";
+
+// --- Shield Tuning Configuration ---
+const SHIELD_BASE_SCALE = (1024 / 15) / 2; // Base scale relative to tile size
+const SHIELD_USER_SCALE = 0.8;              // [USER EDITABLE] Adjust this to change shield size
+const SHIELD_OFFSET_X = 0;                  // [USER EDITABLE] Fine-tune horizontal position
+const SHIELD_OFFSET_Y = 0;                  // [USER EDITABLE] Fine-tune vertical position
 
 // Cache paths
 const RED_PATH = LudoBoardData.getPathForColor('red');
@@ -243,7 +252,7 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
     };
 };
 
-export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, positions: { [key: string]: { pos: number, land: number, delay: number, isActive: boolean }[] } }) => {
+export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress: any, positions: { [key: string]: { pos: number, land: number, delay: number, isActive: boolean }[] }, level?: number }) => {
     const boardImage = useImage(boardImageSource);
     const blueImage = useImage(blueImageSource);
     const greenImage = useImage(greenImageSource);
@@ -391,6 +400,28 @@ export const LudoSkiaBoard = ({ onBoardPress, positions }: { onBoardPress: any, 
                         fit="contain"
                     />
                 )}
+
+                {/* Shield Icons for lower levels */}
+                {(level === undefined || level < 3) && LudoBoardData.shieldPositions.map((pos, idx) => (
+                    <Group
+                        key={`shield-${idx}`}
+                        transform={[
+                            { translateX: boardX + pos.x * boardSize + SHIELD_OFFSET_X },
+                            { translateY: boardY + pos.y * boardSize + SHIELD_OFFSET_Y }
+                        ]}
+                    >
+                        {/* Nested group for scaling around the center (-12, -12 for a 24x24 path) */}
+                        <Group transform={[{ scale: (boardSize / 15 / 24) * SHIELD_USER_SCALE }]}>
+                            <Path
+                                path={SHIELD_PATH}
+                                color="rgba(255, 255, 255, 0.6)"
+                                transform={[{ translateX: -12 }, { translateY: -12 }]}
+                            >
+                                <Paint style="stroke" strokeWidth={2} color="rgba(0,0,0,0.3)" />
+                            </Path>
+                        </Group>
+                    </Group>
+                ))}
 
                 {seedsData.map(s => (
                     <AnimatedSeed

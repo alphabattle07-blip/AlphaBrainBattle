@@ -117,7 +117,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
 }) => {
     const navigation = useNavigation();
     const [gameState, setGameState] = useState<LudoGameState>(
-        initialGameState ?? initializeGame('blue', 'green')
+        initialGameState ?? initializeGame('blue', 'green', level || 2)
     );
 
     const defaultPlayer = { name: "Player", country: "NG", rating: 1200, isAI: false, avatar: null as string | null };
@@ -140,6 +140,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
         const showHumanIndicators = isHumanTurn && !gameState.waitingForRoll && gameState.dice.length > 0 && !gameState.winner;
 
         const currentValidMoves = showHumanIndicators ? getValidMoves(gameState) : [];
+        console.log("Derived State - showIndicators:", showHumanIndicators, "moves:", currentValidMoves.length, "level:", level || gameState.level);
 
         gameState.players.forEach((p, pIdx) => {
             const isP1 = p.id === 'p1'; // P1 is the human
@@ -322,6 +323,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 <LudoSkiaBoard
                     onBoardPress={handleBoardPress}
                     positions={boardPositions}
+                    level={level || gameState.level}
                 />
             </View>
 

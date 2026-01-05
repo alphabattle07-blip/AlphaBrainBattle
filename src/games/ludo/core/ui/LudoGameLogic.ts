@@ -24,12 +24,13 @@ export interface LudoGameState {
     waitingForRoll: boolean;
     winner: string | null;
     log: string[];
+    level: number;
 }
 
 const HOUSE_POS = -1;
 const FINISH_POS = 56;
 
-export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColor = 'yellow'): LudoGameState => {
+export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColor = 'yellow', level: number = 2): LudoGameState => {
     return {
         players: [
             {
@@ -49,22 +50,27 @@ export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColo
         waitingForRoll: true,
         winner: null,
         log: ['Game Started'],
+        level: level,
     };
 };
 
 export const rollDice = (state: LudoGameState): LudoGameState => {
     if (!state.waitingForRoll) return state;
 
+    //  const d1 = Math.floor(Math.random() * 6) + 1;
     // RANDOM DICE (Required for game to work)
-    const d1 = 6;
-    const d2 = 5;
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = state.level >= 3 ? (Math.floor(Math.random() * 6) + 1) : 0;
+
+    const dice = state.level >= 3 ? [d1, d2] : [d1];
+    const diceUsed = state.level >= 3 ? [false, false] : [false];
 
     return {
         ...state,
-        dice: [d1, d2],
-        diceUsed: [false, false],
+        dice,
+        diceUsed,
         waitingForRoll: false,
-        log: [...state.log, `Rolled [${d1}, ${d2}]`],
+        log: [...state.log, `Rolled [${dice.join(', ')}]`],
     };
 };
 
@@ -187,7 +193,10 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
                 // 200ms per tile (TILE_ANIMATION_DURATION)
                 capturedOpponentSeed.animationDelay = steps * 200;
 
-                targetSeed.position = FINISH_POS; // AS PER AGGRESSIVE MODE: Capturing seed moves to finish!
+                // AS PER AGGRESSIVE MODE: Capturing seed moves to finish! (Only for Warrior level and above)
+                if (state.level >= 3) {
+                    targetSeed.position = FINISH_POS;
+                }
             }
         }
     }
@@ -206,19 +215,21 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
     // If all dice are used:
     if (resetDice.every(u => u)) {
 
-        // --- NEW RULE: ONLY 6 AND 6 GIVES ANOTHER TURN ---
-        const rolledDoubleSix = state.dice[0] === 6 && state.dice[1] === 6;
+        // --- NEW RULE: ONLY 6 AND 6 GIVES ANOTHER TURN (Multi-die) ---
+        // --- OR ROLLED 6 (Single-die) ---
+        const rolledDoubleSix = state.level >= 3 && state.dice[0] === 6 && state.dice[1] === 6;
+        const rolledSingleSix = state.level < 3 && state.dice[0] === 6;
 
-        if (rolledDoubleSix && !winner) {
+        if ((rolledDoubleSix || rolledSingleSix) && !winner) {
             // BONUS TURN (Same Player)
             waiting = true;
-            resetDice = [false, false];
+            resetDice = state.level >= 3 ? [false, false] : [false];
             // nextTurn remains current
         } else {
             // PASS TURN
             nextTurn = (state.currentPlayerIndex + 1) % 2;
             waiting = true;
-            resetDice = [false, false];
+            resetDice = state.level >= 3 ? [false, false] : [false];
         }
     } else {
         // STILL MOVING (One die remaining)
@@ -241,8 +252,8 @@ export const passTurn = (state: LudoGameState): LudoGameState => {
         ...state,
         currentPlayerIndex: (state.currentPlayerIndex + 1) % 2,
         waitingForRoll: true,
-        diceUsed: [false, false],
+        diceUsed: state.level >= 3 ? [false, false] : [false],
         dice: [],
         log: [...state.log, `Turn passed`],
     };
-};       
+};
