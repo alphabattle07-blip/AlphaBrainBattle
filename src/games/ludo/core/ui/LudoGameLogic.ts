@@ -242,6 +242,7 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
         currentPlayerIndex: nextTurn,
         diceUsed: resetDice,
         waitingForRoll: waiting,
+        dice: waiting ? [] : state.dice,
         winner: winner,
         log: [...state.log, `Moved seed`],
     };
