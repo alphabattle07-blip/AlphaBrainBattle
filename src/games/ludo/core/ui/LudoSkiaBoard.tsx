@@ -75,8 +75,18 @@ const YELLOW_PATH = LudoBoardData.getPathForColor('yellow');
 const BLUE_PATH = LudoBoardData.getPathForColor('blue');
 const GREEN_PATH = LudoBoardData.getPathForColor('green');
 
-const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, animationDelay, isActive, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, landingPos: number, animationDelay: number, isActive: boolean, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number }) => {
-    const getTargetPixels = (stepIndex: number) => {
+const applyRadialOffset = (base: { x: number, y: number }, index: number, total: number, boardSize: number) => {
+    if (total <= 1) return base;
+    const offsetRadius = boardSize * 0.018; // ~1.8% of board size
+    const angle = (2 * Math.PI / total) * index - Math.PI / 2;
+    return {
+        x: base.x + Math.cos(angle) * offsetRadius,
+        y: base.y + Math.sin(angle) * offsetRadius
+    };
+};
+
+const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, animationDelay, isActive, boardX, boardY, boardSize, color, radius, colorName, canvasWidth, canvasHeight, stackIndex, stackSize }: { id: string, playerId: string, seedSubIndex: number, currentPos: number, landingPos: number, animationDelay: number, isActive: boolean, boardX: number, boardY: number, boardSize: number, color: string, radius: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number, stackIndex: number, stackSize: number }) => {
+    const getTargetPixels = (stepIndex: number, isFinal: boolean = false) => {
         let norm = { x: 0.5, y: 0.5 };
 
         // Select path based on colorName
@@ -90,7 +100,6 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
             norm = yardArr[seedSubIndex % 4];
         } else if (stepIndex >= 56) {
             // Use HOME_SEED_POSITIONS for home with sub-index
-            // This applies to index 56 (Center) and above
             const posArray = HOME_SEED_POSITIONS[colorName];
             const pos = posArray[seedSubIndex % 4];
             return {
@@ -100,13 +109,21 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
         } else {
             if (path[stepIndex]) norm = path[stepIndex];
         }
-        return {
+
+        const base = {
             x: boardX + norm.x * boardSize,
             y: boardY + norm.y * boardSize
         };
+
+        // Apply radial offset ONLY if it's the final target position on the main track (0-55)
+        if (isFinal && stepIndex >= 0 && stepIndex < 56) {
+            return applyRadialOffset(base, stackIndex, stackSize, boardSize);
+        }
+
+        return base;
     };
 
-    const target = getTargetPixels(currentPos);
+    const target = getTargetPixels(currentPos, true);
     const cx = useSharedValue(target.x);
     const cy = useSharedValue(target.y);
     const scale = useSharedValue(1);
@@ -170,8 +187,14 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
             steps.push(landingPos);
         }
 
-        const xSequence = steps.map(i => withTiming(getTargetPixels(i).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
-        const ySequence = steps.map(i => withTiming(getTargetPixels(i).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear }));
+        const xSequence = steps.map((i, idx) => {
+            const isLast = idx === steps.length - 1 && landingPos === newPos;
+            return withTiming(getTargetPixels(i, isLast).x, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear });
+        });
+        const ySequence = steps.map((i, idx) => {
+            const isLast = idx === steps.length - 1 && landingPos === newPos;
+            return withTiming(getTargetPixels(i, isLast).y, { duration: TILE_ANIMATION_DURATION, easing: Easing.linear });
+        });
 
         // Generate scale sequence for hopping
         const scaleSequence: any[] = [];
@@ -182,8 +205,8 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
 
         if (landingPos !== newPos) {
             // Capture! Add a jump to final position at the end of the sequence
-            xSequence.push(withTiming(getTargetPixels(newPos).x, { duration: 400, easing: Easing.out(Easing.quad) }));
-            ySequence.push(withTiming(getTargetPixels(newPos).y, { duration: 400, easing: Easing.out(Easing.quad) }));
+            xSequence.push(withTiming(getTargetPixels(newPos, true).x, { duration: 400, easing: Easing.out(Easing.quad) }));
+            ySequence.push(withTiming(getTargetPixels(newPos, true).y, { duration: 400, easing: Easing.out(Easing.quad) }));
 
             // Big Hop for victory jump
             scaleSequence.push(withTiming(1.5, { duration: 200, easing: Easing.out(Easing.quad) }));
@@ -194,7 +217,7 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
         cy.value = withSequence(...(ySequence as [any, ...any[]]));
         scale.value = withSequence(...(scaleSequence as [any, ...any[]]));
 
-    }, [currentPos, landingPos, animationDelay, boardX, boardY, boardSize]);
+    }, [currentPos, landingPos, animationDelay, boardX, boardY, boardSize, stackIndex, stackSize]);
 
     const transform = useDerivedValue(() => [{ scale: scale.value }]);
     const origin = useDerivedValue(() => ({ x: cx.value, y: cy.value }));
@@ -224,7 +247,7 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
 };
 
 // Helper to get pixel position for a seed
-const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number) => {
+const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: number, boardX: number, boardY: number, boardSize: number, colorName: 'red' | 'yellow' | 'blue' | 'green', canvasWidth: number, canvasHeight: number, stackIndex: number, stackSize: number) => {
     let path = RED_PATH;
     if (colorName === 'yellow') path = YELLOW_PATH;
     else if (colorName === 'blue') path = BLUE_PATH;
@@ -246,10 +269,16 @@ const getSeedPixelPosition = (seedPos: number, playerId: string, seedSubIndex: n
     } else {
         if (path[seedPos]) norm = path[seedPos];
     }
-    return {
+
+    const base = {
         x: boardX + norm.x * boardSize,
         y: boardY + norm.y * boardSize
     };
+
+    if (seedPos >= 0 && seedPos < 56) {
+        return applyRadialOffset(base, stackIndex, stackSize, boardSize);
+    }
+    return base;
 };
 
 export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress: any, positions: { [key: string]: { pos: number, land: number, delay: number, isActive: boolean }[] }, level?: number }) => {
@@ -279,14 +308,35 @@ export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress
 
     const seedsData = useMemo(() => {
         const list: any[] = [];
+        const positionGroups: { [key: string]: number[] } = {};
+
         Object.entries(positions).forEach(([playerId, seedPositions]) => {
             const isP1 = playerId === 'p1';
-            // P1 = Blue (User), P2 = Green (Computer)
             const colorName = isP1 ? 'blue' : 'green';
             const color = isP1 ? '#007AFF' : '#34C759';
+            const path = LudoBoardData.getPathForColor(colorName);
 
-            // Cast seedPositions to array
             (seedPositions as { pos: number, land: number, delay: number, isActive: boolean }[]).forEach((item, index) => {
+                let key = "";
+                if (item.pos === -1) {
+                    key = `yard-${colorName}-${index}`; // Unique key for yard slots
+                } else if (item.pos >= 56) {
+                    key = `home-${colorName}-${index}`; // Unique key for home slots
+                } else {
+                    const coord = path[item.pos];
+                    if (coord) {
+                        // Snap coordinates to group seeds on the same tile (Main Track)
+                        const snapX = Math.round(coord.x * 1000);
+                        const snapY = Math.round(coord.y * 1000);
+                        key = `${snapX},${snapY}`;
+                    } else {
+                        key = `unknown-${playerId}-${index}`;
+                    }
+                }
+
+                if (!positionGroups[key]) positionGroups[key] = [];
+                positionGroups[key].push(list.length);
+
                 list.push({
                     id: `${playerId}-${index}`,
                     playerId,
@@ -296,10 +346,21 @@ export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress
                     animationDelay: item.delay,
                     isActive: item.isActive,
                     color,
-                    colorName
+                    colorName,
+                    stackIndex: 0,
+                    stackSize: 1
                 });
             });
         });
+
+        // Assign stack indices and sizes for radial offset calculation
+        Object.values(positionGroups).forEach(indices => {
+            indices.forEach((listIdx, stackIdx) => {
+                list[listIdx].stackIndex = stackIdx;
+                list[listIdx].stackSize = indices.length;
+            });
+        });
+
         return list;
     }, [positions]);
 
@@ -314,7 +375,9 @@ export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress
                 seed.seedSubIndex,
                 boardX, boardY, boardSize,
                 seed.colorName,
-                canvasWidth, canvasHeight
+                canvasWidth, canvasHeight,
+                seed.stackIndex,
+                seed.stackSize
             );
 
             const distance = Math.sqrt(Math.pow(tapX - seedX, 2) + Math.pow(tapY - seedY, 2));
@@ -434,6 +497,8 @@ export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress
                         colorName={s.colorName}
                         canvasWidth={canvasWidth}
                         canvasHeight={canvasHeight}
+                        stackIndex={s.stackIndex}
+                        stackSize={s.stackSize}
                     />
                 ))}
             </Canvas>

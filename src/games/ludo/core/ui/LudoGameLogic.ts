@@ -85,29 +85,28 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
     if (state.waitingForRoll || state.winner) return [];
 
     const player = state.players[state.currentPlayerIndex];
-    const moves: MoveAction[] = [];
+    const singleMoves: MoveAction[] = [];
 
+    // 1. Generate all possible Single Die moves first
     state.dice.forEach((die, dIdx) => {
         if (state.diceUsed[dIdx]) return;
 
         player.seeds.forEach((seed, sIdx) => {
-
-            // 1. Move out of House (Needs a 6)
+            // A. Move out of House
             if (seed.position === HOUSE_POS) {
                 if (die === 6) {
-                    moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: 0, isCapture: false });
+                    singleMoves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: 0, isCapture: false });
                 }
                 return;
             }
 
-            // 2. Already Finished
+            // B. Already Finished
             if (seed.position === FINISH_POS) return;
 
-            // 3. Move on Track
+            // C. Move on Track
             const nextPos = seed.position + die;
-
             if (nextPos <= FINISH_POS) {
-                // Check if this move is a capture
+                // Check capture logic for single move
                 let isCapture = false;
                 if (nextPos >= 0 && nextPos <= 51) {
                     const opponentIndex = (state.currentPlayerIndex + 1) % 2;
@@ -117,12 +116,9 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
                     const targetCoord = activePlayerPath[nextPos];
 
                     if (targetCoord) {
-                        // Check if this is a safe tile (Shield) - only for level < 3
-                        const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => {
-                            const tolerance = 0.01;
-                            return Math.abs(pos.x - targetCoord.x) < tolerance &&
-                                Math.abs(pos.y - targetCoord.y) < tolerance;
-                        });
+                        const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => 
+                            Math.abs(pos.x - targetCoord.x) < 0.01 && Math.abs(pos.y - targetCoord.y) < 0.01
+                        );
 
                         if (!isSafeTile) {
                             isCapture = opponent.seeds.some(oppSeed => {
@@ -130,19 +126,78 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
                                 const opponentPath = LudoBoardData.getPathForColor(opponent.color);
                                 const oppCoord = opponentPath[oppSeed.position];
                                 if (!oppCoord) return false;
-                                const tolerance = 0.01;
-                                return Math.abs(targetCoord.x - oppCoord.x) < tolerance &&
-                                    Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+                                return Math.abs(targetCoord.x - oppCoord.x) < 0.01 &&
+                                       Math.abs(targetCoord.y - oppCoord.y) < 0.01;
                             });
                         }
                     }
                 }
-                moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: nextPos, isCapture });
+                singleMoves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: nextPos, isCapture });
             }
         });
     });
 
-    return moves;
+    // 2. CHECK FOR COMBINATION LOGIC
+    // We only combine if:
+    // a. We have 2 unused dice (implied level >= 3)
+    // b. Exactly ONE seed is capable of moving (meaning no other seed can use the "remaining" die)
+    const activeDiceCount = state.dice.filter((_, i) => !state.diceUsed[i]).length;
+    
+    if (activeDiceCount === 2) {
+        // Get unique seed indices that have valid moves
+        const movableSeedIndices = [...new Set(singleMoves.map(m => m.seedIndex))];
+
+        if (movableSeedIndices.length === 1) {
+            const seedIndex = movableSeedIndices[0];
+            const seed = player.seeds[seedIndex];
+
+            // EXCEPTION: If the seed is in the HOUSE, we do NOT combine (Move Out + Move is sequential, not atomic)
+            if (seed.position !== HOUSE_POS) {
+                
+                // Calculate Combined Move
+                const totalDiceValue = state.dice[0] + state.dice[1];
+                const combinedTarget = seed.position + totalDiceValue;
+
+                if (combinedTarget <= FINISH_POS) {
+                    // Recalculate Capture for the FINAL destination
+                    let isCapture = false;
+                    if (combinedTarget >= 0 && combinedTarget <= 51) {
+                         const opponentIndex = (state.currentPlayerIndex + 1) % 2;
+                         const opponent = state.players[opponentIndex];
+                         const { LudoBoardData } = require('./LudoCoordinates');
+                         const activePlayerPath = LudoBoardData.getPathForColor(player.color);
+                         const targetCoord = activePlayerPath[combinedTarget];
+
+                         if (targetCoord) {
+                            const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => 
+                                Math.abs(pos.x - targetCoord.x) < 0.01 && Math.abs(pos.y - targetCoord.y) < 0.01
+                            );
+                             if (!isSafeTile) {
+                                 isCapture = opponent.seeds.some(oppSeed => {
+                                     if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
+                                     const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                                     const oppCoord = opponentPath[oppSeed.position];
+                                     if(!oppCoord) return false;
+                                     return Math.abs(targetCoord.x - oppCoord.x) < 0.01 &&
+                                            Math.abs(targetCoord.y - oppCoord.y) < 0.01;
+                                 });
+                             }
+                         }
+                    }
+
+                    // Return ONLY the combined move (forces the player to move the full distance)
+                    return [{
+                        seedIndex: seedIndex,
+                        diceIndices: [0, 1], // Mark both dice as used
+                        targetPos: combinedTarget,
+                        isCapture: isCapture
+                    }];
+                }
+            }
+        }
+    }
+
+    return singleMoves;
 };
 
 export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState => {
