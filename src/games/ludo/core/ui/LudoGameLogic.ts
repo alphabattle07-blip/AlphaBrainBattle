@@ -117,15 +117,24 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
                     const targetCoord = activePlayerPath[nextPos];
 
                     if (targetCoord) {
-                        isCapture = opponent.seeds.some(oppSeed => {
-                            if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
-                            const opponentPath = LudoBoardData.getPathForColor(opponent.color);
-                            const oppCoord = opponentPath[oppSeed.position];
-                            if (!oppCoord) return false;
+                        // Check if this is a safe tile (Shield) - only for level < 3
+                        const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => {
                             const tolerance = 0.01;
-                            return Math.abs(targetCoord.x - oppCoord.x) < tolerance &&
-                                Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+                            return Math.abs(pos.x - targetCoord.x) < tolerance &&
+                                Math.abs(pos.y - targetCoord.y) < tolerance;
                         });
+
+                        if (!isSafeTile) {
+                            isCapture = opponent.seeds.some(oppSeed => {
+                                if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
+                                const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                                const oppCoord = opponentPath[oppSeed.position];
+                                if (!oppCoord) return false;
+                                const tolerance = 0.01;
+                                return Math.abs(targetCoord.x - oppCoord.x) < tolerance &&
+                                    Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+                            });
+                        }
                     }
                 }
                 moves.push({ seedIndex: sIdx, diceIndices: [dIdx], targetPos: nextPos, isCapture });
@@ -164,38 +173,47 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
         const targetCoord = activePlayerPath[move.targetPos];
 
         if (targetCoord) {
-            // Check each opponent seed - find only the first one to capture
-            const capturedOpponentSeed = opponent.seeds.find((oppSeed: LudoSeed) => {
-                // Skip seeds in house, finished, or in victory lane
-                if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
-
-                // Get opponent seed's physical coordinates
-                const opponentPath = LudoBoardData.getPathForColor(opponent.color);
-                const oppCoord = opponentPath[oppSeed.position];
-
-                if (oppCoord) {
-                    // Compare physical coordinates (with small tolerance for floating point)
-                    const tolerance = 0.01;
-                    const sameX = Math.abs(targetCoord.x - oppCoord.x) < tolerance;
-                    const sameY = Math.abs(targetCoord.y - oppCoord.y) < tolerance;
-                    return sameX && sameY;
-                }
-                return false;
+            // Check if this is a safe tile (Shield) - only for level < 3
+            const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => {
+                const tolerance = 0.01;
+                return Math.abs(pos.x - targetCoord.x) < tolerance &&
+                    Math.abs(pos.y - targetCoord.y) < tolerance;
             });
 
-            if (capturedOpponentSeed) {
-                console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${capturedOpponentSeed.id} at position ${capturedOpponentSeed.position}`);
-                capturedOpponentSeed.position = HOUSE_POS; // Send opponent seed back to house
-                capturedOpponentSeed.landingPos = HOUSE_POS;
+            if (!isSafeTile) {
+                // Check each opponent seed - find only the first one to capture
+                const capturedOpponentSeed = opponent.seeds.find((oppSeed: LudoSeed) => {
+                    // Skip seeds in house, finished, or in victory lane
+                    if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
 
-                // Calculate delay based on how many steps the capturing seed takes
-                const steps = oldPosition === HOUSE_POS ? 1 : Math.max(0, move.targetPos - oldPosition);
-                // 200ms per tile (TILE_ANIMATION_DURATION)
-                capturedOpponentSeed.animationDelay = steps * 200;
+                    // Get opponent seed's physical coordinates
+                    const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                    const oppCoord = opponentPath[oppSeed.position];
 
-                // AS PER AGGRESSIVE MODE: Capturing seed moves to finish! (Only for Warrior level and above)
-                if (state.level >= 3) {
-                    targetSeed.position = FINISH_POS;
+                    if (oppCoord) {
+                        // Compare physical coordinates (with small tolerance for floating point)
+                        const tolerance = 0.01;
+                        const sameX = Math.abs(targetCoord.x - oppCoord.x) < tolerance;
+                        const sameY = Math.abs(targetCoord.y - oppCoord.y) < tolerance;
+                        return sameX && sameY;
+                    }
+                    return false;
+                });
+
+                if (capturedOpponentSeed) {
+                    console.log(`CAPTURE! Player ${activePlayer.id} captured opponent seed ${capturedOpponentSeed.id} at position ${capturedOpponentSeed.position}`);
+                    capturedOpponentSeed.position = HOUSE_POS; // Send opponent seed back to house
+                    capturedOpponentSeed.landingPos = HOUSE_POS;
+
+                    // Calculate delay based on how many steps the capturing seed takes
+                    const steps = oldPosition === HOUSE_POS ? 1 : Math.max(0, move.targetPos - oldPosition);
+                    // 200ms per tile (TILE_ANIMATION_DURATION)
+                    capturedOpponentSeed.animationDelay = steps * 200;
+
+                    // AS PER AGGRESSIVE MODE: Capturing seed moves to finish! (Only for Warrior level and above)
+                    if (state.level >= 3) {
+                        targetSeed.position = FINISH_POS;
+                    }
                 }
             }
         }
@@ -217,10 +235,12 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
 
         // --- NEW RULE: ONLY 6 AND 6 GIVES ANOTHER TURN (Multi-die) ---
         // --- OR ROLLED 6 (Single-die) ---
+        // --- OR CAPTURE (Only for level 1 & 2) ---
         const rolledDoubleSix = state.level >= 3 && state.dice[0] === 6 && state.dice[1] === 6;
         const rolledSingleSix = state.level < 3 && state.dice[0] === 6;
+        const captureBonus = move.isCapture && state.level < 3;
 
-        if ((rolledDoubleSix || rolledSingleSix) && !winner) {
+        if ((rolledDoubleSix || rolledSingleSix || captureBonus) && !winner) {
             // BONUS TURN (Same Player)
             waiting = true;
             resetDice = state.level >= 3 ? [false, false] : [false];
