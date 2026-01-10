@@ -91,3 +91,19 @@ export const updateUserProfileAndGameStatsThunk = createAsyncThunk(
     }
   }
 );
+
+export const updateUserProfileThunk = createAsyncThunk(
+  'user/updateProfile',
+  async (updateData: Partial<api.UserProfile>, { getState, rejectWithValue }) => {
+    try {
+      const token = (getState() as RootState).auth.token;
+      if (!token) {
+        return rejectWithValue('No token found');
+      }
+      const updatedUser = await api.updateProfile(token, updateData);
+      return updatedUser;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);

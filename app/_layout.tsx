@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from '../src/navigation/RootNavigator';
 import { WalletProvider } from '../src/screens/wallet/WalletContext';
+import Toast from 'react-native-toast-message';
 
 function AppContent() {
     const dispatch = useDispatch<AppDispatch>();
@@ -32,6 +33,7 @@ function AppContent() {
             <WalletProvider>
                 <RootNavigator />
             </WalletProvider>
+            <Toast />
         </NavigationContainer>
     );
 }

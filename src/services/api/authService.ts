@@ -146,3 +146,19 @@ export const getProfile = async (token: string, userId?: string): Promise<UserPr
     throw new Error(error.response?.data?.error || "Failed to fetch profile. Your session may have expired.");
   }
 };
+
+export const updateProfile = async (
+  token: string,
+  updateData: Partial<UserProfile>
+): Promise<UserProfile> => {
+  try {
+    const response = await api.put<{ user: UserProfile }>("/auth/profile", updateData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data.user;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || "Failed to update profile.");
+  }
+};

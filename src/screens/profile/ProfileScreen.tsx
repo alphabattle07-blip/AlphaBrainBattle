@@ -18,8 +18,11 @@ import { fetchUserProfile } from '../../store/thunks/authThunks';
 import { fetchAllGameStatsThunk } from '../../store/thunks/gameStatsThunks';
 import { getFlagEmoji } from '../../utils/flags';
 import { getRankFromRating } from '../../utils/rank';
-import { ArrowLeft, User } from 'lucide-react-native';
+import { ArrowLeft, User, Camera } from 'lucide-react-native';
 import { UserProfile, GameStats } from '../../services/api/authService';
+import * as ImagePicker from 'expo-image-picker';
+import { updateUserProfileThunk } from '../../store/thunks/authThunks';
+import Toast from 'react-native-toast-message';
 
 type ProfileScreenProps = {
   isOwnProfile?: boolean;
@@ -38,7 +41,7 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   // --- REDUX STATE ---
   const { token } = useAppSelector((state) => state.auth);
   const { profile: reduxProfile, loading: userLoading, error: userError } = useAppSelector((state) => state.user);
-  
+
   // Game Stats from Redux (Slice)
   const { gameStats: reduxGameStats, loading: gameStatsLoading } = useAppSelector((state) => state.gameStats);
   const gameStatsArray = Object.values(reduxGameStats);
@@ -47,9 +50,14 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const [otherPlayerProfile, setOtherPlayerProfile] = useState<UserProfile | null>(null);
   const [otherPlayerLoading, setOtherPlayerLoading] = useState(false);
   const [otherPlayerError, setOtherPlayerError] = useState<string | null>(null);
-  
+
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // Cloudinary configuration (You should ideally move these to a .env or config file)
+  const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dq7ktyv9v/image/upload'; // Placeholder
+  const UPLOAD_PRESET = 'alpha_battle_presets'; // Placeholder
 
   const { userId } = route.params || {};
 
@@ -99,7 +107,7 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   };
 
   const playerToShow = isOwnProfile ? reduxProfile : otherPlayerProfile;
-  
+
   // Only show full loading screen if we have absolutely no data
   const isLoading = (isOwnProfile ? userLoading : otherPlayerLoading) && !playerToShow && !refreshing;
   const error = isOwnProfile ? userError : otherPlayerError;
@@ -113,7 +121,7 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   ];
 
   // --- RENDER PREPARATION ---
-  
+
   // MERGE STRATEGY: Try to find stats in the Redux Slice first. 
   // If not found (e.g. fetch failed), fall back to the `gameStats` array inside the Profile object.
   const profileEmbeddedStats = playerToShow?.gameStats || [];
@@ -121,21 +129,21 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const statsToRender = DEFAULT_GAMES.map(game => {
     // 1. Try Redux Slice
     let existingStat = gameStatsArray.find(stat => stat.gameId === game.id);
-    
+
     // 2. If missing, try Profile Embedded Stats (mapped to match interface)
     if (!existingStat) {
       const embedded = profileEmbeddedStats.find(s => s.gameId === game.id);
       if (embedded) {
         existingStat = {
-           id: embedded.id || `emb-${game.id}`,
-           gameId: embedded.gameId,
-           title: game.title,
-           wins: embedded.wins,
-           losses: embedded.losses,
-           draws: embedded.draws,
-           rating: embedded.rating,
-           createdAt: new Date().toISOString(),
-           updatedAt: new Date().toISOString(),
+          id: embedded.id || `emb-${game.id}`,
+          gameId: embedded.gameId,
+          title: game.title,
+          wins: embedded.wins,
+          losses: embedded.losses,
+          draws: embedded.draws,
+          rating: embedded.rating,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         } as GameStats;
       }
     }
@@ -164,6 +172,72 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const selectedGame = statsToRender.find((stat) => stat.gameId === selectedGameId);
   const totalRating = selectedGame ? selectedGame.rating : (playerToShow?.rating ?? 1000);
   const rank = getRankFromRating(totalRating);
+
+  const pickImage = async () => {
+    if (!isOwnProfile) return;
+
+    // Request permissions
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({
+        type: 'error',
+        text1: 'Permission Denied',
+        text2: 'Sorry, we need camera roll permissions to make this work!',
+      });
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      handleUpload(result.assets[0].uri);
+    }
+  };
+
+  const handleUpload = async (uri: string) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri,
+        type: 'image/jpeg',
+        name: 'profile.jpg',
+      } as any);
+      formData.append('upload_preset', UPLOAD_PRESET);
+
+      const response = await fetch(CLOUDINARY_URL, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.secure_url) {
+        await dispatch(updateUserProfileThunk({ avatar: data.secure_url })).unwrap();
+        Toast.show({
+          type: 'success',
+          text1: 'Success',
+          text2: 'Profile picture updated!',
+        });
+      } else {
+        throw new Error('Upload failed');
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Upload Failed',
+        text2: error.message || 'Something went wrong',
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // --- RENDER UI ---
 
@@ -206,11 +280,11 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
       </SafeAreaView>
     );
   }
-  
+
   if (!playerToShow) {
     return (
       <SafeAreaView style={styles.container}>
-        <ScrollView 
+        <ScrollView
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.centered}
         >
@@ -226,7 +300,7 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2E86DE" />
@@ -240,13 +314,28 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
         </View>
 
         <View style={styles.profileSection}>
-          {avatar ? (
-            <Image source={{ uri: avatar }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <User size={48} color="gray" />
-            </View>
-          )}
+          <TouchableOpacity
+            onPress={pickImage}
+            disabled={!isOwnProfile || uploading}
+            style={styles.avatarContainer}
+          >
+            {avatar ? (
+              <Image source={{ uri: avatar }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <User size={48} color="gray" />
+              </View>
+            )}
+            {isOwnProfile && (
+              <View style={styles.editBadge}>
+                {uploading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Camera size={16} color="#fff" />
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
           <Text style={styles.playerName}>{name}</Text>
           <Text style={styles.countryFlag}>{getFlagEmoji(country)}</Text>
 
@@ -274,22 +363,22 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
             ) : (
               <>
                 {statsToRender.map((s) => (
-                    <TouchableOpacity
-                      key={s.gameId}
-                      style={[
-                        styles.gameChip,
-                        selectedGameId === s.gameId && styles.selectedGameChip
-                      ]}
-                      onPress={() => setSelectedGameId(s.gameId)}
-                    >
-                      <Text style={[
-                        styles.gameChipText,
-                        selectedGameId === s.gameId && styles.selectedGameChipText
-                      ]}>
-                        {s.title}
-                      </Text>
-                    </TouchableOpacity>
-                  )
+                  <TouchableOpacity
+                    key={s.gameId}
+                    style={[
+                      styles.gameChip,
+                      selectedGameId === s.gameId && styles.selectedGameChip
+                    ]}
+                    onPress={() => setSelectedGameId(s.gameId)}
+                  >
+                    <Text style={[
+                      styles.gameChipText,
+                      selectedGameId === s.gameId && styles.selectedGameChipText
+                    ]}>
+                      {s.title}
+                    </Text>
+                  </TouchableOpacity>
+                )
                 )}
               </>
             )}
@@ -319,7 +408,7 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
             </View>
           </View>
         )}
-        
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -337,8 +426,22 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   headerText: { marginLeft: 12, fontSize: 20, fontWeight: '700' },
   profileSection: { alignItems: 'center', padding: 16 },
-  avatar: { width: 96, height: 96, borderRadius: 48, marginBottom: 8, borderWidth: 2, borderColor: '#E5E7EB' },
+  avatarContainer: { position: 'relative', marginBottom: 8 },
+  avatar: { width: 96, height: 96, borderRadius: 48, borderWidth: 2, borderColor: '#E5E7EB' },
   avatarPlaceholder: { backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#2E86DE',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
   playerName: { fontSize: 22, fontWeight: 'bold' },
   countryFlag: { marginTop: 4, fontSize: 18 },
   rankRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginTop: 12, backgroundColor: '#F3F4F6' },
