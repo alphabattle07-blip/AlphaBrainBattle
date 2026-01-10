@@ -47,16 +47,15 @@ const styles = StyleSheet.create({
     opponentUIContainer: {
         position: 'absolute',
         top: 40,
-        left: 0,
-        right: 0,
-        alignItems: 'center',
+        right: 20,
+        alignItems: 'flex-start',
         zIndex: 10,
     },
     playerUIContainer: {
         position: 'absolute',
         bottom: 50,
-        right: 20,
-        alignItems: 'flex-end',
+        left: 20,
+        alignItems: 'flex-start',
         zIndex: 10,
     }
 });
@@ -236,14 +235,14 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
 
     return (
         <View style={styles.container}>
-            {/* 1. Opponent Profile */}
+            {/* 1. Opponent Profile - Top-Right */}
             <View style={styles.opponentUIContainer}>
                 <LudoPlayerProfile
                     name={opponent.name}
                     rating={opponent.rating || 1500}
                     isAI={true}
                     isActive={gameState.currentPlayerIndex === 1}
-                    color="#00FF00"
+                    color="#34C759"
                     score={p2Score}
                 />
             </View>
@@ -257,13 +256,13 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 />
             </View>
 
-            {/* 2. Player Profile */}
+            {/* 2. Player Profile - Bottom-Left */}
             <View style={styles.playerUIContainer}>
                 <LudoPlayerProfile
                     name={player.name}
                     rating={player.rating || 1200}
                     isActive={gameState.currentPlayerIndex === 0}
-                    color="#0000FF"
+                    color="#007AFF"
                     avatar={player.avatar}
                     score={p1Score}
                 />

@@ -32,47 +32,50 @@ const LudoPlayerProfile: React.FC<LudoPlayerProfileProps> = ({
 
     return (
         <View style={[styles.container, isLandscape && styles.containerLandscape]}>
-            {/* 1. Player Name */}
-            <View style={styles.nameRow}>
+            {/* Row: Avatar + Score Badge */}
+            <View style={styles.avatarRow}>
+                <View style={styles.profileWrapper}>
+                    <View style={[
+                        styles.avatarContainer,
+                        isLandscape && styles.avatarContainerLandscape,
+                        isActive && { borderColor: '#FFD700', elevation: 15, shadowColor: '#FFD700' },
+                        !isActive && { borderColor: color }
+                    ]}>
+                        <Image source={{ uri: displayAvatar }} style={styles.avatar} />
+                    </View>
+
+                    {/* Score Badge (Seeds in Home) */}
+                    <View style={[styles.badge, isLandscape && styles.badgeLandscape]}>
+                        <Text style={[styles.badgeText, isLandscape && styles.badgeTextLandscape]}>
+                            {score}
+                        </Text>
+                    </View>
+                </View>
+            </View>
+
+            {/* Column: Name, Rank, Rating */}
+            <View style={styles.infoColumn}>
+                {/* Player Name */}
                 <Text style={[styles.playerName, isLandscape && styles.textLandscape]}>
                     {displayName}
                 </Text>
-                {isAI && (
-                    <Ionicons
-                        name="hardware-chip-outline"
-                        size={isLandscape ? 12 : 14}
-                        color="#0ff"
-                        style={{ marginLeft: 4 }}
-                    />
-                )}
-            </View>
 
-            {/* 2. Avatar + Score Badge */}
-            <View style={styles.profileWrapper}>
-                <View style={[
-                    styles.avatarContainer,
-                    isLandscape && styles.avatarContainerLandscape,
-                    isActive && { borderColor: '#FFD700', elevation: 15, shadowColor: '#FFD700' },
-                    !isActive && { borderColor: color }
-                ]}>
-                    <Image source={{ uri: displayAvatar }} style={styles.avatar} />
-                </View>
-
-                {/* Score Badge (Seeds in Home) */}
-                <View style={[styles.badge, isLandscape && styles.badgeLandscape]}>
-                    <Text style={[styles.badgeText, isLandscape && styles.badgeTextLandscape]}>
-                        {score}
-                    </Text>
-                </View>
-            </View>
-
-            {/* 3. Rating Info */}
-            <View style={styles.ratingContainer}>
-                <View style={styles.ratingRow}>
+                {/* Rank Label + AI Icon */}
+                <View style={styles.rankRow}>
                     <Text style={[styles.ratingName, isLandscape && styles.textSmallLandscape]}>
                         {rank.level}
                     </Text>
+                    {isAI && (
+                        <Ionicons
+                            name="hardware-chip-outline"
+                            size={isLandscape ? 10 : 12}
+                            color="#0ff"
+                            style={{ marginLeft: 4 }}
+                        />
+                    )}
                 </View>
+
+                {/* Rating Value */}
                 <Text style={[styles.ratingNumber, isLandscape && styles.textSmallLandscape]}>
                     {rating}
                 </Text>
@@ -83,12 +86,26 @@ const LudoPlayerProfile: React.FC<LudoPlayerProfileProps> = ({
 
 const styles = StyleSheet.create({
     container: {
+        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        width: 100,
+        justifyContent: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 65,
     },
     containerLandscape: {
         transform: [{ scale: 0.8 }],
+    },
+    avatarRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    infoColumn: {
+        marginLeft: 10,
+        alignItems: 'flex-start',
+    },
+    rankRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     nameRow: {
         flexDirection: 'row',
@@ -102,13 +119,11 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0, 0, 0, 0.75)',
         textShadowOffset: { width: -1, height: 1 },
         textShadowRadius: 2,
-        textAlign: 'center',
     },
     profileWrapper: {
         position: "relative",
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 2,
     },
     avatarContainer: {
         width: 60,
