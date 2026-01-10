@@ -181,7 +181,7 @@ const AnimatedSeed = ({ id, playerId, seedSubIndex, currentPos, landingPos, anim
 
         const steps = [];
         const diff = landingPos - oldPos;
-        if (diff > 0 && diff <= 6) {
+        if (diff > 0 && diff <= 12) {
             for (let i = oldPos + 1; i <= landingPos; i++) steps.push(i);
         } else {
             steps.push(landingPos);
