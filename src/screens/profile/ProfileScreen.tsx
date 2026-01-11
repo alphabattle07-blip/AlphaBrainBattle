@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Button,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useNavigation, NavigationProp, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,10 +19,14 @@ import { fetchUserProfile } from '../../store/thunks/authThunks';
 import { fetchAllGameStatsThunk } from '../../store/thunks/gameStatsThunks';
 import { getFlagEmoji } from '../../utils/flags';
 import { getRankFromRating } from '../../utils/rank';
-import { ArrowLeft, User, Camera } from 'lucide-react-native';
+import { ArrowLeft, User, Camera, LogOut } from 'lucide-react-native';
 import { UserProfile, GameStats } from '../../services/api/authService';
-import * as ImagePicker from 'expo-image-picker';
-import { updateUserProfileThunk } from '../../store/thunks/authThunks';
+import {
+  requestMediaLibraryPermissionsAsync,
+  launchImageLibraryAsync,
+  MediaTypeOptions
+} from 'expo-image-picker';
+import { updateUserProfileThunk, logoutUser } from '../../store/thunks/authThunks';
 import Toast from 'react-native-toast-message';
 
 type ProfileScreenProps = {
@@ -56,8 +61,8 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const [uploading, setUploading] = useState(false);
 
   // Cloudinary configuration (You should ideally move these to a .env or config file)
-  const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dq7ktyv9v/image/upload'; // Placeholder
-  const UPLOAD_PRESET = 'alpha_battle_presets'; // Placeholder
+  const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/daj1kuk7w/image/upload';
+  const UPLOAD_PRESET = 'alpha_battle_preset'; // You still need to create this in Cloudinary dashboard
 
   const { userId } = route.params || {};
 
@@ -173,11 +178,29 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
   const totalRating = selectedGame ? selectedGame.rating : (playerToShow?.rating ?? 1000);
   const rank = getRankFromRating(totalRating);
 
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: () => {
+            dispatch(logoutUser());
+            navigation.replace("Auth");
+          }
+        }
+      ]
+    );
+  };
+
   const pickImage = async () => {
     if (!isOwnProfile) return;
 
     // Request permissions
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Toast.show({
         type: 'error',
@@ -187,8 +210,8 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
       return;
     }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    let result = await launchImageLibraryAsync({
+      mediaTypes: MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.7,
@@ -409,6 +432,14 @@ export default function ProfileScreen({ isOwnProfile: propIsOwnProfile }: Profil
           </View>
         )}
 
+        {isOwnProfile && (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut size={20} color="#EF4444" />
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -467,4 +498,22 @@ const styles = StyleSheet.create({
   ratingBlock: { marginTop: 16, alignItems: 'center' },
   noGamesText: { fontSize: 16, color: '#6B7280', textAlign: 'center', padding: 20 },
   loadingText: { fontSize: 16, color: '#666', marginTop: 10 },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 30,
+    paddingVertical: 15,
+    marginHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    backgroundColor: '#FEF2F2',
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
 });

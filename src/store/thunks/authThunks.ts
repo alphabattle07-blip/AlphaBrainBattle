@@ -2,7 +2,7 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import * as api from '../../services/api/authService';
 import * as SecureStore from 'expo-secure-store';
-import { setToken } from '../slices/authSlice';
+import { setToken, logout } from '../slices/authSlice';
 import { RootState } from '../index'; // Import RootState
 
 // Thunk for user sign-in
@@ -43,16 +43,26 @@ export const loadToken = createAsyncThunk('auth/loadToken', async (_, { dispatch
       dispatch(setToken(token));
 
       // 2. Attempt to fetch the user profile to validate the token
-      // .unwrap() allows us to catch the error if the thunk is rejected
       await dispatch(fetchUserProfile(undefined)).unwrap();
+    } else {
+      // No token found, ensure we are logged out
+      dispatch(logout());
     }
   } catch (error: any) {
     console.log('Token invalid or expired during load:', error);
+    // 3. Clear bad token
+    dispatch(logoutUser());
+  }
+});
 
-    // 3. CRITICAL FIX: If fetching profile fails, the token is bad.
-    // Clear it and force logout immediately.
+// Thunk for handling logout
+export const logoutUser = createAsyncThunk('auth/logout', async (_, { dispatch }) => {
+  try {
     await SecureStore.deleteItemAsync('token');
-    // dispatch(logout()); // Commented out as logout is not imported
+  } catch (error) {
+    console.error('Error deleting token:', error);
+  } finally {
+    dispatch(logout());
   }
 });
 
