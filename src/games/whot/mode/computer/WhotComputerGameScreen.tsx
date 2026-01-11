@@ -764,6 +764,11 @@ const WhotComputerGameScreen = () => {
     setIsCardListReady(true);
   }, []);
 
+  const handleNewBattle = useCallback(() => {
+    setGame(null);
+    setSelectedLevel(null);
+  }, []);
+
   const handleRestart = useCallback(() => {
     if (selectedLevel) {
       const lvlValue = levels.find((l) => l.label === selectedLevel)?.value || 1;
@@ -1161,7 +1166,17 @@ const WhotComputerGameScreen = () => {
       <GameOverModal
         visible={!!game?.gameState.winner}
         winner={game?.gameState.winner || null}
-        onRestart={handleRestart}
+        onRematch={handleRestart}
+        onNewBattle={handleNewBattle}
+        level={computerLevel}
+        playerName={playerProfile.name}
+        opponentName={levels.find((l) => l.value === computerLevel)?.label.split(" ")[0] + " AI"}
+        playerRating={playerProfile.rating}
+        result={
+          game?.gameState.winner?.id === game?.gameState.players[0].id
+            ? "win"
+            : "loss"
+        }
       />
     </View>
   );
