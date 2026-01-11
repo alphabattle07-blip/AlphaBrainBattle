@@ -59,8 +59,8 @@ export const rollDice = (state: LudoGameState): LudoGameState => {
 
     //  const d1 = Math.floor(Math.random() * 6) + 1;
     // RANDOM DICE (Required for game to work)
-    const d1 = Math.floor(Math.random() * 6) + 1;
-    const d2 = state.level >= 3 ? (Math.floor(Math.random() * 6) + 1) : 0;
+    const d1 = 2;
+    const d2 = 2;
 
     const dice = state.level >= 3 ? [d1, d2] : [d1];
     const diceUsed = state.level >= 3 ? [false, false] : [false];
@@ -116,7 +116,7 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
                     const targetCoord = activePlayerPath[nextPos];
 
                     if (targetCoord) {
-                        const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => 
+                        const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) =>
                             Math.abs(pos.x - targetCoord.x) < 0.01 && Math.abs(pos.y - targetCoord.y) < 0.01
                         );
 
@@ -127,7 +127,7 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
                                 const oppCoord = opponentPath[oppSeed.position];
                                 if (!oppCoord) return false;
                                 return Math.abs(targetCoord.x - oppCoord.x) < 0.01 &&
-                                       Math.abs(targetCoord.y - oppCoord.y) < 0.01;
+                                    Math.abs(targetCoord.y - oppCoord.y) < 0.01;
                             });
                         }
                     }
@@ -142,7 +142,7 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
     // a. We have 2 unused dice (implied level >= 3)
     // b. Exactly ONE seed is capable of moving (meaning no other seed can use the "remaining" die)
     const activeDiceCount = state.dice.filter((_, i) => !state.diceUsed[i]).length;
-    
+
     if (activeDiceCount === 2) {
         // Get unique seed indices that have valid moves
         const movableSeedIndices = [...new Set(singleMoves.map(m => m.seedIndex))];
@@ -153,7 +153,7 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
 
             // EXCEPTION: If the seed is in the HOUSE, we do NOT combine (Move Out + Move is sequential, not atomic)
             if (seed.position !== HOUSE_POS) {
-                
+
                 // Calculate Combined Move
                 const totalDiceValue = state.dice[0] + state.dice[1];
                 const combinedTarget = seed.position + totalDiceValue;
@@ -162,27 +162,27 @@ export const getValidMoves = (state: LudoGameState): MoveAction[] => {
                     // Recalculate Capture for the FINAL destination
                     let isCapture = false;
                     if (combinedTarget >= 0 && combinedTarget <= 51) {
-                         const opponentIndex = (state.currentPlayerIndex + 1) % 2;
-                         const opponent = state.players[opponentIndex];
-                         const { LudoBoardData } = require('./LudoCoordinates');
-                         const activePlayerPath = LudoBoardData.getPathForColor(player.color);
-                         const targetCoord = activePlayerPath[combinedTarget];
+                        const opponentIndex = (state.currentPlayerIndex + 1) % 2;
+                        const opponent = state.players[opponentIndex];
+                        const { LudoBoardData } = require('./LudoCoordinates');
+                        const activePlayerPath = LudoBoardData.getPathForColor(player.color);
+                        const targetCoord = activePlayerPath[combinedTarget];
 
-                         if (targetCoord) {
-                            const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) => 
+                        if (targetCoord) {
+                            const isSafeTile = state.level < 3 && LudoBoardData.shieldPositions.some((pos: any) =>
                                 Math.abs(pos.x - targetCoord.x) < 0.01 && Math.abs(pos.y - targetCoord.y) < 0.01
                             );
-                             if (!isSafeTile) {
-                                 isCapture = opponent.seeds.some(oppSeed => {
-                                     if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
-                                     const opponentPath = LudoBoardData.getPathForColor(opponent.color);
-                                     const oppCoord = opponentPath[oppSeed.position];
-                                     if(!oppCoord) return false;
-                                     return Math.abs(targetCoord.x - oppCoord.x) < 0.01 &&
-                                            Math.abs(targetCoord.y - oppCoord.y) < 0.01;
-                                 });
-                             }
-                         }
+                            if (!isSafeTile) {
+                                isCapture = opponent.seeds.some(oppSeed => {
+                                    if (oppSeed.position < 0 || oppSeed.position >= 52) return false;
+                                    const opponentPath = LudoBoardData.getPathForColor(opponent.color);
+                                    const oppCoord = opponentPath[oppSeed.position];
+                                    if (!oppCoord) return false;
+                                    return Math.abs(targetCoord.x - oppCoord.x) < 0.01 &&
+                                        Math.abs(targetCoord.y - oppCoord.y) < 0.01;
+                                });
+                            }
+                        }
                     }
 
                     // Return ONLY the combined move (forces the player to move the full distance)
@@ -277,7 +277,7 @@ export const applyMove = (state: LudoGameState, move: MoveAction): LudoGameState
     // Check Win
     let winner = state.winner;
     if (activePlayer.seeds.every((s: LudoSeed) => s.position === FINISH_POS)) {
-        winner = activePlayer.color;
+        winner = activePlayer.id;
     }
 
     // Turn Logic

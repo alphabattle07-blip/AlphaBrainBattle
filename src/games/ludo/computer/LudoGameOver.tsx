@@ -16,7 +16,7 @@ const levels = [
 const BATTLE_BONUS = 15;
 
 interface LudoGameOverProps {
-    result: 'win' | 'loss' | 'draw';
+    result: 'win' | 'loss';
     level?: number;
     onRematch?: () => void;
     onNewBattle?: () => void;
@@ -39,7 +39,7 @@ const LudoGameOver: React.FC<LudoGameOverProps> = ({
     const dispatch = useAppDispatch();
     const isWin = result === 'win';
     const isLoss = result === 'loss';
-    const isDraw = result === 'draw';
+
 
     const [calculatedData, setCalculatedData] = useState<{
         levelReward: number;
@@ -95,17 +95,14 @@ const LudoGameOver: React.FC<LudoGameOverProps> = ({
     return (
         <View style={styles.overlay}>
             <View style={styles.container}>
-                {isWin && <Text style={styles.winText}>Victory!</Text>}
-                {isLoss && <Text style={styles.loseText}>Defeat!</Text>}
-                {isDraw && <Text style={styles.drawText}>Draw!</Text>}
+                {isWin && <Text style={styles.winText}>You Won!</Text>}
+                {isLoss && <Text style={styles.loseText}>You Lost!</Text>}
 
                 <Text style={styles.winnerText}>
-                    {isDraw
-                        ? `${playerName} and ${opponentName} tied`
-                        : `Winner: ${isWin ? playerName : opponentName}`}
+                    Winner: {isWin ? playerName : opponentName}
                 </Text>
 
-                {(isWin || isDraw) && (
+                {isWin && (
                     <View style={styles.rewardSection}>
                         <View style={styles.rewardRow}>
                             <Text style={styles.rewardLabel}>Battle Bonus</Text>
@@ -115,18 +112,16 @@ const LudoGameOver: React.FC<LudoGameOverProps> = ({
                             </Text>
                         </View>
 
-                        {isWin && (
-                            <View style={styles.rewardRow}>
-                                <Text style={styles.rewardLabel}>Level Reward</Text>
-                                <Text style={styles.rewardValue}>
-                                    <Ionicons name="trophy" size={16} color="#FFD700" /> +
-                                    {displayLevelReward} R-coin
-                                </Text>
-                            </View>
-                        )}
+                        <View style={styles.rewardRow}>
+                            <Text style={styles.rewardLabel}>Level Reward</Text>
+                            <Text style={styles.rewardValue}>
+                                <Ionicons name="trophy" size={16} color="#FFD700" /> +
+                                {displayLevelReward} R-coin
+                            </Text>
+                        </View>
 
                         <View style={styles.rewardRow}>
-                            <Text style={styles.rewardLabel}>New Rating</Text>
+                            <Text style={styles.rewardLabel}>Rapid Rating</Text>
                             <Text style={[styles.rewardValue, styles.totalRewardValue]}>
                                 <Ionicons name="medal" size={16} color="#FFD700" /> {displayNewRating}
                             </Text>
@@ -176,7 +171,6 @@ const styles = StyleSheet.create({
     },
     winText: { fontSize: 32, fontWeight: 'bold', color: '#4CAF50' },
     loseText: { fontSize: 32, fontWeight: 'bold', color: '#F44336' },
-    drawText: { fontSize: 32, fontWeight: 'bold', color: '#FFD700' },
     winnerText: {
         fontSize: 18,
         color: '#FFFFFF',
