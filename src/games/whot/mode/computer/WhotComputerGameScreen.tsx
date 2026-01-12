@@ -24,7 +24,15 @@ import AnimatedCardList, {
 } from "../core/ui/AnimatedCardList";
 import MemoizedBackground from "../core/ui/MemoizedBackground";
 import WhotSuitSelector from "../core/ui/WhotSuitSelector";
-import { executeForcedDraw, getReshuffledState, initGame, pickCard, playCard } from "../core/game";
+import {
+  calculateHandScore,
+  executeForcedDraw,
+  finalizeMarketExhaustion,
+  getReshuffledState,
+  initGame,
+  pickCard,
+  playCard,
+} from "../core/game";
 import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
@@ -48,7 +56,7 @@ const WhotComputerGameScreen = () => {
   const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } =
     useWhotFonts();
   const playerProfile = usePlayerProfile("whot");
-
+  const [gameInstanceId, setGameInstanceId] = useState(0);
   // ✅ STABLE DIMENSIONS
   const [stableWidth, setStableWidth] = useState(width);
   const [stableHeight, setStableHeight] = useState(height);
@@ -597,6 +605,7 @@ const WhotComputerGameScreen = () => {
       }
     }
 
+
     // 2. LOGIC PICK
     const oldState = logicalState;
     const { newState: stateAfterPick, drawnCards } = pickCard(oldState, 0);
@@ -759,9 +768,13 @@ const WhotComputerGameScreen = () => {
     setIsAnimating(false);
   }, []);
 
-  const onCardListReady = useCallback(() => {
-    console.log("✅ Card list ready!");
-    setIsCardListReady(true);
+const onCardListReady = useCallback(() => {
+    console.log("✅ Card list reported ready. Waiting for ref binding...");
+    
+    // ✅ FIX: Small delay ensures cardListRef.current is attached before we try to deal
+    setTimeout(() => {
+      setIsCardListReady(true);
+    }, 100);
   }, []);
 
   const handleNewBattle = useCallback(() => {
@@ -769,10 +782,23 @@ const WhotComputerGameScreen = () => {
     setSelectedLevel(null);
   }, []);
 
-  const handleRestart = useCallback(() => {
+const handleRestart = useCallback(() => {
     if (selectedLevel) {
       const lvlValue = levels.find((l) => l.label === selectedLevel)?.value || 1;
-      initializeGame(lvlValue);
+      
+      // 1. Force new ID
+      setGameInstanceId((prev) => prev + 1);
+
+      // 2. Reset flags explicitly
+      setGame(null); 
+      setAllCards([]); 
+      setIsAnimating(false);
+      setHasDealt(false);
+      setIsCardListReady(false); // ✅ Reset this too!
+
+      setTimeout(() => {
+        initializeGame(lvlValue);
+      }, 100);
     }
   }, [selectedLevel, initializeGame]);
 
@@ -790,6 +816,25 @@ const WhotComputerGameScreen = () => {
     };
     revealCards();
   }, [game?.gameState.winner]);
+
+  // ✅ LISTEN FOR MARKET EXHAUSTION
+  useEffect(() => {
+    if (game?.gameState.marketExhausted) {
+      console.log("⏳ MARKET EXHAUSTED DETECTED! Starting delay...");
+      console.log("Current Winner in State:", game.gameState.winner);
+
+      const timer = setTimeout(() => {
+        setGame((prev) => {
+          if (!prev) return null;
+          console.log("🏁 Timeout finished. Calling finalizeMarketExhaustion.");
+          const finalState = finalizeMarketExhaustion(prev.gameState);
+          return { ...prev, gameState: finalState };
+        });
+      }, 4000); // 4 seconds delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [game?.gameState.marketExhausted]);
 
   const handlePlayCard = useCallback(
     async (card: Card) => {
@@ -918,27 +963,46 @@ const WhotComputerGameScreen = () => {
     handleComputerTurn,
   ]);
 
-  useEffect(() => {
+ useEffect(() => {
+    // 🔍 DEBUGGING: Check conditions
+    if (isCardListReady && !hasDealt && isAnimating) {
+        console.log("👀 Checking Deal Conditions:", {
+            ready: isCardListReady,
+            ref: !!cardListRef.current,
+            game: !!game,
+            hasDealt,
+            animating: isAnimating
+        });
+    }
+
     if (
       !isCardListReady ||
       !cardListRef.current ||
       !game ||
       hasDealt ||
       !isAnimating
-    )
+    ) {
       return;
+    }
+
     const dealer = cardListRef.current;
     let isMounted = true;
+
     const dealSmoothly = async () => {
       console.log("🎴 Starting smooth deal...");
       const { players, pile } = game.gameState;
       const playerHand = players[0].hand;
       const computerHand = players[1].hand;
+      
+      // ... (Rest of your existing dealing logic remains the same) ...
+      
       const computerHandSize = computerHand.length;
       const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
       const hiddenPlayerHand = playerHand.slice(playerHandLimit);
       const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
       const dealDelay = 150;
+      
+      // 1. Deal Computer
       for (let i = 0; i < computerHandSize; i++) {
         if (!isMounted) return;
         const computerCard = computerHand[i];
@@ -952,6 +1016,8 @@ const WhotComputerGameScreen = () => {
           await delay(dealDelay);
         }
       }
+
+      // 2. Deal Player
       for (let i = 0; i < visiblePlayerHand.length; i++) {
         if (!isMounted) return;
         const playerCard = visiblePlayerHand[i];
@@ -965,16 +1031,23 @@ const WhotComputerGameScreen = () => {
           await delay(dealDelay);
         }
       }
+
+      // 3. Hidden cards to market
       for (const card of hiddenPlayerHand) {
         if (!isMounted) return;
         if (card) dealer.dealCard(card, "market", { cardIndex: 0 }, true);
       }
+      
+      // 4. Pile
       for (const pileCard of pile) {
         if (pileCard)
           await dealer.dealCard(pileCard, "pile", { cardIndex: 0 }, false);
       }
+
       await delay(500);
       if (!isMounted) return;
+
+      // 5. Flip
       const flipPromises: Promise<void>[] = [];
       visiblePlayerHand.forEach((card) => {
         if (card) flipPromises.push(dealer.flipCard(card, true));
@@ -982,13 +1055,15 @@ const WhotComputerGameScreen = () => {
       const topPileCard = pile[pile.length - 1];
       if (topPileCard) flipPromises.push(dealer.flipCard(topPileCard, true));
       await Promise.all(flipPromises);
+
       console.log("✅ Deal complete.");
       if (isMounted) {
         setHasDealt(true);
         setIsAnimating(false);
       }
     };
-    const timerId = setTimeout(dealSmoothly, 0);
+
+    const timerId = setTimeout(dealSmoothly, 100); // Small start delay
     return () => {
       isMounted = false;
       clearTimeout(timerId);
@@ -1098,7 +1173,26 @@ const WhotComputerGameScreen = () => {
 
       <MemoizedBackground width={stableWidth} height={stableHeight} />
       <View style={computerHandStyle} />
+
+      {/* ✅ MOVED SCORE CONTAINERS OUTSIDE TO AVOID CLIPPING */}
+      {game?.gameState.marketExhausted && (
+        <View style={styles.scoreContainerComputer}>
+          <Text style={styles.scoreText}>
+            Score: {calculateHandScore(game.gameState.players[1].hand)}
+          </Text>
+        </View>
+      )}
+
       <View style={playerHandStyle} />
+
+      {/* ✅ MOVED SCORE CONTAINERS OUTSIDE TO AVOID CLIPPING */}
+      {game?.gameState.marketExhausted && (
+        <View style={styles.scoreContainerPlayer}>
+          <Text style={styles.scoreText}>
+            Score: {calculateHandScore(game.gameState.players[0].hand)}
+          </Text>
+        </View>
+      )}
 
       <View
         style={[
@@ -1135,6 +1229,7 @@ const WhotComputerGameScreen = () => {
       )}
       {allCards.length > 0 && stableFont && stableWhotFont && (
         <AnimatedCardList
+          key={gameInstanceId}
           ref={cardListRef}
           cardsInPlay={allCards}
           playerHandIdsSV={playerHandIdsSV}
@@ -1282,5 +1377,38 @@ const styles = StyleSheet.create({
 
   rightPagingButton: {
     marginRight: "3%",
+  },
+
+  // ✅ UPDATED STYLES FOR SCORE DISPLAY
+  scoreContainerComputer: {
+    position: "absolute",
+    top: 100, // Fixed position relative to screen, not hand
+    left: "50%",
+    transform: [{ translateX: -40 }], // Center horizontally roughly
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#FFD700",
+    zIndex: 999, // Ensure on top
+  },
+  scoreContainerPlayer: {
+    position: "absolute",
+    bottom: 150, // Fixed position relative to screen
+    left: "50%",
+    transform: [{ translateX: -40 }],
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#FFD700",
+    zIndex: 999, // Ensure on top
+  },
+  scoreText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
   },
 });

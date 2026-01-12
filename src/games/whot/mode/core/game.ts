@@ -19,7 +19,7 @@ import {
  * Calculates the total score of a hand (Sum of card numbers).
  * WHOT (20) counts as 20.
  */
-const calculateHandScore = (hand: Card[]): number => {
+export const calculateHandScore = (hand: Card[]): number => {
   return hand.reduce((total, card) => total + card.number, 0);
 };
 
@@ -27,8 +27,28 @@ const calculateHandScore = (hand: Card[]): number => {
  * Handles the Game Over state when the Market is empty in Rule 2.
  * The player with the LOWEST score wins.
  */
-const determineMarketExhaustionWinner = (state: GameState): GameState => {
-  console.log("🚫 Market Empty in Rule 2! Calculating scores...");
+
+/**
+ * Triggers the "Market Exhausted" state in Rule 2.
+ * This pauses the game to show scores before declaring a winner.
+ */
+const triggerMarketExhaustion = (state: GameState): GameState => {
+  console.log("🚫 Market Empty in Rule 2! Triggering score display...");
+
+  return {
+    ...state,
+    marketExhausted: true, // Triggers UI to show scores
+    pendingAction: null, // Stop all actions
+    currentPlayer: -1, // Lock turns
+  };
+};
+
+/**
+ * FINALIZES the game after the score display delay.
+ * Calculates scores and declares the winner.
+ */
+export const finalizeMarketExhaustion = (state: GameState): GameState => {
+  console.log("🏁 Finalizing Market Exhaustion... Calculating scores.");
 
   // Calculate scores for all players
   const playersWithScores = state.players.map((p) => ({
@@ -46,11 +66,11 @@ const determineMarketExhaustionWinner = (state: GameState): GameState => {
 
   return {
     ...state,
+    marketExhausted: false, // Turn off the flag (optional due to winner trigger)
     winner: winner, // This triggers the Game Over modal
-    pendingAction: null, // Stop all actions
-    currentPlayer: -1, // Lock turns
   };
 };
+
 
 const reshufflePileIntoMarket = (
   pile: Card[],
@@ -205,7 +225,7 @@ export const pickCard = (
 
     // Case B: Market Already Empty (User clicked empty slot)
     if (market.length === 0) {
-      const endGameState = determineMarketExhaustionWinner(state);
+      const endGameState = triggerMarketExhaustion(state);
       return { newState: endGameState, drawnCards: [] };
     }
 
@@ -235,7 +255,7 @@ export const pickCard = (
     // ✅ CHECK IF MARKET BECAME EMPTY AFTER DRAWING
     if (market.length === 0) {
       console.log("⚡ Market just ran out after pick! Ending game...");
-      const endGameState = determineMarketExhaustionWinner(stateWithCardDrawn);
+      const endGameState = triggerMarketExhaustion(stateWithCardDrawn);
       return { newState: endGameState, drawnCards };
     }
 
@@ -243,7 +263,7 @@ export const pickCard = (
   }
 
   // --- Rule 1 Logic ---
- if (
+  if (
     pendingAction?.type === "defend" &&
     pendingAction.playerIndex === playerIndex
   ) {
@@ -255,9 +275,9 @@ export const pickCard = (
         ...pendingAction,
         type: "draw", // Switch type
         // Preserve count, playerIndex, and returnTurnTo
-      } as any, 
+      } as any,
     };
-    
+
     // We return drawnCards as empty [] because the UI's 
     // runForcedDrawSequence will handle the actual drawing animation.
     return { newState, drawnCards: [] };
@@ -386,7 +406,7 @@ export const executeForcedDraw = (
       ),
     };
 
-    const endGameState = determineMarketExhaustionWinner(tempState);
+    const endGameState = triggerMarketExhaustion(tempState);
     return { newState: endGameState, drawnCard };
   }
 
