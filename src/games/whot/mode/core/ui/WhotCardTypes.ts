@@ -12,5 +12,3 @@ export interface AnimatedCard extends Card {
   initialIndex: number; // Not used in whotCard.ts, but good to have
 }
 
-export const CARD_WIDTH = 80;
-export const CARD_HEIGHT = 120;

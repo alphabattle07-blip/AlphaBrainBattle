@@ -6,5 +6,5 @@
  * All layout calculations (coordinateHelper, styles, etc.)
  * should import from this file to stay consistent.
  */
-export const CARD_WIDTH = 75;
-export const CARD_HEIGHT = 110;
+export const CARD_WIDTH = 60;
+export const CARD_HEIGHT = 90;
