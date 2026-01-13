@@ -61,7 +61,7 @@ const EmptyMarketPlaceholder = memo(() => {
         r={8} // Border Radius
         color="rgba(255, 255, 255, 0.3)" // Semi-transparent white
         style="stroke"
-        strokeWidth={2}
+        strokeWidth={1.5}
       >
         <DashPathEffect intervals={[10, 10]} />
       </RoundedRect>

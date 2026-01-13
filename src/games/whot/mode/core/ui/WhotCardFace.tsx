@@ -14,7 +14,7 @@ interface RenderShapeProps {
 const RenderShape = ({ suit, cx, cy, size }: RenderShapeProps) => {
   const suitColor = '#A22323';
   switch (suit) {
-    case 'circle': 
+    case 'circle':
       return <Circle cx={cx} cy={cy} r={size / 2} color={suitColor} />;
     case 'triangle': {
       const path = Skia.Path.Make();
@@ -34,7 +34,7 @@ const RenderShape = ({ suit, cx, cy, size }: RenderShapeProps) => {
         </Group>
       );
     }
-    case 'square': 
+    case 'square':
       return <Rect x={cx - size / 2} y={cy - size / 2} width={size} height={size} color={suitColor} />;
     case 'star': {
       const path = Skia.Path.Make();
@@ -49,7 +49,7 @@ const RenderShape = ({ suit, cx, cy, size }: RenderShapeProps) => {
       path.close();
       return <Path path={path} color={suitColor} />;
     }
-    default: 
+    default:
       return null;
   }
 };
@@ -69,39 +69,39 @@ export const WhotCardFace = ({ suit, number, width, height, font, whotFont }: Wh
   const cardSuit = suit as CardSuit;
   const cardStr = number ? String(number) : '';
 
-  const cornerRadius = 10;
-  const padding = 10;
+  const cornerRadius = 8;
+  const padding = 8;
   const textWidth = font.getTextWidth(cardStr);
   const cx = width / 2;
   const cy = height / 2;
-  const numberY = padding + 13;
-  const smallShapeSize = 14;
+  const numberY = padding + 10;
+  const smallShapeSize = 11;
   const smallShapeCX = padding + textWidth / 2;
-  const smallShapeCY = numberY + 4 + (smallShapeSize / 2);
+  const smallShapeCY = numberY + 3 + (smallShapeSize / 2);
 
   return (
     <Group>
       <RoundedRect x={0} y={0} width={width} height={height} r={cornerRadius} color="#FFFFFF" />
-      <RoundedRect x={1} y={1} width={width - 2} height={height - 2} r={cornerRadius} color="#A22323" style="stroke" strokeWidth={2} />
-      
+      <RoundedRect x={1} y={1} width={width - 2} height={height - 2} r={cornerRadius} color="#A22323" style="stroke" strokeWidth={1.5} />
+
       {cardSuit === 'whot' ? (
-        <Text 
-          x={cx - whotFont.getTextWidth('WHOT?') / 2} 
-          y={cy + whotFont.getSize() / 2} 
-          text="WHOT" 
-          font={whotFont} 
-          color="#A22323" 
+        <Text
+          x={cx - whotFont.getTextWidth('WHOT?') / 2}
+          y={cy + whotFont.getSize() / 2}
+          text="WHOT"
+          font={whotFont}
+          color="#A22323"
         />
       ) : (
         <>
           <Text x={padding} y={numberY} text={cardStr} font={font} color="#A22323" />
           <RenderShape suit={cardSuit} cx={smallShapeCX} cy={smallShapeCY} size={smallShapeSize} />
-          
+
           <Group origin={{ x: width / 2, y: height / 2 }} transform={[{ rotate: Math.PI }]}>
             <Text x={padding} y={numberY} text={cardStr} font={font} color="#A22323" />
             <RenderShape suit={cardSuit} cx={smallShapeCX} cy={smallShapeCY} size={smallShapeSize} />
           </Group>
-          
+
           <RenderShape suit={cardSuit} cx={cx} cy={cy} size={width * 0.5} />
         </>
       )}

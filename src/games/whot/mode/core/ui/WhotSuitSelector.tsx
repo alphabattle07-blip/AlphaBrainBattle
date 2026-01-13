@@ -31,8 +31,8 @@ interface WhotSuitSelectorProps {
   font: SkFont | null;
 }
 
-const CARD_WIDTH = 80;
-const CARD_HEIGHT = 110;
+const CARD_WIDTH = 60;
+const CARD_HEIGHT = 90;
 const COLOR_RED = "#A22323";
 
 // --- Shape Drawing Logic (Same as your Card Face) ---
@@ -124,21 +124,21 @@ const SelectionCard = ({
         <Group>
           {/* Card Body */}
           <RoundedRect x={0} y={0} width={CARD_WIDTH} height={CARD_HEIGHT} r={8} color="white" />
-          <RoundedRect x={1} y={1} width={CARD_WIDTH - 2} height={CARD_HEIGHT - 2} r={8} color={COLOR_RED} style="stroke" strokeWidth={2} />
+          <RoundedRect x={1} y={1} width={CARD_WIDTH - 2} height={CARD_HEIGHT - 2} r={8} color={COLOR_RED} style="stroke" strokeWidth={1.5} />
 
           {/* Top Left "20" */}
-          <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} size={14} />
-          
+          <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} />
+
           {/* Small Top Icon */}
-           <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={10} />
+          <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={8} />
 
           {/* Center Main Shape */}
-          <ShapeIcon suit={suit} x={centerX} y={centerY} size={35} />
+          <ShapeIcon suit={suit} x={centerX} y={centerY} size={26} />
 
           {/* Bottom Right "20" (Rotated) */}
           <Group origin={{ x: centerX, y: centerY }} transform={[{ rotate: Math.PI }]}>
-            <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} size={14} />
-            <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={10} />
+            <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} />
+            <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={8} />
           </Group>
         </Group>
       </Canvas>

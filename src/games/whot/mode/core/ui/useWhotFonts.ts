@@ -7,8 +7,8 @@ export const useWhotFonts = () => {
     let whotFont = null;
 
     try {
-        font = useFont(require('../../../../../assets/fonts/SpaceMono-Regular.ttf'), 20);
-        whotFont = useFont(require('../../../../../assets/fonts/SpaceMono-Regular.ttf'), 30);
+        font = useFont(require('../../../../../assets/fonts/SpaceMono-Regular.ttf'), 16);
+        whotFont = useFont(require('../../../../../assets/fonts/SpaceMono-Regular.ttf'), 24);
     } catch (error) {
         console.error('❌ Error loading Skia fonts:', error);
     }

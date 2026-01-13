@@ -104,7 +104,7 @@ const ActiveSuitCard = ({ suit, x, y, font }: ActiveSuitCardProps) => {
         <Group>
           {/* 1. Solid White Background to cover the card below */}
           <RoundedRect x={0} y={0} width={CARD_WIDTH} height={CARD_HEIGHT} r={8} color="white" />
-          
+
           {/* 2. Red Border */}
           <RoundedRect
             x={1}
@@ -114,20 +114,20 @@ const ActiveSuitCard = ({ suit, x, y, font }: ActiveSuitCardProps) => {
             r={8}
             color={COLOR_RED}
             style="stroke"
-            strokeWidth={2}
+            strokeWidth={1.5}
           />
 
           {/* Top Left "20" */}
-          <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} size={14} />
-          <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={10} />
+          <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} />
+          <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={8} />
 
           {/* Center Main Shape */}
-          <ShapeIcon suit={suit} x={centerX} y={centerY} size={35} />
+          <ShapeIcon suit={suit} x={centerX} y={centerY} size={26} />
 
           {/* Bottom Right "20" (Rotated) */}
           <Group origin={{ x: centerX, y: centerY }} transform={[{ rotate: Math.PI }]}>
-            <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} size={14} />
-            <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={10} />
+            <SkText x={padding} y={padding + 10} text="20" font={font} color={COLOR_RED} />
+            <ShapeIcon suit={suit} x={padding + textWidth / 2} y={padding + 18} size={8} />
           </Group>
         </Group>
       </Canvas>
