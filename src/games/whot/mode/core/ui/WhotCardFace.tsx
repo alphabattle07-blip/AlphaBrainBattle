@@ -74,9 +74,9 @@ export const WhotCardFace = ({ suit, number, width, height, font, whotFont }: Wh
   const textWidth = font.getTextWidth(cardStr);
   const cx = width / 2;
   const cy = height / 2;
-  const numberY = padding + 10;
+  const numberY = padding + 9;
   const smallShapeSize = 11;
-  const smallShapeCX = padding + textWidth / 2;
+  const smallShapeCX = padding + font.getTextWidth(cardStr.charAt(0)) / 2;
   const smallShapeCY = numberY + 3 + (smallShapeSize / 2);
 
   return (

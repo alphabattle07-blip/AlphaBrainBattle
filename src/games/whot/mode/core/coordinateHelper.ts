@@ -16,7 +16,9 @@ export const getCoords = (
   const isLandscape = screenWidth > screenHeight;
 
   const deckCenterX = screenWidth / 2;
-  const deckCenterY = screenHeight / 2;
+  const deckCenterY = isLandscape ? screenHeight / 2.2 : screenHeight / 2;
+  // deckCenterX = screenWidth / 2;
+  // deckCenterY = screenHeight / 2;
 
   switch (target) {
     // --- PILE (Played Cards) ---
@@ -74,11 +76,11 @@ export const getCoords = (
         return { x, y, rotation: 0 };
       } else {
         // --- FIXED PORTRAIT LOGIC ---
-        
+
         // 1. Define a fixed starting point on the left (Fixed 0 Index)
         // UPDATED: Fixed margin as requested
-        const startMargin = 110; 
-        
+        const startMargin = 110;
+
         // 2. Define the maximum width available before squeezing
         // We leave a matching margin on the right side to keep it balanced visually
         const maxAllowedWidth = screenWidth - (startMargin * 1.2);
@@ -86,7 +88,7 @@ export const getCoords = (
         // 3. Calculate spacing (Visual Width)
         const defaultSpacing = CARD_WIDTH * 0.9;
         let visualWidth = defaultSpacing;
-        
+
         // Calculate how wide the hand WOULD be without squeezing
         const potentialWidth = CARD_WIDTH + (handSize - 1) * defaultSpacing;
 
@@ -107,14 +109,14 @@ export const getCoords = (
     case "player": {
       const boxBottomMargin = isLandscape ? 10 : 20;
       const boxHeight = CARD_HEIGHT + 10;
-      const y = screenHeight - boxBottomMargin - boxHeight / 2;
+      const y = screenHeight - boxBottomMargin - boxHeight / 1.4; // height of the card in landscape
 
       if (isLandscape) {
-        const spacing = 10;
+        const spacing = 5;
         const visualWidth = CARD_WIDTH + spacing;
         const totalWidth = handSize * visualWidth - spacing;
         const startX = (screenWidth - totalWidth) / 2;
-        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
+        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1; // width of the card in landscape
         return { x, y, rotation: 0 };
       } else {
         // Player Squeezing logic (unchanged)
