@@ -167,7 +167,7 @@ const WhotComputerGameScreen = () => {
   ]);
 
   const playerHandLimit = 5;
-  const layoutHandSize = 6;
+  const layoutHandSize = 6;  
   const isPagingActive = playerHand.length > playerHandLimit;
   const showPagingButton = !!game && isPagingActive;
   const gameRef = useRef(game);
@@ -1312,7 +1312,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   playerHandContainerPortrait: {
-    bottom: "12%",
+    bottom: "5.5%",
     left: "3%",
     right: "15%",
     width: "auto",
@@ -1345,7 +1345,7 @@ const styles = StyleSheet.create({
   },
 
   pagingContainerPortrait: {
-    bottom: "12%",
+    bottom: "5.5%",
     width: "100%",
 
   },

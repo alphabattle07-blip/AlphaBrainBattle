@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: "70%", 
-    top: -180,
+    top: -120,
     width: 110, // Slightly wider to accommodate side-by-side text
   },
   containerLandscape: {
