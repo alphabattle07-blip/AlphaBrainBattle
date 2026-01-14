@@ -108,8 +108,8 @@ const styles = StyleSheet.create({
     width: 110, // Slightly wider to accommodate side-by-side text
   },
   containerLandscape: {
-    marginRight: "80%",
-    top: 25,
+    marginRight: "74%",
+    top: 35,
     transform: [{ scale: 1 }],
   },
 

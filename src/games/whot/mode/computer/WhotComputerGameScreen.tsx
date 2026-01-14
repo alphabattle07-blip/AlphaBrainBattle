@@ -768,9 +768,9 @@ const WhotComputerGameScreen = () => {
     setIsAnimating(false);
   }, []);
 
-const onCardListReady = useCallback(() => {
+  const onCardListReady = useCallback(() => {
     console.log("✅ Card list reported ready. Waiting for ref binding...");
-    
+
     // ✅ FIX: Small delay ensures cardListRef.current is attached before we try to deal
     setTimeout(() => {
       setIsCardListReady(true);
@@ -782,16 +782,16 @@ const onCardListReady = useCallback(() => {
     setSelectedLevel(null);
   }, []);
 
-const handleRestart = useCallback(() => {
+  const handleRestart = useCallback(() => {
     if (selectedLevel) {
       const lvlValue = levels.find((l) => l.label === selectedLevel)?.value || 1;
-      
+
       // 1. Force new ID
       setGameInstanceId((prev) => prev + 1);
 
       // 2. Reset flags explicitly
-      setGame(null); 
-      setAllCards([]); 
+      setGame(null);
+      setAllCards([]);
       setIsAnimating(false);
       setHasDealt(false);
       setIsCardListReady(false); // ✅ Reset this too!
@@ -963,16 +963,16 @@ const handleRestart = useCallback(() => {
     handleComputerTurn,
   ]);
 
- useEffect(() => {
+  useEffect(() => {
     // 🔍 DEBUGGING: Check conditions
     if (isCardListReady && !hasDealt && isAnimating) {
-        console.log("👀 Checking Deal Conditions:", {
-            ready: isCardListReady,
-            ref: !!cardListRef.current,
-            game: !!game,
-            hasDealt,
-            animating: isAnimating
-        });
+      console.log("👀 Checking Deal Conditions:", {
+        ready: isCardListReady,
+        ref: !!cardListRef.current,
+        game: !!game,
+        hasDealt,
+        animating: isAnimating
+      });
     }
 
     if (
@@ -993,15 +993,15 @@ const handleRestart = useCallback(() => {
       const { players, pile } = game.gameState;
       const playerHand = players[0].hand;
       const computerHand = players[1].hand;
-      
+
       // ... (Rest of your existing dealing logic remains the same) ...
-      
+
       const computerHandSize = computerHand.length;
       const visiblePlayerHand = playerHand.slice(0, playerHandLimit);
       const hiddenPlayerHand = playerHand.slice(playerHandLimit);
       const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
       const dealDelay = 150;
-      
+
       // 1. Deal Computer
       for (let i = 0; i < computerHandSize; i++) {
         if (!isMounted) return;
@@ -1037,7 +1037,7 @@ const handleRestart = useCallback(() => {
         if (!isMounted) return;
         if (card) dealer.dealCard(card, "market", { cardIndex: 0 }, true);
       }
-      
+
       // 4. Pile
       for (const pileCard of pile) {
         if (pileCard)
@@ -1325,19 +1325,19 @@ const styles = StyleSheet.create({
   },
   playerHandContainerLandscape: {
     bottom: 8,
-    left: "19%",
-    right: "19%",
+    left: "21%",
+    right: "21%",
     width: "auto",
   },
   computerHandContainerLandscape: {
     top: 8,
-    left: "19%",
-    right: "19%",
+    left: "24%",
+    right: "24%",
     width: "auto",
   },
   pagingContainer: {
     position: "absolute",
-    zIndex: 100,
+    zIndex: 100,  
     left: 0,
     right: 0,
     height: CARD_HEIGHT + 10,
@@ -1346,17 +1346,19 @@ const styles = StyleSheet.create({
 
   pagingContainerPortrait: {
     bottom: "12%",
+    width: "100%",
+
   },
 
   pagingContainerLandscape: {
     bottom: 8,
+    width: "90%",
   },
 
   pagingButtonBase: {
     position: "absolute",
     right: 0,
-    width: "12%", // takes up the right 15%
-    height: CARD_HEIGHT + 10, // same height as box
+    height: CARD_HEIGHT + 10,
     backgroundColor: "#FFD700", // solid gold yellow
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
@@ -1376,7 +1378,7 @@ const styles = StyleSheet.create({
   },
 
   rightPagingButton: {
-    marginRight: "3%",
+    marginRight: "5%",
   },
 
   // ✅ UPDATED STYLES FOR SCORE DISPLAY
