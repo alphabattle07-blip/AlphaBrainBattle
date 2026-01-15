@@ -14,6 +14,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -167,7 +168,7 @@ const WhotComputerGameScreen = () => {
   ]);
 
   const playerHandLimit = 5;
-  const layoutHandSize = 6;  
+  const layoutHandSize = 6;
   const isPagingActive = playerHand.length > playerHandLimit;
   const showPagingButton = !!game && isPagingActive;
   const gameRef = useRef(game);
@@ -1133,16 +1134,16 @@ const WhotComputerGameScreen = () => {
 
   if (!selectedLevel) {
     return (
-      <View style={[styles.container, styles.centerContent]}>
-        <Text style={styles.title}>Select Computer Level</Text>
+      <View style={styles.levelSelector}>
+        <Text style={styles.title}>Choose Difficulty</Text>
         {levels.map((level) => (
-          <View key={level.value} style={styles.levelButtonContainer}>
-            <Button
-              title={`${level.label}`}
-              onPress={() => initializeGame(level.value)}
-              color="#1E5E4E"
-            />
-          </View>
+          <TouchableOpacity
+            key={level.value}
+            style={styles.levelButton}
+            onPress={() => initializeGame(level.value)}
+          >
+            <Text style={styles.levelText}>{level.label}</Text>
+          </TouchableOpacity>
         ))}
       </View>
     );
@@ -1281,12 +1282,35 @@ export default WhotComputerGameScreen;
 // Using the styles you provided
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffffff" },
+  levelSelector: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#1a1a1a' // Match Ludo BG for menu
+  },
   centerContent: {
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
-  title: { fontSize: 24, color: "#FFF", margin: 20, textAlign: "center" },
+  title: {
+    color: '#FFD700',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 30
+  },
+  levelButton: {
+    backgroundColor: '#333',
+    padding: 15,
+    borderRadius: 10,
+    marginVertical: 8,
+    width: '85%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444'
+  },
+  levelText: { color: 'white', fontSize: 18, fontWeight: '500' },
   levelButtonContainer: { marginBottom: 15, width: 200 },
   computerUIContainer: {
     position: "absolute",
@@ -1337,7 +1361,7 @@ const styles = StyleSheet.create({
   },
   pagingContainer: {
     position: "absolute",
-    zIndex: 100,  
+    zIndex: 100,
     left: 0,
     right: 0,
     height: CARD_HEIGHT + 10,
