@@ -95,7 +95,7 @@
 //         </View>
 
 //         <View style={styles.row}>
-//           <Ionicons name="diamond-outline" size={14} color="#FFD700" />
+//           <Ionicons name="diamond" size={14} color="#FFD700" />
 //           <Text style={styles.rating}> x{score}</Text>
 //         </View>
 //       </View>

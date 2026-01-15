@@ -1,6 +1,6 @@
 // AyoComputerUI.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Button, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Button } from 'react-native';
 import { initializeComputerGame, playComputerTurn, AyoComputerState, ComputerLevel, getComputerMove } from "./AyoComputerLogic";
 import { calculateMoveResult } from "../core/AyoCoreLogic";
 import { AyoGame } from "../core/AyoCoreUI";
@@ -23,10 +23,10 @@ export default function AyoComputerUI() {
   const [level, setLevel] = useState<ComputerLevel | null>(null);
   const [animationPaths, setAnimationPaths] = useState<number[][]>([]);
   const [aiThinking, setAiThinking] = useState(false);
-  
+
   // --- FIX: Destructure the player profile and the new isLoading flag ---
   const playerProfile = usePlayerProfile('ayo'); // Assuming 'ayo' is the gameId
- const dispatch = useAppDispatch();
+  const dispatch = useAppDispatch();
   const [isAnimating, setIsAnimating] = useState(false);
   const [pendingMove, setPendingMove] = useState<{ player: 1 | 2; pit: number } | null>(null);
 
@@ -48,19 +48,19 @@ export default function AyoComputerUI() {
     if (gameState?.isPlayerWinner === true && level) {
       const levelData = levels.find(l => l.value === level);
       const totalReward = (levelData?.reward ?? 0) + BATTLE_BONUS;
-      
+
       console.log(`Player won! Awarding ${totalReward} R-coins.`);
       // dispatch(updateUserRcoin(totalReward)); // <-- UNCOMMENT THIS when your Redux action is ready
     }
-  }, [gameState?.isPlayerWinner, level]);  
+  }, [gameState?.isPlayerWinner, level]);
 
   // ... (startGame, onAnimationDone, handleMove, useEffect logic remains the same)
   const startGame = (lvl: ComputerLevel) => {
     setLevel(lvl);
     setGameState(initializeComputerGame(lvl));
   };
- 
-  
+
+
 
   const onAnimationDone = () => {
     if (pendingMove && gameState) {
@@ -116,16 +116,16 @@ export default function AyoComputerUI() {
     return () => clearTimeout(timer);
   }, [gameState, level, isAnimating]);
 
-    const opponent = useMemo(() => {
-        if (!level) return null;
-        const levelData = levels.find(l => l.value === level);
-        return {
-            name: `${levelData?.label.split(' ')[0]} AI`,
-            country: "NG",
-            rating: levelData?.rating || 1000,
-            isAI: true,
-        };
-    }, [level]);
+  const opponent = useMemo(() => {
+    if (!level) return null;
+    const levelData = levels.find(l => l.value === level);
+    return {
+      name: `${levelData?.label.split(' ')[0]} AI`,
+      country: "NG",
+      rating: levelData?.rating || 1000,
+      isAI: true,
+    };
+  }, [level]);
 
   // --- FIX: Remove loading state check to allow immediate game over display ---
   // Profile loading should not block the game UI
@@ -147,26 +147,25 @@ export default function AyoComputerUI() {
         </View>
       ) : (
         <View style={styles.gameContainer}>
-                    <AyoGame
-                        initialGameState={gameState.game}
-                        onPitPress={handleMove}
-                        opponent={opponent || { name: 'AI', country: 'NG', rating: 1000, isAI: true }} // Provide a default opponent
-                        player={playerProfile} // using the simplified playerProfile object
-                        level={level || 1} // Provide a default level if null
-                    />
+          <AyoGame
+            initialGameState={gameState.game}
+            onPitPress={handleMove}
+            opponent={opponent || { name: 'AI', country: 'NG', rating: 1000, isAI: true }} // Provide a default opponent
+            player={playerProfile} // using the simplified playerProfile object
+            level={level || 1} // Provide a default level if null
+          />
 
-          {aiThinking && <ActivityIndicator size="large" color="#fff" style={{ marginTop: 10 }} />}
 
           {gameState.isPlayerWinner !== null && level && (
-<AyoGameOver
-  result={gameState.isPlayerWinner ? "win" : "loss"}
-  level={level}
-  onRematch={handleRematch}
-  onNewBattle={handleNewBattle}
-  playerName={playerProfile.name}
-  opponentName={opponent?.name || 'AI'}
-  playerRating={playerProfile.rating} // ✅ pass rating
-/>
+            <AyoGameOver
+              result={gameState.isPlayerWinner ? "win" : "loss"}
+              level={level}
+              onRematch={handleRematch}
+              onNewBattle={handleNewBattle}
+              playerName={playerProfile.name}
+              opponentName={opponent?.name || 'AI'}
+              playerRating={playerProfile.rating} // ✅ pass rating
+            />
 
           )}
         </View>
@@ -176,7 +175,7 @@ export default function AyoComputerUI() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: '#222', justifyContent: 'center' },
+  container: { flex: 1, padding: 8, backgroundColor: '#222', justifyContent: 'center',  },
   levelSelector: { justifyContent: 'center', alignItems: 'center', flex: 1 },
   title: { color: 'white', fontSize: 20, marginBottom: 20 },
   levelButton: { backgroundColor: '#444', padding: 12, borderRadius: 8, marginVertical: 6, width: '80%', alignItems: 'center' },

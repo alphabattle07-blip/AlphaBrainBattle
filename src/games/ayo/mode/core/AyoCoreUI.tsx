@@ -202,8 +202,8 @@ export const AyoGame: React.FC<AyoGameProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "space-between", padding: 10, backgroundColor: "#222" },
-  profileContainer: { alignItems: "center", marginBottom: 12 },
+  container: { flex: 1, justifyContent: "space-between", padding: 1, backgroundColor: "#222" },
+  profileContainer: { alignItems: "center", marginBottom: 0 },
   boardContainer: { flex: 1, justifyContent: "center" },
 });
 

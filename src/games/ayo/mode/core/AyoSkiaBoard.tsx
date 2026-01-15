@@ -23,6 +23,7 @@ import hopSound from '../../../../../src/assets/sounds/hop.mp3';
 import captureSound from '../../../../assets/sounds/capture.mp3';
 import { useBackgroundSound } from "../../../../hooks/useBackgroundSound";
 import bgSound from "../../../../assets/sounds/background.mp3";
+import { AYO_BOARD_CONFIG } from './ayoConfig';
 
 const boardImageSource = require('../../../../assets/images/ayo-board.png');
 const seedImageSource = require('../../../../assets/images/ayo-seed.png');
@@ -82,13 +83,31 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
   const animatedX = useSharedValue(0);
   const animatedY = useSharedValue(0);
   const animatedOpacity = useSharedValue(0);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const isPortrait = screenHeight >= screenWidth;
 
   const BOARD_IMAGE_WIDTH = 721;
   const BOARD_IMAGE_HEIGHT = 300;
   const BOARD_ASPECT_RATIO = BOARD_IMAGE_WIDTH / BOARD_IMAGE_HEIGHT;
-  const canvasWidth = screenWidth * 0.95;
-  const canvasHeight = canvasWidth / BOARD_ASPECT_RATIO;
+
+  let canvasWidth: number;
+  let canvasHeight: number;
+
+  if (isPortrait) {
+    canvasWidth = screenWidth * AYO_BOARD_CONFIG.portrait.widthMultiplier;
+    canvasHeight = canvasWidth / BOARD_ASPECT_RATIO;
+  } else {
+    // In landscape, prioritize fitting within height to leave room for profiles
+    canvasHeight = screenHeight * AYO_BOARD_CONFIG.landscape.heightMultiplier;
+    canvasWidth = canvasHeight * BOARD_ASPECT_RATIO;
+
+    // Cap width to screen width if necessary
+    if (canvasWidth > screenWidth * AYO_BOARD_CONFIG.landscape.maxWidthMultiplier) {
+      canvasWidth = screenWidth * AYO_BOARD_CONFIG.landscape.maxWidthMultiplier;
+      canvasHeight = canvasWidth / BOARD_ASPECT_RATIO;
+    }
+  }
+
   const scale = canvasWidth / BOARD_IMAGE_WIDTH;
 
   const PIT_POSITIONS = useMemo(() => generatePitPositions(2, 6, BOARD_IMAGE_WIDTH, BOARD_IMAGE_HEIGHT), []);
@@ -227,7 +246,10 @@ export const AyoSkiaImageBoard: React.FC<AyoSkiaImageBoardProps> = ({ board, boa
 
   return (
     <GestureDetector gesture={tapGesture}>
-      <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
+      <Canvas style={[
+        { width: canvasWidth, height: canvasHeight },
+        isPortrait ? AYO_BOARD_CONFIG.portrait.margins : AYO_BOARD_CONFIG.landscape.margins
+      ]}>
         <SkiaImage image={boardImage} x={0} y={0} width={canvasWidth} height={canvasHeight} fit="fill" />
         {currentBoard.map((seedCount, pitIndex) => {
           if (seedCount === 0) return null;
