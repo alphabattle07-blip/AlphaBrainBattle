@@ -1,6 +1,6 @@
 // Alpha-Battle/src/games/whot/mode/computer/whotComputerUI.tsx
 import React, { memo } from "react";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 // Level definitions (kept the same)
 export const levels = [
@@ -28,6 +28,8 @@ type Props = {
 const AVATAR_URI = require("../../../../assets/images/826118.png");
 
 const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
   const levelInfo = levels.find((l) => l.value === level);
 
   if (!computerState) {
@@ -35,7 +37,7 @@ const ComputerUI: React.FC<Props> = ({ computerState, level }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isLandscape && styles.containerLandscape]}>
       {/* Top Section: Level Name & Rating */}
       {levelInfo && (
         <View style={styles.headerRow}>
@@ -79,8 +81,12 @@ export default memo(ComputerUI);
 
 const styles = StyleSheet.create({
   container: {
-    marginRight: "76%",
-    top: -15,
+    marginRight: "69%",
+    top: -10,
+  },
+  containerLandscape: {
+    marginRight: "62%",
+    top: -40,
   },
   headerRow: {
     marginBottom: 2,
@@ -89,7 +95,7 @@ const styles = StyleSheet.create({
   levelLabel: {
     color: "#FFF",
     fontWeight: "900", // Extra Bold
-    fontSize: 16,
+    fontSize: 14,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 2,
@@ -100,10 +106,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     paddingVertical: 2,
     borderRadius: 4,
-    width: 60,
+    width: 50,
     marginLeft: 10
-
-
   },
   ratingText: {
     color: "#000",
@@ -120,8 +124,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarContainer: {
-    width: 60,
-    height: 60,
+    width: 50,
+    height: 50,
     borderRadius: 30,
     borderWidth: 3,
     borderColor: "#fff", // White ring around avatar
@@ -132,33 +136,35 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 5,
-    top: -7,
+    top: -12,
+    left: -5,
   },
   avatar: {
     width: "100%",
     height: "100%",
   },
+
   badge: {
     position: "absolute",
     top: 1,
-    right: 8, // "By the side"
+    right: 18, // "By the side"
     backgroundColor: "#8B0000", // Dark Red/Brown like the image
     borderWidth: 2,
     borderColor: "#FFF",
-    borderRadius: 6, // Rounded rectangle
-    minWidth: 20,
-    height: 20,
+    borderRadius: 8, // Rounded rectangle
+    minWidth: 18,
+    height: 18,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 3,
     elevation: 5, // Shadow to make it pop
     zIndex: 2,
-    
+
   },
   badgeText: {
     color: "white",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: 10,
   },
 
   // Status Text
@@ -170,7 +176,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textShadowColor: 'rgba(0, 0, 0, 1)',
     textShadowRadius: 4,
-    
+
   },
   idle: {
     marginTop: -2,

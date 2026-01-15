@@ -57,7 +57,7 @@ export const getCoords = (
       const maxCardsBeforeSqueeze = 6;
 
       if (isLandscape) {
-        const defaultSpacing = 10;
+        const defaultSpacing = 5;
         const maxAllowedWidth =
           CARD_WIDTH + (maxCardsBeforeSqueeze - 1) * (CARD_WIDTH + defaultSpacing);
 
@@ -66,12 +66,12 @@ export const getCoords = (
 
         if (handSize > maxCardsBeforeSqueeze) {
           totalWidth = maxAllowedWidth;
-          visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
+          visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1) ;
         }
 
         // Fixed: Ensure division by 2 is present
         const startX = (screenWidth - totalWidth) / 2;
-        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 1;
+        const x = startX + cardIndex * visualWidth + CARD_WIDTH / 2;
 
         return { x, y, rotation: 0 };
       } else {
