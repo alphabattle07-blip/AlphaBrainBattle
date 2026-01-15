@@ -1,6 +1,8 @@
 //index.ts
 
 import React from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import * as ScreenOrientation from 'expo-screen-orientation';
 // --- FIX: Import the main computer game screen ---
 import LudoComputerGameScreen from "./computer/LudoComputerGameScreen"
 import LudoOnline from "./online/LudoOnline"
@@ -17,6 +19,22 @@ export default function LudoIndex({ mode }: LudoIndexProps) {
   // as ComputerGameScreen manages its own state.
   // You might still need it for other modes.
   const [game, setGame] = React.useState<any>(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const lockOrientation = async () => {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      };
+      lockOrientation();
+
+      return () => {
+        const unlockOrientation = async () => {
+          await ScreenOrientation.unlockAsync();
+        };
+        unlockOrientation();
+      };
+    }, [])
+  );
 
   React.useEffect(() => {
     if (mode === "battle") {
