@@ -8,6 +8,7 @@ interface Props {
   rating: number;
   cardCount: number;
   avatar?: string | null;
+  country?: string;
   isAI?: boolean;
   isCurrentPlayer?: boolean;
   showCardCount?: boolean;
@@ -18,6 +19,7 @@ const WhotPlayerProfile = ({
   rating,
   cardCount,
   avatar,
+  country = 'CA',
   isAI = false,
   isCurrentPlayer = false,
   showCardCount = true,
@@ -38,18 +40,18 @@ const WhotPlayerProfile = ({
       styles.container,
       isLandscape && styles.containerLandscape
     ]}>
-      
+
       {/* 1. Player Name */}
       <View style={styles.nameRow}>
         <Text style={[styles.playerName, isLandscape && styles.textLandscape]}>
           {displayName}
         </Text>
         {isAI && (
-          <Ionicons 
-            name="hardware-chip-outline" 
-            size={isLandscape ? 12 : 14} 
-            color="#0ff" 
-            style={{ marginLeft: 4 }} 
+          <Ionicons
+            name="hardware-chip-outline"
+            size={isLandscape ? 12 : 14}
+            color="#0ff"
+            style={{ marginLeft: 4 }}
           />
         )}
       </View>
@@ -57,7 +59,7 @@ const WhotPlayerProfile = ({
       {/* 2. Avatar + Card Count Badge */}
       <View style={styles.profileWrapper}>
         <View style={[
-          styles.avatarContainer, 
+          styles.avatarContainer,
           isLandscape && styles.avatarContainerLandscape,
           isCurrentPlayer && styles.currentPlayerAvatar
         ]}>
@@ -76,7 +78,7 @@ const WhotPlayerProfile = ({
 
       {/* 3. Rating Info */}
       <View style={styles.ratingContainer}>
-        
+
         {/* Row: Icon + Name */}
         <View style={styles.ratingRow}>
           <Text style={[styles.ratingIcon, isLandscape && styles.textLandscape]}>
@@ -86,7 +88,7 @@ const WhotPlayerProfile = ({
             {rank.level}
           </Text>
         </View>
-        
+
         {/* Rating Number (Below the row) */}
         <Text style={[styles.ratingNumber, isLandscape && styles.textSmallLandscape]}>
           {rating}
@@ -103,7 +105,7 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: "70%", 
+    marginRight: "70%",
     top: -120,
     width: 110, // Slightly wider to accommodate side-by-side text
   },
@@ -161,7 +163,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  
+
   // Active Player Highlight
   currentPlayerAvatar: {
     borderColor: '#FFD700', // Gold border
@@ -233,7 +235,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
     textAlign: 'center',
-    marginTop: 1, 
+    marginTop: 1,
   },
 
   // Landscape Text Overrides

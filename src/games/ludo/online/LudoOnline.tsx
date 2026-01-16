@@ -127,7 +127,8 @@ const LudoOnline = () => {
     // We need to map the server state (logical players) to the visual state (p1/p2).
     const visualGameState = useMemo(() => {
         if (!currentGame) return null;
-        const serverState = (currentGame.board as unknown as LudoGameState) || initializeGame('blue', 'green');
+        const board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
+        const serverState = (board as unknown as LudoGameState) || initializeGame('blue', 'green');
 
         // If we are player 2 in the logical game, we swap indices so we see ourselves as 'p1'
         if (isPlayer2) {
@@ -162,11 +163,16 @@ const LudoOnline = () => {
         }
 
         try {
+            // Determine the current turn ID based on the updated logical state
+            const nextTurnId = logicalState.currentPlayerIndex === 0
+                ? currentGame.player1.id
+                : (currentGame.player2?.id || '');
+
             await dispatch(updateOnlineGameState({
                 gameId: currentGame.id,
                 updates: {
                     board: logicalState as any,
-                    currentTurn: newState.currentPlayerIndex === 0 ? userProfile.id : (isPlayer1 ? currentGame.player2?.id : currentGame.player1?.id),
+                    currentTurn: nextTurnId || undefined,
                     winnerId: newState.winner === 'p1' ? userProfile.id : (newState.winner === 'p2' ? (isPlayer1 ? currentGame.player2?.id : currentGame.player1?.id) : undefined),
                     status: newState.winner ? 'COMPLETED' : 'IN_PROGRESS'
                 }

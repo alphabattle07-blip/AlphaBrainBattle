@@ -35,6 +35,7 @@ export type WhotCoreUIProps = {
         isCurrentPlayer: boolean;
         isAI?: boolean;
     };
+    level?: any;
     marketCardCount: number;
     activeCalledSuit: CardSuit | null;
     showSuitSelector: boolean;
@@ -70,6 +71,7 @@ const WhotCoreUI: React.FC<WhotCoreUIProps> = ({
     game,
     playerState,
     opponentState,
+    level = 1,
     marketCardCount,
     activeCalledSuit,
     showSuitSelector,
@@ -127,21 +129,20 @@ const WhotCoreUI: React.FC<WhotCoreUIProps> = ({
     return (
         <View style={styles.container}>
             {game && (
-                <View style={[styles.computerUIContainer, { pointerEvents: "box-none" }]}>
+                <View style={styles.computerUIContainer} pointerEvents="box-none">
                     <ComputerUI
                         computerState={{
                             name: opponentState.name,
                             handLength: opponentState.handLength,
                             isCurrentPlayer: opponentState.isCurrentPlayer
                         }}
-                        level={1} // Default for online, or passed from prop
-                        isOnline={!opponentState.isAI}
+                        level={level}
                     />
                 </View>
             )}
 
             {game && (
-                <View style={[styles.playerUIContainer, { pointerEvents: "box-none" }]}>
+                <View style={styles.playerUIContainer} pointerEvents="box-none">
                     <WhotPlayerProfile
                         name={playerState.name}
                         rating={playerState.rating}

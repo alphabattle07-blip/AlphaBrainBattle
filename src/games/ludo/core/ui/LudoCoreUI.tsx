@@ -169,7 +169,14 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     // --- Handlers ---
     const handleRollDice = useCallback(() => {
         if (gameState.winner) return;
+        // Strict turn validation: only allow roll if it's the current player's turn (index 0 for local player in LudoCoreUI)
+        if (gameState.currentPlayerIndex !== 0) {
+            console.log("[LudoCoreUI] Prevented roll: Not player's turn");
+            return;
+        }
+
         const newState = rollDice(gameState);
+        console.log("[LudoCoreUI] Dice rolled:", newState.dice);
         setGameState(newState);
         if (onRoll) onRoll(newState);
     }, [gameState, onRoll]);

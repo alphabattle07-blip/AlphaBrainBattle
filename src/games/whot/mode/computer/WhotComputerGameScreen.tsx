@@ -39,6 +39,7 @@ import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
 import { useSharedValue } from "react-native-reanimated";
 import WhotCoreUI from "../core/ui/WhotCoreUI";
+import { useWhotFonts } from "../core/ui/useWhotFonts";
 import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
 
 type GameData = {
@@ -94,26 +95,6 @@ const WhotComputerGameScreen = () => {
   );
 
   const marketCardCount = game?.gameState.market.length || 0;
-
-  const playerHandStyle = useMemo(
-    () => [
-      styles.handContainerBase,
-      isLandscape
-        ? styles.playerHandContainerLandscape
-        : styles.playerHandContainerPortrait,
-    ],
-    [isLandscape]
-  );
-
-  const computerHandStyle = useMemo(
-    () => [
-      styles.handContainerBase,
-      isLandscape
-        ? styles.computerHandContainerLandscape
-        : styles.computerHandContainerPortrait,
-    ],
-    [isLandscape]
-  );
 
   const computerState = useMemo(() => {
     if (!game) {
@@ -401,7 +382,7 @@ const WhotComputerGameScreen = () => {
 
         let newState: GameState;
         try {
-          newState = playCard(oldState, computerPlayerIndex, move, ruleVersion);
+          newState = playCard(oldState, computerPlayerIndex, move);
         } catch (e: any) {
           const { newState: pickState, drawnCards } = pickCard(
             oldState,
@@ -853,8 +834,7 @@ const WhotComputerGameScreen = () => {
           newState = playCard(
             currentGame.gameState,
             0,
-            card,
-            currentGame.gameState.ruleVersion
+            card
           );
         } catch (error: any) {
           console.log("Invalid move:", error.message);
