@@ -91,26 +91,40 @@ const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll, rankIcon }: { dice
 );
 
 type LudoGameProps = {
-    initialGameState?: LudoGameState;
+    gameState?: LudoGameState;
     player?: { name: string; country?: string; rating?: number; isAI?: boolean; avatar?: string | null };
     opponent?: { name: string; country?: string; rating?: number; isAI?: boolean; avatar?: string | null };
     onGameStatsUpdate?: (result: "win" | "loss" | "draw", newRating: number) => void;
     onGameOver?: (winnerId: string) => void;
+    onMove?: (state: LudoGameState) => void;
+    onRoll?: (state: LudoGameState) => void;
     level?: any;
 };
 
 export const LudoCoreUI: React.FC<LudoGameProps> = ({
-    initialGameState,
+    gameState: propGameState,
     player: propPlayer,
     opponent: propOpponent,
     onGameStatsUpdate,
     onGameOver,
+    onMove,
+    onRoll,
     level,
 }) => {
     const navigation = useNavigation();
-    const [gameState, setGameState] = useState<LudoGameState>(
-        initialGameState ?? initializeGame('blue', 'green', level || 2)
+    const [internalGameState, setInternalGameState] = useState<LudoGameState>(
+        propGameState ?? initializeGame('blue', 'green', level || 2)
     );
+
+    // Sync internal state with prop if controlled
+    useEffect(() => {
+        if (propGameState) {
+            setInternalGameState(propGameState);
+        }
+    }, [propGameState]);
+
+    const gameState = internalGameState;
+    const setGameState = setInternalGameState;
 
     const defaultPlayer = { name: "Player", country: "NG", rating: 1200, isAI: false, avatar: null as string | null };
     const defaultOpponent = { name: "Opponent", country: "US", rating: 1500, isAI: true, avatar: null as string | null };
@@ -155,12 +169,15 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     // --- Handlers ---
     const handleRollDice = useCallback(() => {
         if (gameState.winner) return;
-        setGameState(prev => rollDice(prev));
-    }, [gameState.winner]);
+        const newState = rollDice(gameState);
+        setGameState(newState);
+        if (onRoll) onRoll(newState);
+    }, [gameState, onRoll]);
 
     // --- Auto Pass & Turn Logic ---
     useEffect(() => {
-        if (!gameState.waitingForRoll && !gameState.winner) {
+        // Only run auto-pass for local computer games (no onMove prop)
+        if (!onMove && !gameState.waitingForRoll && !gameState.winner) {
             const moves = getValidMoves(gameState);
             if (moves.length === 0) {
                 const timer = setTimeout(() => {
@@ -169,11 +186,12 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 return () => clearTimeout(timer);
             }
         }
-    }, [gameState, gameState.dice, gameState.diceUsed, gameState.waitingForRoll]);
+    }, [gameState, gameState.dice, gameState.diceUsed, gameState.waitingForRoll, onMove]);
 
     // AI Turn Loop
     useEffect(() => {
-        const isAiTurn = gameState.currentPlayerIndex === 1 && !gameState.winner;
+        // AI only plays in local computer games (no onMove prop)
+        const isAiTurn = !onMove && gameState.currentPlayerIndex === 1 && !gameState.winner;
         if (isAiTurn) {
             const aiDelay = 1000;
             if (gameState.waitingForRoll) {
@@ -194,10 +212,12 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 return () => clearTimeout(timer);
             }
         }
-    }, [gameState, handleRollDice, level]);
+    }, [gameState, handleRollDice, level, onMove]);
 
     const handleBoardPress = useCallback((x: number, y: number, tappedSeed?: { playerId: string; seedIndex: number; position: number } | null) => {
         if (tappedSeed) {
+            // In online mode, we still map 'p1' to the local interactor.
+            // LudoOnline will handle mapping logical players to p1/p2.
             if (tappedSeed.playerId !== 'p1') return;
             if (gameState.currentPlayerIndex !== 0) return;
 
@@ -205,11 +225,13 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                 const moves = getValidMoves(gameState);
                 const matchingMove = moves.find(move => move.seedIndex === tappedSeed.seedIndex);
                 if (matchingMove) {
-                    setGameState(prev => applyMove(prev, matchingMove));
+                    const newState = applyMove(gameState, matchingMove);
+                    setGameState(newState);
+                    if (onMove) onMove(newState);
                 }
             }
         }
-    }, [gameState]);
+    }, [gameState, onMove]);
 
     // --- Dice Positioning Configuration ---
     const DICE_POS_CONFIG = {

@@ -38,12 +38,7 @@ import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
 
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
 import { useSharedValue } from "react-native-reanimated";
-import ActiveSuitCard from "../core/ui/ActiveSuitCard";
-import GameOverModal from "../core/ui/GameOverModal";
-import { MarketPile } from "../core/ui/MarketPile";
-import { useWhotFonts } from "../core/ui/useWhotFonts";
-import { CARD_HEIGHT } from "../core/ui/whotConfig";
-import WhotPlayerProfile from "../core/ui/whotplayerProfile";
+import WhotCoreUI from "../core/ui/WhotCoreUI";
 import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
 
 type GameData = {
@@ -1150,144 +1145,53 @@ const WhotComputerGameScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {game && (
-        <View
-          style={[styles.computerUIContainer, { pointerEvents: "box-none" }]}
-        >
-          <ComputerUI computerState={computerState} level={computerLevel} />
-        </View>
-      )}
-
-      {game && (
-        <View style={[styles.playerUIContainer, { pointerEvents: "box-none" }]}>
-          <WhotPlayerProfile
-            name={playerState.name}
-            rating={playerState.rating}
-            country={playerState.country}
-            avatar={playerState.avatar}
-            cardCount={playerState.handLength}
-            isCurrentPlayer={playerState.isCurrentPlayer}
-          />
-        </View>
-      )}
-
-      <MemoizedBackground width={stableWidth} height={stableHeight} />
-      <View style={computerHandStyle} />
-
-      {/* ✅ MOVED SCORE CONTAINERS OUTSIDE TO AVOID CLIPPING */}
-      {game?.gameState.marketExhausted && (
-        <View style={styles.scoreContainerComputer}>
-          <Text style={styles.scoreText}>
-            Score: {calculateHandScore(game.gameState.players[1].hand)}
-          </Text>
-        </View>
-      )}
-
-      <View style={playerHandStyle} />
-
-      {/* ✅ MOVED SCORE CONTAINERS OUTSIDE TO AVOID CLIPPING */}
-      {game?.gameState.marketExhausted && (
-        <View style={styles.scoreContainerPlayer}>
-          <Text style={styles.scoreText}>
-            Score: {calculateHandScore(game.gameState.players[0].hand)}
-          </Text>
-        </View>
-      )}
-
-      <View
-        style={[
-          styles.pagingContainer,
-          isLandscape
-            ? styles.pagingContainerLandscape
-            : styles.pagingContainerPortrait,
-        ]}
-        pointerEvents="box-none"
-      >
-        {showPagingButton && (
-          <Pressable
-            onPress={handlePagingPress}
-            style={({ pressed }) => [
-              styles.pagingButtonBase,
-              styles.rightPagingButton,
-              pressed && { backgroundColor: "#e6c200" },
-            ]}
-          >
-            <Text style={styles.pagingIcon}>{">"}</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {game && (
-        <MarketPile
-          count={marketCardCount}
-          font={stableWhotFont}
-          smallFont={stableFont}
-          width={stableWidth}
-          height={stableHeight}
-          onPress={handlePickFromMarket}
-        />
-      )}
-      {allCards.length > 0 && stableFont && stableWhotFont && (
-        <AnimatedCardList
-          key={gameInstanceId}
-          ref={cardListRef}
-          cardsInPlay={allCards}
-          playerHandIdsSV={playerHandIdsSV}
-          font={stableFont}
-          whotFont={stableWhotFont}
-          width={stableWidth}
-          height={stableHeight}
-          onCardPress={handlePlayCard}
-          onReady={onCardListReady}
-        />
-      )}
-
-      {activeCalledSuit && stableFont && (
-        <ActiveSuitCard
-          suit={activeCalledSuit}
-          x={pileCoords.x}
-          y={pileCoords.y}
-          font={stableFont}
-        />
-      )}
-
-      <WhotSuitSelector
-        isVisible={showSuitSelector}
-        onSelectSuit={handleSuitSelection}
-        width={stableWidth}
-        height={stableHeight}
-        font={stableFont}
-      />
-      <GameOverModal
-        visible={!!game?.gameState.winner}
-        winner={game?.gameState.winner || null}
-        onRematch={handleRestart}
-        onNewBattle={handleNewBattle}
-        level={computerLevel}
-        playerName={playerProfile.name}
-        opponentName={levels.find((l) => l.value === computerLevel)?.label.split(" ")[0] + " AI"}
-        playerRating={playerProfile.rating}
-        result={
-          game?.gameState.winner?.id === game?.gameState.players[0].id
-            ? "win"
-            : "loss"
-        }
-      />
-    </View>
+    <WhotCoreUI
+      game={game}
+      playerState={playerState}
+      opponentState={computerState}
+      marketCardCount={marketCardCount}
+      activeCalledSuit={activeCalledSuit}
+      showSuitSelector={showSuitSelector}
+      isAnimating={isAnimating}
+      cardListRef={cardListRef}
+      onCardPress={handlePlayCard}
+      onPickFromMarket={handlePickFromMarket}
+      onPagingPress={handlePagingPress}
+      onSuitSelect={handleSuitSelection}
+      onCardListReady={onCardListReady}
+      showPagingButton={showPagingButton}
+      allCards={allCards}
+      playerHandIdsSV={playerHandIdsSV}
+      gameInstanceId={gameInstanceId}
+      stableWidth={stableWidth}
+      stableHeight={stableHeight}
+      stableFont={stableFont}
+      stableWhotFont={stableWhotFont}
+      isLandscape={isLandscape}
+      gameOver={{
+        winner: game?.gameState.winner || null,
+        onRematch: handleRestart,
+        onNewBattle: handleNewBattle,
+        level: computerLevel,
+        playerName: playerProfile.name,
+        opponentName: levels.find((l) => l.value === computerLevel)?.label.split(" ")[0] + " AI",
+        playerRating: playerProfile.rating,
+        result: game?.gameState.winner?.id === game?.gameState.players[0].id ? "win" : "loss"
+      }}
+    />
   );
 };
+
 export default WhotComputerGameScreen;
 
-// Using the styles you provided
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ffffffff" },
+  container: { flex: 1, backgroundColor: "#000" },
   levelSelector: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#1a1a1a' // Match Ludo BG for menu
+    backgroundColor: '#1a1a1a'
   },
   centerContent: {
     justifyContent: "center",
@@ -1311,130 +1215,4 @@ const styles = StyleSheet.create({
     borderColor: '#444'
   },
   levelText: { color: 'white', fontSize: 18, fontWeight: '500' },
-  levelButtonContainer: { marginBottom: 15, width: 200 },
-  computerUIContainer: {
-    position: "absolute",
-    top: 50,
-    alignSelf: "center",
-    zIndex: 10,
-  },
-  playerUIContainer: {
-    position: "absolute",
-    bottom: 40,
-    right: 20,
-    alignSelf: "flex-end",
-    zIndex: 10,
-  },
-  handContainerBase: {
-    position: "absolute",
-    backgroundColor: "rgba(0, 0, 0, 0.2)",
-    borderTopLeftRadius: 20,
-    zIndex: 0,
-    height: CARD_HEIGHT + 10,
-    overflow: "hidden", // ✅ hide outside cards
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playerHandContainerPortrait: {
-    bottom: "5.5%",
-    left: "3%",
-    right: "15%",
-    width: "auto",
-  },
-  computerHandContainerPortrait: {
-    top: 40,
-    left: "26%",
-    right: "5%",
-    width: "auto",
-  },
-  playerHandContainerLandscape: {
-    bottom: 8,
-    left: "21%",
-    right: "21%",
-    width: "auto",
-  },
-  computerHandContainerLandscape: {
-    top: 8,
-    left: "24%",
-    right: "24%",
-    width: "auto",
-  },
-  pagingContainer: {
-    position: "absolute",
-    zIndex: 100,
-    left: 0,
-    right: 0,
-    height: CARD_HEIGHT + 10,
-    pointerEvents: "box-none",
-  },
-
-  pagingContainerPortrait: {
-    bottom: "5.5%",
-    width: "100%",
-
-  },
-
-  pagingContainerLandscape: {
-    bottom: 8,
-    width: "90%",
-  },
-
-  pagingButtonBase: {
-    position: "absolute",
-    right: 0,
-    height: CARD_HEIGHT + 10,
-    backgroundColor: "#FFD700", // solid gold yellow
-    borderTopRightRadius: 20,
-    borderBottomRightRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 5, // shadow for Android
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-
-  pagingIcon: {
-    fontSize: 36, // big bold arrow
-    fontWeight: "bold",
-    color: "#000",
-  },
-
-  rightPagingButton: {
-    marginRight: "5%",
-  },
-
-  // ✅ UPDATED STYLES FOR SCORE DISPLAY
-  scoreContainerComputer: {
-    position: "absolute",
-    top: 100, // Fixed position relative to screen, not hand
-    left: "50%",
-    transform: [{ translateX: -40 }], // Center horizontally roughly
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#FFD700",
-    zIndex: 999, // Ensure on top
-  },
-  scoreContainerPlayer: {
-    position: "absolute",
-    bottom: 150, // Fixed position relative to screen
-    left: "50%",
-    transform: [{ translateX: -40 }],
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: "#FFD700",
-    zIndex: 999, // Ensure on top
-  },
-  scoreText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
 });

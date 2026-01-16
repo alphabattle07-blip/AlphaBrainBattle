@@ -57,10 +57,8 @@ export const initializeGame = (p1Color: PlayerColor = 'red', p2Color: PlayerColo
 export const rollDice = (state: LudoGameState): LudoGameState => {
     if (!state.waitingForRoll) return state;
 
-    //  const d1 = Math.floor(Math.random() * 6) + 1;
-    // RANDOM DICE (Required for game to work)
-    const d1 = 2;
-    const d2 = 2;
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
 
     const dice = state.level >= 3 ? [d1, d2] : [d1];
     const diceUsed = state.level >= 3 ? [false, false] : [false];

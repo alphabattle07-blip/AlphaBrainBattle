@@ -48,6 +48,7 @@ const AyoOnlineUI = () => {
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
   const [pendingServerUpdate, setPendingServerUpdate] = useState<{ board: number[], turn: string } | null>(null);
+  const previousBoardSnapshot = useRef<number[] | null>(null);
 
   // Matchmaking State
   const [isMatchmaking, setIsMatchmaking] = useState(false);
@@ -133,11 +134,49 @@ const AyoOnlineUI = () => {
   }, [currentGame, isAnimating, needsRotation]);
 
   const syncGameStateFromProps = () => {
-    if (!currentGame) return;
-    const serverBoard = currentGame.board || Array(12).fill(4); // Default to standard board if null
+    if (!currentGame || isAnimating) return;
+
+    const serverBoard = currentGame.board || Array(12).fill(4);
     const displayBoard = needsRotation ? rotateBoard(serverBoard) : serverBoard;
+
+    // Detect if opponent made a move
+    if (previousBoardSnapshot.current &&
+      JSON.stringify(previousBoardSnapshot.current) !== JSON.stringify(serverBoard) &&
+      currentGame.currentTurn === userProfile?.id // It just became our turn, so opponent must have moved
+    ) {
+      // Find starting pit of opponent's move
+      // Opponent pits are 6-11 if we are P1 (needsRotation=true), 0-5 if we are P2.
+      const opponentPits = needsRotation ? [6, 7, 8, 9, 10, 11] : [0, 1, 2, 3, 4, 5];
+      const startPit = opponentPits.find(idx => previousBoardSnapshot.current![idx] > 0 && serverBoard[idx] === 0);
+
+      if (startPit !== undefined) {
+        // Run logic locally to get animation paths
+        const opponentLogicalState = {
+          board: previousBoardSnapshot.current,
+          scores: { 1: 0, 2: 0 },
+          currentPlayer: needsRotation ? 2 : (1 as 1 | 2),
+          isGameOver: false
+        };
+        const moveResult = calculateMoveResult(opponentLogicalState, startPit);
+
+        if (moveResult.animationPaths.length > 0) {
+          const visualStartBoard = needsRotation ? rotateBoard(previousBoardSnapshot.current) : previousBoardSnapshot.current;
+          const visualOpponentPit = needsRotation ? mapPitToVisual(startPit) : startPit;
+
+          setBoardBeforeMove(visualStartBoard);
+          setIsAnimating(true);
+          setAnimationPaths(moveResult.animationPaths.map(path => path.map(p => needsRotation ? mapPitToVisual(p) : p)));
+          setCaptures(moveResult.captures.map(c => ({ ...c, pitIndex: needsRotation ? mapPitToVisual(c.pitIndex) : c.pitIndex })));
+
+          previousBoardSnapshot.current = serverBoard;
+          return; // Animation will trigger onAnimationDone which will set final board
+        }
+      }
+    }
+
     setVisualBoard(displayBoard);
-    setBoardBeforeMove(displayBoard); // Reset reference for animations
+    setBoardBeforeMove(displayBoard);
+    previousBoardSnapshot.current = serverBoard;
   };
 
   // --- Matchmaking Handlers ---
@@ -293,11 +332,23 @@ const AyoOnlineUI = () => {
       const finalLogicalBoard = needsRotation ? unrotateBoard(finalVisualBoard) : finalVisualBoard;
 
       // Prepare Server Update
-      const nextTurnId = isPlayer1 ? currentGame.player2?.id : currentGame.player1?.id;
+      // logical currentPlayer is 1 or 2.
+      // needsRotation=true means WE are P1 (Logical 1).
+      // If nextState.currentPlayer is 1, it remains P1's turn.
+      const nextLogicalPlayer = moveResult.nextState.currentPlayer;
+      let nextTurnId = currentGame.currentTurn;
+
+      if (needsRotation) {
+        // We are P1 (Logical 1)
+        nextTurnId = nextLogicalPlayer === 1 ? currentGame.player1?.id : currentGame.player2?.id;
+      } else {
+        // We are P2 (Logical 2)
+        nextTurnId = nextLogicalPlayer === 2 ? currentGame.player2?.id : currentGame.player1?.id;
+      }
 
       setPendingServerUpdate({
         board: finalLogicalBoard,
-        turn: nextTurnId || currentGame.currentTurn // Should ensure P2 exists
+        turn: nextTurnId || currentGame.currentTurn
       });
 
     } else {
@@ -456,6 +507,13 @@ const AyoOnlineUI = () => {
             isActive={topProfile.isActive && !isAnimating}
             timeLeft="--:--"
           />
+        </View>
+
+        {/* Turn Indicator */}
+        <View style={styles.turnIndicator}>
+          <Text style={[styles.turnText, { color: bottomProfile.isActive ? '#4CAF50' : '#888' }]}>
+            {bottomProfile.isActive ? "YOUR TURN" : `${topProfile.name.toUpperCase()}'S TURN`}
+          </Text>
         </View>
 
         {/* Board */}
@@ -767,6 +825,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 16,
     fontWeight: '600',
+  },
+  turnIndicator: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  turnText: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
 });
 
