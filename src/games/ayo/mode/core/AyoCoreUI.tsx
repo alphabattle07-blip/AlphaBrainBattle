@@ -10,7 +10,6 @@ import {
   getValidMoves,
   Capture,
 } from "./AyoCoreLogic";
-import { useGameTimer } from "../../../../hooks/useGameTimer";
 import AyoGameOver from "../computer/AyoGameOver"; // ✅ import overlay
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile"; // Import the hook
 
@@ -48,9 +47,6 @@ export const AyoGame: React.FC<AyoGameProps> = ({
   const player = propPlayer ?? defaultPlayer;
   const opponent = propOpponent ?? defaultOpponent;
 
-  const { player1Time, player2Time, startTimer, pauseTimer, formatTime, setLastActivePlayer } =
-    useGameTimer(300);
-
   const isAnimating = animatingPaths.length > 0;
 
   // --- AI Move (opponent is currentPlayer 1) ---
@@ -72,29 +68,16 @@ export const AyoGame: React.FC<AyoGameProps> = ({
     }
   }, [gameState, isAnimating]);
 
-  // --- Timer management ---
+  // --- Game State Sync ---
   useEffect(() => {
     if (gameState.isGameOver) {
-      pauseTimer();
-      setShowGameOver(true); // Show the game over overlay
-      return;
+      setShowGameOver(true);
     }
-    if (isAnimating) {
-      pauseTimer();
-      return;
-    }
-    setLastActivePlayer(gameState.currentPlayer);
-    if (gameState.currentPlayer === 1) {
-      pauseTimer();
-    } else if (gameState.currentPlayer === 2) {
-      startTimer();
-    }
-  }, [gameState.currentPlayer, gameState.isGameOver, isAnimating]);
+  }, [gameState.isGameOver]);
 
   const handlePlayerMove = useCallback(
     (pitIndex: number) => {
       if (gameState.currentPlayer !== 2 || isAnimating) return;
-      pauseTimer();
       setBoardBeforeMove(gameState.board);
       const moveResult = calculateMoveResult(gameState, pitIndex);
       setAnimatingPaths(moveResult.animationPaths);
@@ -150,7 +133,6 @@ export const AyoGame: React.FC<AyoGameProps> = ({
         <GamePlayerProfile
           {...opponent}
           score={gameState.scores[1]}
-          timeLeft={formatTime(player1Time)}
           isActive={gameState.currentPlayer === 1 && !isAnimating}
           country={opponent.country || "NG"}
           rating={opponent.rating || 1200}
@@ -173,7 +155,6 @@ export const AyoGame: React.FC<AyoGameProps> = ({
         <GamePlayerProfile
           {...player}
           score={gameState.scores[2]}
-          timeLeft={formatTime(player2Time)}
           isActive={gameState.currentPlayer === 2 && !isAnimating}
           country={player.country || "NG"}
           rating={player.rating || 1200}

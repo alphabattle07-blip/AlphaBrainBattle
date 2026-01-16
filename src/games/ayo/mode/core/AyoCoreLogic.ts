@@ -4,12 +4,6 @@ export interface AyoGameState {
   scores: { [key: number]: number };
   currentPlayer: 1 | 2;
   isGameOver: boolean;
-  timerState: {
-    player1Time: number;
-    player2Time: number;
-    isRunning: boolean;
-    lastActivePlayer: 1 | 2;
-  };
 }
 
 export interface Capture {
@@ -40,12 +34,6 @@ export const initializeGame = (): AyoGameState => {
     scores: { 1: 0, 2: 0 },
     currentPlayer: startingPlayer,
     isGameOver: false,
-    timerState: {
-      player1Time: 600,
-      player2Time: 600,
-      isRunning: false,
-      lastActivePlayer: startingPlayer,
-    },
   };
 };
 

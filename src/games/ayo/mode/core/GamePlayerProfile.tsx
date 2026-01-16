@@ -10,11 +10,11 @@ interface GamePlayerProfileProps {
   country: string;
   rating: number;
   avatar?: string | null;
-  timeLeft?: string;
   isAI?: boolean;
   score?: number;
   isActive?: boolean;
   isOwnProfile?: boolean;
+  timeLeft?: string;
 }
 
 const GamePlayerProfile = ({
@@ -22,11 +22,11 @@ const GamePlayerProfile = ({
   country,
   rating,
   avatar,
-  timeLeft,
   isAI = false,
   score = 0,
   isActive = false,
   isOwnProfile = false,
+  timeLeft,
 }: GamePlayerProfileProps) => {
   const { width, height } = useWindowDimensions();
   const displayName = name;
@@ -82,7 +82,7 @@ const GamePlayerProfile = ({
         </View>
 
         <View style={styles.row}>
-          <Ionicons name="diamond" size={14} color="#FFD700" />
+          <Ionicons name={"diamond" as any} size={14} color="#FFD700" />
           <Text style={styles.rating}> x{score}</Text>
         </View>
       </View>
