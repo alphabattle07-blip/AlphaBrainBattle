@@ -60,11 +60,11 @@ const styles = StyleSheet.create({
     }
 });
 
-const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll, rankIcon }: { dice: number[], diceUsed: boolean[], onPress: () => void, waitingForRoll: boolean, rankIcon: string }) => (
+const DiceHouse = ({ dice, diceUsed, onPress, waitingForRoll, rankIcon, disabled }: { dice: number[], diceUsed: boolean[], onPress: () => void, waitingForRoll: boolean, rankIcon: string, disabled?: boolean }) => (
     <TouchableOpacity
         style={styles.diceHouse}
         onPress={onPress}
-        disabled={!waitingForRoll}
+        disabled={disabled || !waitingForRoll}
         activeOpacity={0.8}
     >
         <View style={styles.diceRow}>
@@ -169,9 +169,15 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
     // --- Handlers ---
     const handleRollDice = useCallback(() => {
         if (gameState.winner) return;
-        // Strict turn validation: only allow roll if it's the current player's turn (index 0 for local player in LudoCoreUI)
-        if (gameState.currentPlayerIndex !== 0) {
-            console.log("[LudoCoreUI] Prevented roll: Not player's turn");
+        // Strict turn validation: only allow roll if it's the current player's turn
+        // In local computer games (no onMove prop), player is index 0.
+        // We allow the roll if it's player 0's turn, OR if it's a computer game (onMove is undefined)
+        // and it's player 1's turn (the computer).
+        const isPlayerTurn = gameState.currentPlayerIndex === 0;
+        const isComputerTurn = !onMove && gameState.currentPlayerIndex === 1;
+
+        if (!isPlayerTurn && !isComputerTurn) {
+            console.log("[LudoCoreUI] Prevented roll: Not authorized for current player");
             return;
         }
 
@@ -179,16 +185,28 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
         console.log("[LudoCoreUI] Dice rolled:", newState.dice);
         setGameState(newState);
         if (onRoll) onRoll(newState);
-    }, [gameState, onRoll]);
+    }, [gameState, onRoll, onMove]);
 
     // --- Auto Pass & Turn Logic ---
     useEffect(() => {
-        // Only run auto-pass for local computer games (no onMove prop)
-        if (!onMove && !gameState.waitingForRoll && !gameState.winner) {
+        // Auto-pass conditions:
+        // 1. Game is not over
+        // 2. Dice have been rolled (!waitingForRoll)
+        // 3. Either:
+        //    a. Local computer game (no onMove) - runs for current turn (usually AI or player)
+        //    b. Online game (onMove present) - ONLY runs if it's the LOCAL player's turn (index 0)
+        //       to avoid race conditions where both clients try to pass for each other.
+        const isLocalTurn = gameState.currentPlayerIndex === 0;
+        const canAutoPass = !gameState.waitingForRoll && !gameState.winner && (!onMove || isLocalTurn);
+
+        if (canAutoPass) {
             const moves = getValidMoves(gameState);
             if (moves.length === 0) {
+                console.log(`[LudoCoreUI] No moves available. Auto-passing turn for player ${gameState.currentPlayerIndex}`);
                 const timer = setTimeout(() => {
-                    setGameState(prev => passTurn(prev));
+                    const newState = passTurn(gameState);
+                    setGameState(newState);
+                    if (onMove) onMove(newState);
                 }, 1000);
                 return () => clearTimeout(timer);
             }
@@ -306,6 +324,7 @@ export const LudoCoreUI: React.FC<LudoGameProps> = ({
                         waitingForRoll={gameState.waitingForRoll}
                         onPress={handleRollDice}
                         rankIcon={gameState.currentPlayerIndex === 0 ? playerRank.icon : opponentRank.icon}
+                        disabled={gameState.currentPlayerIndex !== 0}
                     />
                 </View>
             )}

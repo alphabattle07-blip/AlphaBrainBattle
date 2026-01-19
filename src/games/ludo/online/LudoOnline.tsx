@@ -146,7 +146,14 @@ const LudoOnline = () => {
     }, [currentGame, isPlayer2]);
 
     const handleOnlineAction = async (newState: LudoGameState) => {
-        if (!currentGame || !userProfile) return;
+        if (!currentGame || !userProfile || !visualGameState) return;
+
+        // Strict Turn Validation: Only the player whose turn it is should update the server.
+        // visualGameState.currentPlayerIndex 0 is always the local player.
+        if (visualGameState.currentPlayerIndex !== 0) {
+            console.log("[LudoOnline] Action ignored: Not your turn to update server");
+            return;
+        }
 
         // Transform back to logical state before sending to server
         let logicalState = newState;
