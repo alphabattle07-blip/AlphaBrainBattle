@@ -115,6 +115,7 @@ const WhotOnlineUI = () => {
 
   // --- UI Transformation (CRASH FIX HERE) ---
 
+  const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
   const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
   const needsRotation = isPlayer2;
 
@@ -132,12 +133,12 @@ const WhotOnlineUI = () => {
 
     const serverState = board as GameState;
     
-    // SAFETY CHECK 1: Ensure critical arrays exist
+    // SAFETY CHECK 1: Ensure critical arrays exist or default to []
     if (!serverState || !Array.isArray(serverState.players) || serverState.players.length < 2) {
       return { visualGameState: null, reconstructedAllCards: [] };
     }
 
-    // SAFETY CHECK 2: Ensure piles exist (prevents undefined.length crash)
+    // SAFETY CHECK 2: Sanitize arrays (prevents undefined.length crash)
     const safeState = {
         ...serverState,
         market: serverState.market || [],
@@ -145,7 +146,8 @@ const WhotOnlineUI = () => {
         players: serverState.players.map(p => ({ ...p, hand: p.hand || [] }))
     };
 
-    // Reconstruct allCards if missing (Vital for AnimatedCardList)
+    // VITAL: Reconstruct allCards if missing. 
+    // The server usually doesn't send "allCards", but AnimatedCardList NEEDS it to render anything.
     let allCards = safeState.allCards;
     if (!allCards || allCards.length === 0) {
         allCards = [
@@ -386,6 +388,7 @@ const WhotOnlineUI = () => {
 
   return (
     <WhotCoreUI
+      // PASS THE RECONSTRUCTED CARDS HERE
       game={{ gameState: visualGameState, allCards: reconstructedAllCards }}
       playerState={{
         name: userProfile?.name || 'You',
