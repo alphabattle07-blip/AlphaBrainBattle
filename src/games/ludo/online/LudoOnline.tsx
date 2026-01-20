@@ -31,6 +31,11 @@ const LudoOnline = () => {
     const matchmakingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const hasStartedMatchmaking = useRef(false);
 
+    // --- Optimistic State Protection ---
+    // Stores our local state after an action until the server confirms it
+    const pendingStateRef = useRef<LudoGameState | null>(null);
+    const lastActionTimeRef = useRef<number>(0);
+
     // Identify Player Role
     const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
     const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
@@ -130,19 +135,48 @@ const LudoOnline = () => {
         const board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
         const serverState = (board as unknown as LudoGameState) || initializeGame('blue', 'green');
 
-        // If we are player 2 in the logical game, we swap indices so we see ourselves as 'p1'
+        // Swap server state if we are Player 2
+        let processedState = serverState;
         if (isPlayer2) {
             const swappedPlayers = [
                 { ...serverState.players[1], id: 'p1' },
                 { ...serverState.players[0], id: 'p2' }
             ];
-            return {
+            processedState = {
                 ...serverState,
                 players: swappedPlayers,
                 currentPlayerIndex: serverState.currentPlayerIndex === 1 ? 0 : 1,
             };
         }
-        return serverState;
+
+        // --- RUBBER-BANDING PROTECTION ---
+        // If we have a pending local state, check if we should prefer it over the server state
+        if (pendingStateRef.current) {
+            const now = Date.now();
+            const timeSinceAction = now - lastActionTimeRef.current;
+
+            // If it's been more than 10 seconds, drop the pending state (stale)
+            if (timeSinceAction > 10000) {
+                pendingStateRef.current = null;
+            } else {
+                // Check if the server has "caught up"
+                // We compare current turn and dice state roughly
+                const isServerEquivalent =
+                    processedState.currentPlayerIndex === pendingStateRef.current.currentPlayerIndex &&
+                    processedState.waitingForRoll === pendingStateRef.current.waitingForRoll;
+
+                if (isServerEquivalent) {
+                    // Server matched our optimistic expectation! Clear pending state.
+                    pendingStateRef.current = null;
+                } else {
+                    // Server is still behind. Ignore server state and use our pending state.
+                    console.log("[LudoOnline] Ignoring outdated server state (Rubber-banding protection)");
+                    return pendingStateRef.current;
+                }
+            }
+        }
+
+        return processedState;
     }, [currentGame, isPlayer2]);
 
     const handleOnlineAction = async (newState: LudoGameState) => {
@@ -168,6 +202,10 @@ const LudoOnline = () => {
                 currentPlayerIndex: newState.currentPlayerIndex === 1 ? 0 : 1,
             };
         }
+
+        // --- Optimistic Update ---
+        pendingStateRef.current = newState;
+        lastActionTimeRef.current = Date.now();
 
         try {
             // Determine the current turn ID based on the updated logical state

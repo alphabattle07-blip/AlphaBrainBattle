@@ -366,7 +366,10 @@ export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress
 
     // Hit-test function to find which seed was tapped
     const findTappedSeed = (tapX: number, tapY: number) => {
-        const hitRadius = seedRadius * 1.5; // Slightly larger for easier tapping
+        // Increase hit radius for better mobile responsiveness
+        // seedRadius is typically (boardSize / 15) * 0.35
+        // We want a hit target of at least 44-48 points total diameter
+        const hitRadius = Math.max(seedRadius * 2.8, 22);
 
         for (const seed of seedsData) {
             const { x: seedX, y: seedY } = getSeedPixelPosition(
@@ -400,7 +403,13 @@ export const LudoSkiaBoard = ({ onBoardPress, positions, level }: { onBoardPress
     if (!boardImage) return null;
 
     return (
-        <GestureDetector gesture={Gesture.Tap().onEnd(({ x, y }) => runOnJS(handleTap)(x, y))}>
+        <GestureDetector
+            gesture={Gesture.Tap()
+                .maxDuration(250)
+                .maxDistance(15)
+                .onEnd(({ x, y }) => runOnJS(handleTap)(x, y))
+            }
+        >
             <Canvas style={{ width: canvasWidth, height: canvasHeight }}>
                 <SkiaImage
                     image={boardImage}
