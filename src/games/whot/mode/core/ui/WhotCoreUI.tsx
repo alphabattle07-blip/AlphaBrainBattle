@@ -130,14 +130,28 @@ const WhotCoreUI: React.FC<WhotCoreUIProps> = ({
         <View style={styles.container}>
             {game && (
                 <View style={styles.computerUIContainer} pointerEvents="box-none">
-                    <ComputerUI
-                        computerState={{
-                            name: opponentState.name,
-                            handLength: opponentState.handLength,
-                            isCurrentPlayer: opponentState.isCurrentPlayer
-                        }}
-                        level={level}
-                    />
+                    {opponentState.isAI ? (
+                        <ComputerUI
+                            computerState={{
+                                name: opponentState.name,
+                                handLength: opponentState.handLength,
+                                isCurrentPlayer: opponentState.isCurrentPlayer
+                            }}
+                            level={level}
+                        />
+                    ) : (
+                        <WhotPlayerProfile
+                            name={opponentState.name}
+                            rating={opponentState.rating || 1200}
+                            cardCount={opponentState.handLength}
+                            isCurrentPlayer={opponentState.isCurrentPlayer}
+                            avatar={null} // Or pass avatar if available in opponentState
+                            country="Global"
+                            isAI={false}
+                            showCardCount={true}
+                            style={{ marginRight: 0, top: 0, alignSelf: 'center' }}
+                        />
+                    )}
                 </View>
             )}
 

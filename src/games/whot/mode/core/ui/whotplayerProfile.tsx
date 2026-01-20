@@ -12,6 +12,7 @@ interface Props {
   isAI?: boolean;
   isCurrentPlayer?: boolean;
   showCardCount?: boolean;
+  style?: any; // Allow style override
 }
 
 const WhotPlayerProfile = ({
@@ -23,6 +24,7 @@ const WhotPlayerProfile = ({
   isAI = false,
   isCurrentPlayer = false,
   showCardCount = true,
+  style,
 }: Props) => {
   const { width, height } = useWindowDimensions();
   const [isLandscape, setIsLandscape] = useState(false);
@@ -38,7 +40,8 @@ const WhotPlayerProfile = ({
   return (
     <View style={[
       styles.container,
-      isLandscape && styles.containerLandscape
+      isLandscape && styles.containerLandscape,
+      style // Apply override last
     ]}>
 
       {/* 1. Player Name */}

@@ -184,6 +184,25 @@ const WhotOnlineUI = () => {
     let board: any;
     try {
       board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : JSON.parse(JSON.stringify(currentGame.board));
+
+      // NORMALIZE CARD DATA (Fix case mismatch e.g., "Star" -> "star")
+      const normalizeCard = (c: any) => {
+        if (!c) return c;
+        if (c.suit && typeof c.suit === 'string') c.suit = c.suit.toLowerCase();
+        if (c.shape && typeof c.shape === 'string') c.shape = c.shape.toLowerCase();
+        return c; // Mutating deep clone is fine
+      };
+
+      if (Array.isArray(board.market)) board.market.forEach(normalizeCard);
+      if (Array.isArray(board.pile)) board.pile.forEach(normalizeCard);
+      if (Array.isArray(board.players)) {
+        board.players.forEach((p: any) => {
+          if (Array.isArray(p.hand)) {
+            p.hand.forEach(normalizeCard);
+          }
+        });
+      }
+      if (Array.isArray(board.allCards)) board.allCards.forEach(normalizeCard);
     } catch (e) {
       console.error("Failed to parse board state", e);
       return { visualGameState: null, reconstructedAllCards: [] };
