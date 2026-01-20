@@ -203,6 +203,17 @@ const WhotOnlineUI = () => {
         });
       }
       if (Array.isArray(board.allCards)) board.allCards.forEach(normalizeCard);
+
+      // NORMALIZE GAME STATE GLOBALS
+      // Fixes issue where server sends "CROSS" but client expects "cross", causing "Invalid Move" lock.
+      if (board.calledSuit && typeof board.calledSuit === 'string') {
+        board.calledSuit = board.calledSuit.toLowerCase();
+      }
+      if (board.pendingAction && typeof board.pendingAction === 'object') {
+        if (board.pendingAction.type && typeof board.pendingAction.type === 'string') {
+          board.pendingAction.type = board.pendingAction.type.toLowerCase();
+        }
+      }
     } catch (e) {
       console.error("Failed to parse board state", e);
       return { visualGameState: null, reconstructedAllCards: [] };

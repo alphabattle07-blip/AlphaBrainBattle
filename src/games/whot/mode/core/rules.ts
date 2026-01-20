@@ -116,7 +116,7 @@ export const applyCardEffectRule1 = (
       break;
 
     case 14: // General Market
-      newState.currentPlayer = playerIndex;
+      newState.currentPlayer = opponentIndex; // Pass turn to opponent to draw
       newState.pendingAction = {
         type: "draw",
         playerIndex: opponentIndex,
@@ -128,7 +128,7 @@ export const applyCardEffectRule1 = (
     // --- Group 2: Pick 2, Pick 3 (Attacks) ---
     case 2: {
       // Pick Two
-      
+
       // ✅ DEFENSE LOGIC (CANCEL & RESET):
       // If we are currently under attack (defend state) and we played the matching 2...
       if (isCounteringAttack && state.lastPlayedCard?.number === 2) {
