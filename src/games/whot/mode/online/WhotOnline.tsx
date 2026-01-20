@@ -24,6 +24,9 @@ const WhotOnlineUI = () => {
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
+  // Error State for crash prevention
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } = useWhotFonts();
   const [stableFont, setStableFont] = useState<any>(null);
   const [stableWhotFont, setStableWhotFont] = useState<any>(null);
@@ -370,6 +373,21 @@ const WhotOnlineUI = () => {
   // Add font-ready guard to prevent crash on slow devices
   const areFontsReady = stableFont !== null && stableWhotFont !== null;
 
+  // Error Display UI
+  if (errorMessage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centerContainer}>
+          <Text style={styles.errorText}>⚠️ Error</Text>
+          <Text style={styles.loadingText}>{errorMessage}</Text>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.goBack()}>
+            <Text style={styles.cancelText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (isMatchmaking) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -391,6 +409,9 @@ const WhotOnlineUI = () => {
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
           <Text style={styles.loadingText}>Loading Game...</Text>
+          <Text style={[styles.loadingText, { fontSize: 10, opacity: 0.6 }]}>
+            {!currentGame ? 'Waiting for match...' : !areFontsReady ? 'Loading fonts...' : 'Processing game state...'}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -453,6 +474,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#000' },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#FFD700', marginTop: 15 },
+  errorText: { color: '#ef5350', fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
   matchmakingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   matchmakingTitle: { color: 'white', fontSize: 24, fontWeight: 'bold', marginTop: 20, textAlign: 'center' },
   cancelButton: { marginTop: 40, padding: 15, borderWidth: 1, borderColor: '#d32f2f', borderRadius: 8 },
