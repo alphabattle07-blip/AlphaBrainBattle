@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, Text, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '../../../../store/hooks';
@@ -7,19 +7,18 @@ import {
   updateOnlineGameState,
 } from '../../../../store/thunks/onlineGameThunks';
 import { clearCurrentGame, setCurrentGame } from '../../../../store/slices/onlineGameSlice';
-import { Ionicons } from '@expo/vector-icons';
 import { matchmakingService } from '../../../../services/api/matchmakingService';
 import WhotCoreUI from '../core/ui/WhotCoreUI';
 import { useWhotFonts } from '../core/ui/useWhotFonts';
 import { Card, CardSuit, GameState } from '../core/types';
 import { AnimatedCardListHandle } from '../core/ui/AnimatedCardList';
 import { useSharedValue } from 'react-native-reanimated';
-import { playCard, pickCard, callSuit, executeForcedDraw, getReshuffledState, calculateHandScore } from '../core/game';
+import { playCard, pickCard, callSuit, executeForcedDraw } from '../core/game';
 
 const WhotOnlineUI = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
-  const { currentGame, isLoading } = useAppSelector(state => state.onlineGame);
+  const { currentGame } = useAppSelector(state => state.onlineGame);
   const { profile: userProfile } = useAppSelector(state => state.user);
   const { isAuthenticated, token } = useAppSelector(state => state.auth);
   const { width, height } = useWindowDimensions();
@@ -38,12 +37,12 @@ const WhotOnlineUI = () => {
   // Game Logic State
   const [isAnimating, setIsAnimating] = useState(false);
   const cardListRef = useRef<AnimatedCardListHandle>(null);
-  const [isCardListReady, setIsCardListReady] = useState(false);
   const [hasDealt, setHasDealt] = useState(false);
   const playerHandIdsSV = useSharedValue<string[]>([]);
   const previousGameStateRef = useRef<GameState | null>(null);
   const lastSyncBatchRef = useRef<string | null>(null);
 
+  // Font Stabilization
   useEffect(() => {
     if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
       setStableFont(loadedFont);
@@ -114,34 +113,64 @@ const WhotOnlineUI = () => {
     }, 2000);
   };
 
-  // --- UI Transformation ---
+  // --- UI Transformation (CRASH FIX HERE) ---
 
-  const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
   const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
-  const needsRotation = isPlayer2; // Use explicit Player 2 check
+  const needsRotation = isPlayer2;
 
-  const visualGameState = useMemo(() => {
-    if (!currentGame?.board || !userProfile?.id) return null; // Add guard for userProfile.id
-    let board;
+  // We process the game state here to ensure it's safe for rendering
+  const { visualGameState, reconstructedAllCards } = useMemo(() => {
+    if (!currentGame?.board || !userProfile?.id) return { visualGameState: null, reconstructedAllCards: [] };
+    
+    let board: any;
     try {
       board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
     } catch (e) {
       console.error("Failed to parse board state", e);
-      return null;
+      return { visualGameState: null, reconstructedAllCards: [] };
     }
 
     const serverState = board as GameState;
-    if (!serverState || !serverState.players || serverState.players.length < 2) return null;
+    
+    // SAFETY CHECK 1: Ensure critical arrays exist
+    if (!serverState || !Array.isArray(serverState.players) || serverState.players.length < 2) {
+      return { visualGameState: null, reconstructedAllCards: [] };
+    }
 
-    if (!needsRotation) return serverState;
+    // SAFETY CHECK 2: Ensure piles exist (prevents undefined.length crash)
+    const safeState = {
+        ...serverState,
+        market: serverState.market || [],
+        pile: serverState.pile || [],
+        players: serverState.players.map(p => ({ ...p, hand: p.hand || [] }))
+    };
 
-    // Flip players: local player at index 0, opponent at index 1
-    return {
-      ...serverState,
-      players: [serverState.players[1], serverState.players[0]],
-      currentPlayer: serverState.currentPlayer === 0 ? 1 : 0
+    // Reconstruct allCards if missing (Vital for AnimatedCardList)
+    let allCards = safeState.allCards;
+    if (!allCards || allCards.length === 0) {
+        allCards = [
+            ...safeState.players[0].hand,
+            ...safeState.players[1].hand,
+            ...safeState.pile,
+            ...safeState.market
+        ];
+    }
+
+    if (!needsRotation) {
+        return { visualGameState: { ...safeState, allCards }, reconstructedAllCards: allCards };
+    }
+
+    // Flip players for Player 2 view
+    const rotatedState = {
+      ...safeState,
+      players: [safeState.players[1], safeState.players[0]],
+      currentPlayer: safeState.currentPlayer === 0 ? 1 : 0,
+      allCards // Pass the reconstructed cards
     } as GameState;
-  }, [currentGame?.board, needsRotation]);
+
+    return { visualGameState: rotatedState, reconstructedAllCards: allCards };
+
+  }, [currentGame?.board, needsRotation, userProfile?.id]);
 
   useEffect(() => {
     if (visualGameState && visualGameState.players?.[0]?.hand) {
@@ -149,7 +178,7 @@ const WhotOnlineUI = () => {
     }
   }, [visualGameState]);
 
-  // Sync Logic (Detect Opponent Moves)
+  // Sync Logic
   useEffect(() => {
     if (!visualGameState || isAnimating || !hasDealt) return;
 
@@ -164,8 +193,7 @@ const WhotOnlineUI = () => {
       // Detect Play
       if (curr.pile.length > prev.pile.length) {
         const playedCard = curr.pile[curr.pile.length - 1];
-        if (curr.currentPlayer === 0) { // Opponent just finished their turn
-          // Animate opponent playing a card
+        if (curr.currentPlayer === 0) { 
           animateOpponentPlay(playedCard, curr);
         }
       }
@@ -184,13 +212,11 @@ const WhotOnlineUI = () => {
     const dealer = cardListRef.current;
     if (!dealer) return;
     setIsAnimating(true);
-
     const finalPileIndex = finalState.pile.length - 1;
     await Promise.all([
       dealer.dealCard(card, "pile", { cardIndex: finalPileIndex }, false),
       dealer.flipCard(card, true)
     ]);
-
     setIsAnimating(false);
   };
 
@@ -198,14 +224,11 @@ const WhotOnlineUI = () => {
     const dealer = cardListRef.current;
     if (!dealer) return;
     setIsAnimating(true);
-
     const drawnCard = finalState.players?.[1]?.hand?.[finalState.players[1].hand.length - 1];
     if (!drawnCard) return;
     dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
     await new Promise(r => setTimeout(r, 40));
-
     await dealer.dealCard(drawnCard, "computer", { cardIndex: finalState.players[1].hand.length - 1, handSize: finalState.players[1].hand.length }, false);
-
     setIsAnimating(false);
   };
 
@@ -215,8 +238,6 @@ const WhotOnlineUI = () => {
     setIsAnimating(true);
     try {
       const nextVisualState = await action();
-
-      // Transform visual back to logical
       const logicalBoard = !needsRotation ? nextVisualState : {
         ...nextVisualState,
         players: [nextVisualState.players[1], nextVisualState.players[0]],
@@ -241,12 +262,9 @@ const WhotOnlineUI = () => {
 
   const onCardPress = (card: Card) => {
     if (visualGameState?.currentPlayer !== 0) return;
-
     handleAction(async () => {
       const dealer = cardListRef.current;
       const newState = playCard(visualGameState!, 0, card);
-
-      // Local animation
       if (dealer) {
         const finalPileIndex = newState.pile.length - 1;
         await Promise.all([
@@ -254,19 +272,15 @@ const WhotOnlineUI = () => {
           dealer.flipCard(card, true)
         ]);
       }
-
       return newState;
     });
   };
 
   const onPickFromMarket = () => {
     if (visualGameState?.currentPlayer !== 0) return;
-
     handleAction(async () => {
       const dealer = cardListRef.current;
       let currentState = visualGameState!;
-
-      // Check if it's a forced draw
       if (currentState.pendingAction?.type === 'draw') {
         const { count } = currentState.pendingAction;
         for (let i = 0; i < count; i++) {
@@ -285,8 +299,6 @@ const WhotOnlineUI = () => {
         }
         return currentState;
       }
-
-      // Normal draw
       const { newState, drawnCards } = pickCard(currentState, 0);
       if (dealer && drawnCards.length > 0) {
         for (const d of drawnCards) {
@@ -299,7 +311,6 @@ const WhotOnlineUI = () => {
           await dealer.flipCard(d, true);
         }
       }
-
       return newState;
     });
   };
@@ -311,13 +322,7 @@ const WhotOnlineUI = () => {
     });
   };
 
-  const onPagingPress = () => {
-    // Local paging doesn't necessarily need server sync if we handle it purely visually
-    // but for now let's just use it as is
-  };
-
   const onCardListReady = () => {
-    setIsCardListReady(true);
     setTimeout(() => {
       if (!hasDealt) animateInitialDeal();
     }, 500);
@@ -327,27 +332,19 @@ const WhotOnlineUI = () => {
     if (!visualGameState || !cardListRef.current) return;
     const dealer = cardListRef.current;
     setIsAnimating(true);
-
     const { players, pile } = visualGameState;
     const h1 = players[0].hand;
     const h2 = players[1].hand;
-
-    // Deal to both
-    for (let i = 0; i < 5; i++) {
-      if (h2[i]) await dealer.dealCard(h2[i], "computer", { cardIndex: i, handSize: 5 }, false);
-      if (h1[i]) await dealer.dealCard(h1[i], "player", { cardIndex: i, handSize: 5 }, false);
+    for (let i = 0; i < h1.length; i++) {
+      if (h2[i]) await dealer.dealCard(h2[i], "computer", { cardIndex: i, handSize: h2.length }, false);
+      if (h1[i]) await dealer.dealCard(h1[i], "player", { cardIndex: i, handSize: h1.length }, false);
     }
-
-    // Pile
-    for (const p of pile) {
-      await dealer.dealCard(p, "pile", { cardIndex: 0 }, false);
+    if(pile.length > 0) {
+         await dealer.dealCard(pile[pile.length - 1], "pile", { cardIndex: 0 }, false);
+         await dealer.flipCard(pile[pile.length - 1], true);
     }
-
-    // Flip
     const flips = h1.map(c => dealer.flipCard(c, true));
-    flips.push(dealer.flipCard(pile[pile.length - 1], true));
     await Promise.all(flips);
-
     setIsAnimating(false);
     setHasDealt(true);
   };
@@ -373,12 +370,13 @@ const WhotOnlineUI = () => {
     );
   }
 
+  // Ensure visualGameState is valid before rendering the core UI
   if (!currentGame || !visualGameState) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
-          <Text style={styles.loadingText}>Connecting to Server...</Text>
+          <Text style={styles.loadingText}>Connecting to Game Server...</Text>
         </View>
       </SafeAreaView>
     );
@@ -388,7 +386,7 @@ const WhotOnlineUI = () => {
 
   return (
     <WhotCoreUI
-      game={{ gameState: visualGameState, allCards: visualGameState.allCards || [] }}
+      game={{ gameState: visualGameState, allCards: reconstructedAllCards }}
       playerState={{
         name: userProfile?.name || 'You',
         rating: userProfile?.rating || 1200,
@@ -399,7 +397,7 @@ const WhotOnlineUI = () => {
       opponentState={{
         name: opponent?.name || 'Opponent',
         rating: opponent?.rating || 1200,
-        handLength: visualGameState.players?.[1]?.hand?.length || 0,
+        handLength: visualGameState.players[1].hand.length,
         isCurrentPlayer: visualGameState.currentPlayer === 1,
         isAI: false
       }}
@@ -410,13 +408,13 @@ const WhotOnlineUI = () => {
       cardListRef={cardListRef}
       onCardPress={onCardPress}
       onPickFromMarket={onPickFromMarket}
-      onPagingPress={onPagingPress}
+      onPagingPress={() => {}}
       onSuitSelect={onSuitSelect}
       onCardListReady={onCardListReady}
       showPagingButton={visualGameState.players[0].hand.length > 5}
-      allCards={visualGameState.allCards || []}
+      allCards={reconstructedAllCards}
       playerHandIdsSV={playerHandIdsSV}
-      gameInstanceId={0}
+      gameInstanceId={currentGame.id ? Number(currentGame.id) : 0}
       stableWidth={width}
       stableHeight={height}
       stableFont={stableFont}
@@ -424,7 +422,7 @@ const WhotOnlineUI = () => {
       isLandscape={isLandscape}
       gameOver={visualGameState.winner ? {
         winner: visualGameState.winner,
-        onRematch: () => { }, // Matchmaking handles rematches or new games
+        onRematch: () => { },
         onNewBattle: handleExit,
         level: 1,
         playerName: userProfile?.name || 'You',
