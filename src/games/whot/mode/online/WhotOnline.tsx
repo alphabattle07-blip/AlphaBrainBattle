@@ -367,6 +367,9 @@ const WhotOnlineUI = () => {
 
   // --- Rendering ---
 
+  // Add font-ready guard to prevent crash on slow devices
+  const areFontsReady = stableFont !== null && stableWhotFont !== null;
+
   if (isMatchmaking) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -381,13 +384,13 @@ const WhotOnlineUI = () => {
     );
   }
 
-  // Ensure visualGameState is valid before rendering the core UI
-  if (!currentGame || !visualGameState) {
+  // Block rendering until BOTH fonts AND game state are ready
+  if (!currentGame || !visualGameState || !areFontsReady) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
-          <Text style={styles.loadingText}>Connecting to Game Server...</Text>
+          <Text style={styles.loadingText}>Loading Game...</Text>
         </View>
       </SafeAreaView>
     );
