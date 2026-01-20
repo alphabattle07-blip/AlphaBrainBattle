@@ -122,7 +122,7 @@ const WhotOnlineUI = () => {
   // We process the game state here to ensure it's safe for rendering
   const { visualGameState, reconstructedAllCards } = useMemo(() => {
     if (!currentGame?.board || !userProfile?.id) return { visualGameState: null, reconstructedAllCards: [] };
-    
+
     let board: any;
     try {
       board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
@@ -132,7 +132,7 @@ const WhotOnlineUI = () => {
     }
 
     const serverState = board as GameState;
-    
+
     // SAFETY CHECK 1: Ensure critical arrays exist or default to []
     if (!serverState || !Array.isArray(serverState.players) || serverState.players.length < 2) {
       return { visualGameState: null, reconstructedAllCards: [] };
@@ -140,26 +140,35 @@ const WhotOnlineUI = () => {
 
     // SAFETY CHECK 2: Sanitize arrays (prevents undefined.length crash)
     const safeState = {
-        ...serverState,
-        market: serverState.market || [],
-        pile: serverState.pile || [],
-        players: serverState.players.map(p => ({ ...p, hand: p.hand || [] }))
+      ...serverState,
+      market: serverState.market || [],
+      pile: serverState.pile || [],
+      players: serverState.players.map(p => ({ ...p, hand: p.hand || [] }))
     };
 
     // VITAL: Reconstruct allCards if missing. 
     // The server usually doesn't send "allCards", but AnimatedCardList NEEDS it to render anything.
     let allCards = safeState.allCards;
     if (!allCards || allCards.length === 0) {
-        allCards = [
-            ...safeState.players[0].hand,
-            ...safeState.players[1].hand,
-            ...safeState.pile,
-            ...safeState.market
-        ];
+      allCards = [
+        ...safeState.players[0].hand,
+        ...safeState.players[1].hand,
+        ...safeState.pile,
+        ...safeState.market
+      ];
     }
 
+    // --- DUPLICATE KEY PROTECTION ---
+    // Ensure allCards only contains unique IDs to prevent AnimatedCardList crashes
+    const seenIds = new Set();
+    const uniqueAllCards = allCards.filter(card => {
+      if (!card || !card.id || seenIds.has(card.id)) return false;
+      seenIds.add(card.id);
+      return true;
+    });
+
     if (!needsRotation) {
-        return { visualGameState: { ...safeState, allCards }, reconstructedAllCards: allCards };
+      return { visualGameState: { ...safeState, allCards: uniqueAllCards }, reconstructedAllCards: uniqueAllCards };
     }
 
     // Flip players for Player 2 view
@@ -167,10 +176,10 @@ const WhotOnlineUI = () => {
       ...safeState,
       players: [safeState.players[1], safeState.players[0]],
       currentPlayer: safeState.currentPlayer === 0 ? 1 : 0,
-      allCards // Pass the reconstructed cards
+      allCards: uniqueAllCards // Pass the reconstructed cards
     } as GameState;
 
-    return { visualGameState: rotatedState, reconstructedAllCards: allCards };
+    return { visualGameState: rotatedState, reconstructedAllCards: uniqueAllCards };
 
   }, [currentGame?.board, needsRotation, userProfile?.id]);
 
@@ -195,7 +204,7 @@ const WhotOnlineUI = () => {
       // Detect Play
       if (curr.pile.length > prev.pile.length) {
         const playedCard = curr.pile[curr.pile.length - 1];
-        if (curr.currentPlayer === 0) { 
+        if (curr.currentPlayer === 0) {
           animateOpponentPlay(playedCard, curr);
         }
       }
@@ -341,9 +350,9 @@ const WhotOnlineUI = () => {
       if (h2[i]) await dealer.dealCard(h2[i], "computer", { cardIndex: i, handSize: h2.length }, false);
       if (h1[i]) await dealer.dealCard(h1[i], "player", { cardIndex: i, handSize: h1.length }, false);
     }
-    if(pile.length > 0) {
-         await dealer.dealCard(pile[pile.length - 1], "pile", { cardIndex: 0 }, false);
-         await dealer.flipCard(pile[pile.length - 1], true);
+    if (pile.length > 0) {
+      await dealer.dealCard(pile[pile.length - 1], "pile", { cardIndex: 0 }, false);
+      await dealer.flipCard(pile[pile.length - 1], true);
     }
     const flips = h1.map(c => dealer.flipCard(c, true));
     await Promise.all(flips);
@@ -393,31 +402,31 @@ const WhotOnlineUI = () => {
       playerState={{
         name: userProfile?.name || 'You',
         rating: userProfile?.rating || 1200,
-        handLength: visualGameState.players[0].hand.length,
+        handLength: visualGameState.players?.[0]?.hand?.length || 0,
         isCurrentPlayer: visualGameState.currentPlayer === 0,
         avatar: userProfile?.avatar
       }}
       opponentState={{
         name: opponent?.name || 'Opponent',
         rating: opponent?.rating || 1200,
-        handLength: visualGameState.players[1].hand.length,
+        handLength: visualGameState.players?.[1]?.hand?.length || 0,
         isCurrentPlayer: visualGameState.currentPlayer === 1,
         isAI: false
       }}
-      marketCardCount={visualGameState.market.length}
+      marketCardCount={visualGameState.market?.length || 0}
       activeCalledSuit={visualGameState.calledSuit || null}
       showSuitSelector={visualGameState.pendingAction?.type === 'call_suit' && visualGameState.currentPlayer === 0}
       isAnimating={isAnimating}
       cardListRef={cardListRef}
       onCardPress={onCardPress}
       onPickFromMarket={onPickFromMarket}
-      onPagingPress={() => {}}
+      onPagingPress={() => { }}
       onSuitSelect={onSuitSelect}
       onCardListReady={onCardListReady}
-      showPagingButton={visualGameState.players[0].hand.length > 5}
+      showPagingButton={(visualGameState.players?.[0]?.hand?.length || 0) > 5}
       allCards={reconstructedAllCards}
       playerHandIdsSV={playerHandIdsSV}
-      gameInstanceId={currentGame.id ? Number(currentGame.id) : 0}
+      gameInstanceId={currentGame.id || 'whot-online'} // Use stable string ID
       stableWidth={width}
       stableHeight={height}
       stableFont={stableFont}

@@ -49,7 +49,7 @@ export type WhotCoreUIProps = {
     showPagingButton: boolean;
     allCards: Card[];
     playerHandIdsSV: any;
-    gameInstanceId: number;
+    gameInstanceId: string | number;
     stableWidth: number;
     stableHeight: number;
     stableFont: SkFont | null;
