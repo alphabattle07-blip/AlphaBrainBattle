@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, Text, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '../../../../store/hooks';
@@ -14,6 +14,47 @@ import { Card, CardSuit, GameState } from '../core/types';
 import { AnimatedCardListHandle } from '../core/ui/AnimatedCardList';
 import { useSharedValue } from 'react-native-reanimated';
 import { playCard, pickCard, callSuit, executeForcedDraw } from '../core/game';
+
+// Error Boundary to catch crashes in child components
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string;
+}
+
+class WhotErrorBoundary extends Component<{ children: ReactNode; onGoBack: () => void }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode; onGoBack: () => void }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorMessage: error.message || 'Unknown error occurred' };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('WhotErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <Text style={{ color: '#ef5350', fontSize: 20, fontWeight: 'bold', marginBottom: 10 }}>⚠️ Game Error</Text>
+            <Text style={{ color: '#FFD700', textAlign: 'center', marginBottom: 20 }}>{this.state.errorMessage}</Text>
+            <TouchableOpacity
+              style={{ padding: 15, borderWidth: 1, borderColor: '#d32f2f', borderRadius: 8 }}
+              onPress={this.props.onGoBack}
+            >
+              <Text style={{ color: '#ef5350', fontSize: 16, fontWeight: '600' }}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const WhotOnlineUI = () => {
   const dispatch = useAppDispatch();
@@ -37,6 +78,7 @@ const WhotOnlineUI = () => {
   const matchmakingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedMatchmaking = useRef(false);
 
+
   // Game Logic State
   const [isAnimating, setIsAnimating] = useState(false);
   const cardListRef = useRef<AnimatedCardListHandle>(null);
@@ -45,6 +87,9 @@ const WhotOnlineUI = () => {
   const previousGameStateRef = useRef<GameState | null>(null);
   const lastSyncBatchRef = useRef<string | null>(null);
 
+  // Safety: Delay card rendering to prevent Reanimated initialization crashes on mount
+  const [areCardsReadyToRender, setCardsReadyToRender] = useState(false);
+
   // Font Stabilization
   useEffect(() => {
     if (areLoaded && !stableFont && loadedFont && loadedWhotFont) {
@@ -52,6 +97,16 @@ const WhotOnlineUI = () => {
       setStableWhotFont(loadedWhotFont);
     }
   }, [areLoaded, stableFont, loadedFont, loadedWhotFont]);
+
+  // Lazy load cards
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCardsReadyToRender(true);
+    }, 500); // 500ms delay to ensure layout is measured
+    return () => clearTimeout(timer);
+  }, []);
+
+  // ... (Matchmaking useEffects remain the same)
 
   // Matchmaking Initialization
   useEffect(() => {
@@ -421,8 +476,11 @@ const WhotOnlineUI = () => {
 
   return (
     <WhotCoreUI
-      // PASS THE RECONSTRUCTED CARDS HERE
-      game={{ gameState: visualGameState, allCards: reconstructedAllCards }}
+      // PASS THE RECONSTRUCTED CARDS HERE (Safety: Lazy load)
+      game={{
+        gameState: visualGameState,
+        allCards: areCardsReadyToRender ? reconstructedAllCards : []
+      }}
       playerState={{
         name: userProfile?.name || 'You',
         rating: userProfile?.rating || 1200,
@@ -448,7 +506,7 @@ const WhotOnlineUI = () => {
       onSuitSelect={onSuitSelect}
       onCardListReady={onCardListReady}
       showPagingButton={(visualGameState.players?.[0]?.hand?.length || 0) > 5}
-      allCards={reconstructedAllCards}
+      allCards={areCardsReadyToRender ? reconstructedAllCards : []}
       playerHandIdsSV={playerHandIdsSV}
       gameInstanceId={currentGame.id || 'whot-online'} // Use stable string ID
       stableWidth={width}
@@ -481,4 +539,19 @@ const styles = StyleSheet.create({
   cancelText: { color: '#ef5350', fontSize: 16, fontWeight: '600' },
 });
 
-export default WhotOnlineUI;
+// Wrapper component that uses Error Boundary
+const WhotOnlineScreen = () => {
+  const navigation = useNavigation();
+
+  const handleGoBack = () => {
+    navigation.goBack();
+  };
+
+  return (
+    <WhotErrorBoundary onGoBack={handleGoBack}>
+      <WhotOnlineUI />
+    </WhotErrorBoundary>
+  );
+};
+
+export default WhotOnlineScreen;
