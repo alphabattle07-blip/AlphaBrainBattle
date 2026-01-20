@@ -183,7 +183,7 @@ const WhotOnlineUI = () => {
 
     let board: any;
     try {
-      board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
+      board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : JSON.parse(JSON.stringify(currentGame.board));
     } catch (e) {
       console.error("Failed to parse board state", e);
       return { visualGameState: null, reconstructedAllCards: [] };
