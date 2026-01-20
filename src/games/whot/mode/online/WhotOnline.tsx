@@ -116,26 +116,35 @@ const WhotOnlineUI = () => {
 
   // --- UI Transformation ---
 
-  const isPlayer1 = currentGame?.player1.id === userProfile?.id;
-  const needsRotation = !isPlayer1;
+  const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
+  const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
+  const needsRotation = isPlayer2; // Use explicit Player 2 check
 
   const visualGameState = useMemo(() => {
-    if (!currentGame?.board) return null;
-    const board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
+    if (!currentGame?.board || !userProfile?.id) return null; // Add guard for userProfile.id
+    let board;
+    try {
+      board = typeof currentGame.board === 'string' ? JSON.parse(currentGame.board) : currentGame.board;
+    } catch (e) {
+      console.error("Failed to parse board state", e);
+      return null;
+    }
 
-    if (!needsRotation) return board as GameState;
+    const serverState = board as GameState;
+    if (!serverState || !serverState.players || serverState.players.length < 2) return null;
+
+    if (!needsRotation) return serverState;
 
     // Flip players: local player at index 0, opponent at index 1
-    const originalGameState = board as GameState;
     return {
-      ...originalGameState,
-      players: [originalGameState.players[1], originalGameState.players[0]],
-      currentPlayer: originalGameState.currentPlayer === 0 ? 1 : 0
+      ...serverState,
+      players: [serverState.players[1], serverState.players[0]],
+      currentPlayer: serverState.currentPlayer === 0 ? 1 : 0
     } as GameState;
   }, [currentGame?.board, needsRotation]);
 
   useEffect(() => {
-    if (visualGameState) {
+    if (visualGameState && visualGameState.players?.[0]?.hand) {
       playerHandIdsSV.value = visualGameState.players[0].hand.map(c => c.id);
     }
   }, [visualGameState]);
@@ -161,7 +170,7 @@ const WhotOnlineUI = () => {
         }
       }
       // Detect Draw
-      else if (curr.players[1].hand.length > prev.players[1].hand.length) {
+      else if (curr.players?.[1]?.hand && prev.players?.[1]?.hand && curr.players[1].hand.length > prev.players[1].hand.length) {
         if (curr.currentPlayer === 0) {
           animateOpponentDraw(curr);
         }
@@ -190,7 +199,8 @@ const WhotOnlineUI = () => {
     if (!dealer) return;
     setIsAnimating(true);
 
-    const drawnCard = finalState.players[1].hand[finalState.players[1].hand.length - 1];
+    const drawnCard = finalState.players?.[1]?.hand?.[finalState.players[1].hand.length - 1];
+    if (!drawnCard) return;
     dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
     await new Promise(r => setTimeout(r, 40));
 
@@ -389,7 +399,7 @@ const WhotOnlineUI = () => {
       opponentState={{
         name: opponent?.name || 'Opponent',
         rating: opponent?.rating || 1200,
-        handLength: visualGameState.players[1].hand.length,
+        handLength: visualGameState.players?.[1]?.hand?.length || 0,
         isCurrentPlayer: visualGameState.currentPlayer === 1,
         isAI: false
       }}
