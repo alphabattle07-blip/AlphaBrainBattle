@@ -75,6 +75,7 @@ const WhotOnlineUI = () => {
   // Matchmaking State
   const [isMatchmaking, setIsMatchmaking] = useState(false);
   const [matchmakingMessage, setMatchmakingMessage] = useState('Finding match...');
+  const [pageIndex, setPageIndex] = useState(0); // Added for Paging
   const matchmakingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedMatchmaking = useRef(false);
 
@@ -282,6 +283,11 @@ const WhotOnlineUI = () => {
     if (!visualGameState || isAnimating || !hasDealt) return;
 
     const gameStateHash = JSON.stringify(visualGameState);
+    // REMOVED: if (gameStateHash === lastSyncBatchRef.current) return;
+    // We need to allow re-runs for paging or reconciliation even if hash matches?
+    // Actually, reconciliation should run even if hash matches IF pageIndex changes.
+    // But this sync effect is for detecting PLAYS/DRAWS.
+
     if (gameStateHash === lastSyncBatchRef.current) return;
     lastSyncBatchRef.current = gameStateHash;
 
@@ -289,12 +295,15 @@ const WhotOnlineUI = () => {
       const prev = previousGameStateRef.current;
       const curr = visualGameState;
 
-      // Detect Play
-      if (curr.pile.length > prev.pile.length) {
+      // Detect Play (Improved Logic: Check if pile grew AND I didn't play)
+      // If I played, my hand would shrink.
+      // If I didn't play (hand same or grown), and pile grew, it must be opponent.
+      // Also handles edge case of multi-card plays if any.
+      const myHandSameOrGrown = (curr.players[0].hand?.length || 0) >= (prev.players[0].hand?.length || 0);
+
+      if (curr.pile.length > prev.pile.length && myHandSameOrGrown) {
         const playedCard = curr.pile[curr.pile.length - 1];
-        if (curr.currentPlayer === 0) {
-          animateOpponentPlay(playedCard, curr);
-        }
+        animateOpponentPlay(playedCard, curr);
       }
       // Detect Draw
       else if (curr.players?.[1]?.hand && prev.players?.[1]?.hand && curr.players[1].hand.length > prev.players[1].hand.length) {
@@ -306,6 +315,55 @@ const WhotOnlineUI = () => {
 
     previousGameStateRef.current = visualGameState;
   }, [visualGameState, isAnimating, hasDealt]);
+
+  // --- RECONCILIATION LOOP (The Fix for Visual Synchronization) ---
+  useEffect(() => {
+    if (isAnimating || !hasDealt || !cardListRef.current || !visualGameState) return;
+
+    const dealer = cardListRef.current;
+
+    // 1. Reconcile Pile (Fixes "Whot card moves back" issue)
+    visualGameState.pile.forEach((c, i) => {
+      // Force pile cards to their correct slot
+      dealer.teleportCard(c, "pile", { cardIndex: i });
+    });
+
+    // 2. Reconcile Opponent Hand (Fixes compression issues)
+    const oppHand = visualGameState.players[1].hand || [];
+    oppHand.forEach((c, i) => {
+      dealer.teleportCard(c, "computer", { cardIndex: i, handSize: oppHand.length });
+    });
+
+    // 3. Reconcile Player Hand (Fixes Paging and Sorting)
+    const myHand = visualGameState.players[0].hand || [];
+    const pageSize = 5;
+    const startIndex = pageIndex * pageSize;
+    const endIndex = startIndex + pageSize;
+
+    myHand.forEach((c, i) => {
+      if (i >= startIndex && i < endIndex) {
+        const visualIndex = i - startIndex;
+        // Use 5 (or less) as handSize to ensure proper spacing
+        dealer.teleportCard(c, "player", {
+          cardIndex: visualIndex,
+          handSize: Math.min(myHand.length - startIndex, 5)
+        });
+      } else {
+        // Move off-screen or hide
+        dealer.teleportCard(c, "player", { cardIndex: -100, handSize: 5 });
+      }
+    });
+
+  }, [visualGameState, pageIndex, isAnimating, hasDealt]);
+
+  const handlePagingPress = () => {
+    if (!visualGameState?.players?.[0]?.hand) return;
+    const handLength = visualGameState.players[0].hand.length;
+    if (handLength <= 5) return;
+
+    const maxPages = Math.ceil(handLength / 5);
+    setPageIndex(prev => (prev + 1) % maxPages);
+  };
 
   const animateOpponentPlay = async (card: Card, finalState: GameState) => {
     const dealer = cardListRef.current;
@@ -342,6 +400,14 @@ const WhotOnlineUI = () => {
         players: [nextVisualState.players[1], nextVisualState.players[0]],
         currentPlayer: nextVisualState.currentPlayer === 0 ? 1 : 0
       };
+
+      // OPTIMISTIC UPDATE: Update local store immediately to support fast sequential moves (e.g. 1, 1, 8)
+      if (currentGame) {
+        dispatch(setCurrentGame({
+          ...currentGame,
+          board: logicalBoard
+        }));
+      }
 
       await dispatch(updateOnlineGameState({
         gameId: currentGame!.id,
@@ -388,8 +454,8 @@ const WhotOnlineUI = () => {
             dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
             await new Promise(r => setTimeout(r, 40));
             await dealer.dealCard(drawnCard, "player", {
-              cardIndex: newState.players[0].hand.length - 1,
-              handSize: 5
+              cardIndex: (newState.players[0].hand.length - 1) % 5,
+              handSize: Math.min(newState.players[0].hand.length, 5)
             }, false);
             await dealer.flipCard(drawnCard, true);
           }
@@ -404,8 +470,8 @@ const WhotOnlineUI = () => {
           dealer.teleportCard(d, "market", { cardIndex: 0 });
           await new Promise(r => setTimeout(r, 40));
           await dealer.dealCard(d, "player", {
-            cardIndex: newState.players[0].hand.length - 1,
-            handSize: 5
+            cardIndex: (newState.players[0].hand.length - 1) % 5, // Use visual index if paged
+            handSize: Math.min(newState.players[0].hand.length, 5) // Use capped size
           }, false);
           await dealer.flipCard(d, true);
         }
@@ -532,7 +598,7 @@ const WhotOnlineUI = () => {
       cardListRef={cardListRef}
       onCardPress={onCardPress}
       onPickFromMarket={onPickFromMarket}
-      onPagingPress={() => { }}
+      onPagingPress={handlePagingPress}
       onSuitSelect={onSuitSelect}
       onCardListReady={onCardListReady}
       showPagingButton={(visualGameState.players?.[0]?.hand?.length || 0) > 5}
