@@ -81,7 +81,9 @@ const WhotOnlineUI = () => {
 
 
   // Game Logic State
+  // Game Logic State
   const [isAnimating, setIsAnimating] = useState(false);
+  const isAnimatingRef = useRef(false); // Ref for synchronous animation tracking
   const cardListRef = useRef<AnimatedCardListHandle>(null);
   const [hasDealt, setHasDealt] = useState(false);
   const playerHandIdsSV = useSharedValue<string[]>([]);
@@ -280,7 +282,8 @@ const WhotOnlineUI = () => {
 
   // Sync Logic
   useEffect(() => {
-    if (!visualGameState || isAnimating || !hasDealt) return;
+    // Check ref for instant blocking of reconciliation
+    if (!visualGameState || isAnimating || isAnimatingRef.current || !hasDealt) return;
 
     const gameStateHash = JSON.stringify(visualGameState);
     // REMOVED: if (gameStateHash === lastSyncBatchRef.current) return;
@@ -308,7 +311,8 @@ const WhotOnlineUI = () => {
       // Detect Draw
       else if (curr.players?.[1]?.hand && prev.players?.[1]?.hand && curr.players[1].hand.length > prev.players[1].hand.length) {
         if (curr.currentPlayer === 0) {
-          animateOpponentDraw(curr);
+          const prevHandCount = prev.players[1].hand.length;
+          animateOpponentDraw(curr, prevHandCount);
         }
       }
     }
@@ -318,7 +322,7 @@ const WhotOnlineUI = () => {
 
   // --- RECONCILIATION LOOP (The Fix for Visual Synchronization) ---
   useEffect(() => {
-    if (isAnimating || !hasDealt || !cardListRef.current || !visualGameState) return;
+    if (isAnimating || isAnimatingRef.current || !hasDealt || !cardListRef.current || !visualGameState) return;
 
     const dealer = cardListRef.current;
 
@@ -365,34 +369,68 @@ const WhotOnlineUI = () => {
     setPageIndex(prev => (prev + 1) % maxPages);
   };
 
+  // Auto-page when player hand size increases
+  useEffect(() => {
+    if (visualGameState?.players?.[0]?.hand && !isAnimating && !isAnimatingRef.current) {
+      const handLength = visualGameState.players[0].hand.length;
+      if (handLength > 0) {
+        const lastCardPageIndex = Math.floor((handLength - 1) / 5);
+        if (lastCardPageIndex > pageIndex) {
+          setPageIndex(lastCardPageIndex);
+        }
+      }
+    }
+  }, [visualGameState?.players?.[0]?.hand?.length]);
+
   const animateOpponentPlay = async (card: Card, finalState: GameState) => {
     const dealer = cardListRef.current;
     if (!dealer) return;
     setIsAnimating(true);
+    isAnimatingRef.current = true;
+
     const finalPileIndex = finalState.pile.length - 1;
     await Promise.all([
       dealer.dealCard(card, "pile", { cardIndex: finalPileIndex }, false),
       dealer.flipCard(card, true)
     ]);
     setIsAnimating(false);
+    isAnimatingRef.current = false;
   };
 
-  const animateOpponentDraw = async (finalState: GameState) => {
+  const animateOpponentDraw = async (finalState: GameState, prevHandCount: number) => {
     const dealer = cardListRef.current;
     if (!dealer) return;
     setIsAnimating(true);
-    const drawnCard = finalState.players?.[1]?.hand?.[finalState.players[1].hand.length - 1];
-    if (!drawnCard) return;
-    dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
-    await new Promise(r => setTimeout(r, 40));
-    await dealer.dealCard(drawnCard, "computer", { cardIndex: finalState.players[1].hand.length - 1, handSize: finalState.players[1].hand.length }, false);
+    isAnimatingRef.current = true;
+
+    const currentHand = finalState.players?.[1]?.hand || [];
+    const newCards = currentHand.slice(prevHandCount);
+
+    for (let i = 0; i < newCards.length; i++) {
+      const card = newCards[i];
+      const cardIndex = prevHandCount + i;
+
+      dealer.teleportCard(card, "market", { cardIndex: 0 });
+      await new Promise(r => setTimeout(r, 40));
+      await dealer.dealCard(card, "computer", {
+        cardIndex: cardIndex,
+        handSize: currentHand.length
+      }, false);
+
+      if (i < newCards.length - 1) {
+        await new Promise(r => setTimeout(r, 200)); // Gap between cards
+      }
+    }
+
     setIsAnimating(false);
+    isAnimatingRef.current = false;
   };
 
   // Turn Handling
   const handleAction = async (action: () => GameState | Promise<GameState>) => {
-    if (isAnimating) return;
+    if (isAnimating || isAnimatingRef.current) return;
     setIsAnimating(true);
+    isAnimatingRef.current = true;
     try {
       const nextVisualState = await action();
       const logicalBoard = !needsRotation ? nextVisualState : {
@@ -422,6 +460,7 @@ const WhotOnlineUI = () => {
       console.error('Action failed:', err);
     } finally {
       setIsAnimating(false);
+      isAnimatingRef.current = false;
     }
   };
 
@@ -451,11 +490,14 @@ const WhotOnlineUI = () => {
         for (let i = 0; i < count; i++) {
           const { newState, drawnCard } = executeForcedDraw(currentState);
           if (drawnCard && dealer) {
+            const currentHandCount = newState.players[0].hand.length;
+            const cardIndex = currentHandCount - 1;
+
             dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
             await new Promise(r => setTimeout(r, 40));
             await dealer.dealCard(drawnCard, "player", {
-              cardIndex: (newState.players[0].hand.length - 1) % 5,
-              handSize: Math.min(newState.players[0].hand.length, 5)
+              cardIndex: cardIndex % 5,
+              handSize: Math.min(currentHandCount - (Math.floor(cardIndex / 5) * 5), 5)
             }, false);
             await dealer.flipCard(drawnCard, true);
           }
@@ -466,14 +508,19 @@ const WhotOnlineUI = () => {
       }
       const { newState, drawnCards } = pickCard(currentState, 0);
       if (dealer && drawnCards.length > 0) {
-        for (const d of drawnCards) {
+        for (let i = 0; i < drawnCards.length; i++) {
+          const d = drawnCards[i];
+          const cardIndex = (visualGameState!.players[0].hand.length) + i;
+
           dealer.teleportCard(d, "market", { cardIndex: 0 });
           await new Promise(r => setTimeout(r, 40));
           await dealer.dealCard(d, "player", {
-            cardIndex: (newState.players[0].hand.length - 1) % 5, // Use visual index if paged
-            handSize: Math.min(newState.players[0].hand.length, 5) // Use capped size
+            cardIndex: cardIndex % 5,
+            handSize: Math.min((cardIndex + 1) - (Math.floor(cardIndex / 5) * 5), 5)
           }, false);
           await dealer.flipCard(d, true);
+
+          if (i < drawnCards.length - 1) await new Promise(r => setTimeout(r, 200));
         }
       }
       return newState;
@@ -497,6 +544,8 @@ const WhotOnlineUI = () => {
     if (!visualGameState || !cardListRef.current) return;
     const dealer = cardListRef.current;
     setIsAnimating(true);
+    isAnimatingRef.current = true;
+
     const { players, pile } = visualGameState;
     const h1 = players[0].hand;
     const h2 = players[1].hand;
@@ -510,7 +559,9 @@ const WhotOnlineUI = () => {
     }
     const flips = h1.map(c => dealer.flipCard(c, true));
     await Promise.all(flips);
+    await Promise.all(flips);
     setIsAnimating(false);
+    isAnimatingRef.current = false;
     setHasDealt(true);
   };
 
