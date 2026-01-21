@@ -231,7 +231,7 @@ export const pickCard = (
 
     // Case C: Normal Draw
     const drawnCards = market.splice(0, 1); // Draw 1
-    const newHand = [...drawnCards, ...state.players[playerIndex].hand];
+    const newHand = [...state.players[playerIndex].hand, ...drawnCards];
 
     const nextPlayer = (playerIndex + state.direction + state.players.length) % state.players.length;
 
@@ -307,7 +307,7 @@ export const pickCard = (
     }
 
     const drawnCards = market.splice(0, 1);
-    const newHand = [...drawnCards, ...state.players[playerIndex].hand];
+    const newHand = [...state.players[playerIndex].hand, ...drawnCards];
 
     const newState: GameState = {
       ...state,
@@ -391,7 +391,7 @@ export const executeForcedDraw = (
   const market = [...state.market];
   const drawnCard = market.splice(0, 1)[0];
 
-  const newHand = [drawnCard, ...state.players[playerIndex].hand];
+  const newHand = [...state.players[playerIndex].hand, drawnCard];
   const remainingCount = count - 1;
 
   // ✅ CHECK IF MARKET BECAME EMPTY AFTER THIS DRAW

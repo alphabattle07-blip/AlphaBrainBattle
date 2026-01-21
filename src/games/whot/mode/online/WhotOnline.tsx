@@ -310,10 +310,8 @@ const WhotOnlineUI = () => {
       }
       // Detect Draw
       else if (curr.players?.[1]?.hand && prev.players?.[1]?.hand && curr.players[1].hand.length > prev.players[1].hand.length) {
-        if (curr.currentPlayer === 0) {
-          const prevHandCount = prev.players[1].hand.length;
-          animateOpponentDraw(curr, prevHandCount);
-        }
+        const prevHandCount = prev.players[1].hand.length;
+        animateOpponentDraw(curr, prevHandCount);
       }
     }
 
@@ -347,10 +345,11 @@ const WhotOnlineUI = () => {
     myHand.forEach((c, i) => {
       if (i >= startIndex && i < endIndex) {
         const visualIndex = i - startIndex;
-        // Use 5 (or less) as handSize to ensure proper spacing
+        // STABLE: Use 5 as handSize if paged to prevent "jumping" positions
+        const stableHandSize = myHand.length > 5 ? 5 : myHand.length;
         dealer.teleportCard(c, "player", {
           cardIndex: visualIndex,
-          handSize: Math.min(myHand.length - startIndex, 5)
+          handSize: stableHandSize
         });
       } else {
         // Move off-screen or hide
@@ -495,9 +494,11 @@ const WhotOnlineUI = () => {
 
             dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
             await new Promise(r => setTimeout(r, 40));
+            // STABLE: Use 5 if paged
+            const stableHandSize = currentHandCount > 5 ? 5 : currentHandCount;
             await dealer.dealCard(drawnCard, "player", {
               cardIndex: cardIndex % 5,
-              handSize: Math.min(currentHandCount - (Math.floor(cardIndex / 5) * 5), 5)
+              handSize: stableHandSize
             }, false);
             await dealer.flipCard(drawnCard, true);
           }
@@ -514,9 +515,11 @@ const WhotOnlineUI = () => {
 
           dealer.teleportCard(d, "market", { cardIndex: 0 });
           await new Promise(r => setTimeout(r, 40));
+          // STABLE: Use 5 if paged
+          const stableHandSize = (visualGameState!.players[0].hand.length + i + 1) > 5 ? 5 : (visualGameState!.players[0].hand.length + i + 1);
           await dealer.dealCard(d, "player", {
             cardIndex: cardIndex % 5,
-            handSize: Math.min((cardIndex + 1) - (Math.floor(cardIndex / 5) * 5), 5)
+            handSize: stableHandSize
           }, false);
           await dealer.flipCard(d, true);
 
