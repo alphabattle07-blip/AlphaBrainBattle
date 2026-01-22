@@ -1,3 +1,4 @@
+// WhotOnlineScreen
 import React, { useState, useEffect, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, SafeAreaView, Text, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -14,6 +15,7 @@ import { Card, CardSuit, GameState } from '../core/types';
 import { AnimatedCardListHandle } from '../core/ui/AnimatedCardList';
 import { useSharedValue } from 'react-native-reanimated';
 import { playCard, pickCard, callSuit, executeForcedDraw } from '../core/game';
+import { socketService } from '../../../../services/api/socketService';
 
 // Error Boundary to catch crashes in child components
 interface ErrorBoundaryState {
@@ -135,10 +137,31 @@ const WhotOnlineUI = () => {
     if (currentGame?.id && !isAnimating) {
       const interval = setInterval(() => {
         dispatch(fetchGameState(currentGame.id));
-      }, 3000);
+      }, 15000); // REPLACED: Polling fallback reduced to 15s
       return () => clearInterval(interval);
     }
   }, [currentGame?.id, isAnimating, dispatch]);
+
+  // --- SOCKET.IO INTEGRATION ---
+  useEffect(() => {
+    if (currentGame?.id) {
+      socketService.joinGame(currentGame.id);
+
+      const unsubscribe = socketService.onOpponentMove((boardState: GameState) => {
+        // console.log("[WhotOnline] ⚡ Socket update received");
+        // Update local store immediately
+        dispatch(setCurrentGame({
+          ...currentGame,
+          board: boardState
+        }));
+      });
+
+      return () => {
+        unsubscribe();
+        socketService.leaveGame(currentGame.id);
+      };
+    }
+  }, [currentGame?.id]);
 
   const startAutomaticMatchmaking = async () => {
     try {
@@ -481,6 +504,11 @@ const WhotOnlineUI = () => {
           status: nextVisualState.winner ? 'COMPLETED' : 'IN_PROGRESS'
         }
       }));
+
+      // --- Socket Emit ---
+      // Broadcast the move to the opponent instantly
+      socketService.emitMove(currentGame!.id, logicalBoard);
+
     } catch (err) {
       console.error('Action failed:', err);
     } finally {

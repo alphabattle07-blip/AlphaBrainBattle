@@ -16,6 +16,7 @@ import { LudoGameState, initializeGame } from '../core/ui/LudoGameLogic';
 import LudoGameOver from '../computer/LudoGameOver';
 import { Ionicons } from '@expo/vector-icons';
 import { matchmakingService } from '../../../services/api/matchmakingService';
+import { socketService } from '../../../services/api/socketService';
 
 const LudoOnline = () => {
     const dispatch = useAppDispatch();
@@ -70,10 +71,44 @@ const LudoOnline = () => {
         if (currentGame?.id) {
             const interval = setInterval(() => {
                 dispatch(fetchGameState(currentGame.id));
-            }, 3000);
+            }, 15000); // Reduce poll frequency to 15s (fallback only)
             return () => clearInterval(interval);
         }
     }, [currentGame?.id, dispatch]);
+
+    // --- Socket.IO Integration ---
+    useEffect(() => {
+        if (currentGame?.id) {
+            // 1. Join the game room
+            socketService.joinGame(currentGame.id);
+
+            // 2. Listen for opponent moves
+            const unsubscribe = socketService.onOpponentMove((newState: LudoGameState) => {
+                // console.log("[LudoOnline] ⚡ Socket update received");
+
+                // Only process if it's NOT our action (redundant safety)
+                // Actually, the server broadcasts to others, so we shouldn't receive our own moves usually,
+                // unless we join with multiple sockets or server logic changes.
+                // We'll trust the swap logic in useMemo to handle the perspective.
+
+                // Update local store immediately
+                // We need to dispatch updateOnlineGameState or just update slice?
+                // updateOnlineGameState works, but it might be heavy if it triggers another fetch.
+                // Ideally, we just update the simple store.
+
+                // For now, let's treat it as a "fetch success"
+                dispatch(setCurrentGame({
+                    ...currentGame,
+                    board: newState
+                }));
+            });
+
+            return () => {
+                unsubscribe();
+                socketService.leaveGame(currentGame.id);
+            };
+        }
+    }, [currentGame?.id]);
 
     // --- Matchmaking Handlers ---
     const startAutomaticMatchmaking = async () => {
@@ -222,6 +257,11 @@ const LudoOnline = () => {
                     status: newState.winner ? 'COMPLETED' : 'IN_PROGRESS'
                 }
             })).unwrap();
+
+            // --- Socket Emit ---
+            // Broadcast the move to the opponent instantly
+            socketService.emitMove(currentGame.id, logicalState);
+
         } catch (error) {
             console.error("Failed to update server", error);
         }
@@ -268,7 +308,7 @@ const LudoOnline = () => {
                 <LudoCoreUI
                     gameState={visualGameState}
                     player={{
-                        name: userProfile?.displayName || "You",
+                        name: userProfile?.name || "You",
                         rating: userProfile?.rating || 1200,
                         avatar: userProfile?.avatar
                     }}
@@ -287,7 +327,7 @@ const LudoOnline = () => {
                         level={visualGameState.level}
                         onRematch={() => handleExit()} // Rematch logic can be added later
                         onNewBattle={handleExit}
-                        playerName={userProfile?.displayName || "You"}
+                        playerName={userProfile?.name || "You"}
                         opponentName={opponent.name}
                         playerRating={userProfile?.rating || 1200}
                     />
