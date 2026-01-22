@@ -613,10 +613,21 @@ const WhotComputerGameScreen = () => {
       return;
     }
 
-    // 3. GET NEW STATE
-    const newState = stateAfterPick;
-    const newHandOrder = newState.players[0].hand;
+    // 3. CALCULATE NEW HAND
+    const currentHand = stateAfterPick.players[0].hand;
+    const drawnCardIds = new Set(drawnCards.map((c) => c.id));
+    const oldHandCards = currentHand.filter(
+      (card) => !drawnCardIds.has(card.id)
+    );
+    const newHandOrder = [...drawnCards, ...oldHandCards];
 
+    const newState = {
+      ...stateAfterPick,
+      players: stateAfterPick.players.map((player, index) => {
+        if (index === 0) return { ...player, hand: newHandOrder };
+        return player;
+      }),
+    };
 
     const newVisibleHand = newHandOrder.slice(0, playerHandLimit);
     const oldVisibleHand = oldState.players[0].hand.slice(0, playerHandLimit);
