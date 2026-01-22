@@ -75,7 +75,7 @@ const WhotOnlineUI = () => {
   // Matchmaking State
   const [isMatchmaking, setIsMatchmaking] = useState(false);
   const [matchmakingMessage, setMatchmakingMessage] = useState('Finding match...');
-  const [pageIndex, setPageIndex] = useState(0); // Added for Paging
+
   const matchmakingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasStartedMatchmaking = useRef(false);
 
@@ -338,17 +338,13 @@ const WhotOnlineUI = () => {
 
     // 3. Reconcile Player Hand (Fixes Paging and Sorting)
     const myHand = visualGameState.players[0].hand || [];
-    const pageSize = 5;
-    const startIndex = pageIndex * pageSize;
-    const endIndex = startIndex + pageSize;
 
     myHand.forEach((c, i) => {
-      if (i >= startIndex && i < endIndex) {
-        const visualIndex = i - startIndex;
+      if (i < 5) {
         // STABLE: Use 5 as handSize if paged to prevent "jumping" positions
         const stableHandSize = myHand.length > 5 ? 5 : myHand.length;
         dealer.teleportCard(c, "player", {
-          cardIndex: visualIndex,
+          cardIndex: i,
           handSize: stableHandSize
         });
       } else {
@@ -357,29 +353,50 @@ const WhotOnlineUI = () => {
       }
     });
 
-  }, [visualGameState, pageIndex, isAnimating, hasDealt]);
+  }, [visualGameState, isAnimating, hasDealt]);
 
-  const handlePagingPress = () => {
-    if (!visualGameState?.players?.[0]?.hand) return;
-    const handLength = visualGameState.players[0].hand.length;
-    if (handLength <= 5) return;
+  const handlePagingPress = async () => {
+    const dealer = cardListRef.current;
+    if (!dealer || isAnimating || isAnimatingRef.current || !visualGameState) return;
 
-    const maxPages = Math.ceil(handLength / 5);
-    setPageIndex(prev => (prev + 1) % maxPages);
-  };
+    const myHand = visualGameState.players[0].hand;
+    if (myHand.length <= 5) return;
 
-  // Auto-page when player hand size increases
-  useEffect(() => {
-    if (visualGameState?.players?.[0]?.hand && !isAnimating && !isAnimatingRef.current) {
-      const handLength = visualGameState.players[0].hand.length;
-      if (handLength > 0) {
-        const lastCardPageIndex = Math.floor((handLength - 1) / 5);
-        if (lastCardPageIndex > pageIndex) {
-          setPageIndex(lastCardPageIndex);
-        }
+    // Shift logic: Move the last card to the front
+    const lastCard = myHand[myHand.length - 1];
+    const rotatedHand = [lastCard, ...myHand.slice(0, -1)];
+
+    // Optimistic teleport for the entering card (from right to -1 then to 0)
+    dealer.teleportCard(lastCard, "player", { cardIndex: -1, handSize: 5 });
+
+    handleAction(async () => {
+      const newState = {
+        ...visualGameState,
+        players: visualGameState.players.map((p, i) =>
+          i === 0 ? { ...p, hand: rotatedHand } : p
+        )
+      };
+
+      const animationPromises: Promise<void>[] = [];
+      rotatedHand.slice(0, 5).forEach((c, idx) => {
+        animationPromises.push(dealer.dealCard(c, "player", {
+          cardIndex: idx,
+          handSize: 5
+        }, false));
+      });
+
+      // Also animate the card that just left visibility (was at index 4, now index 5)
+      if (rotatedHand.length > 5) {
+        animationPromises.push(dealer.dealCard(rotatedHand[5], "player", {
+          cardIndex: 5,
+          handSize: 5
+        }, false));
       }
-    }
-  }, [visualGameState?.players?.[0]?.hand?.length]);
+
+      await Promise.all(animationPromises);
+      return newState;
+    });
+  };
 
   const animateOpponentPlay = async (card: Card, finalState: GameState) => {
     const dealer = cardListRef.current;
@@ -403,23 +420,32 @@ const WhotOnlineUI = () => {
     isAnimatingRef.current = true;
 
     const currentHand = finalState.players?.[1]?.hand || [];
-    const newCards = currentHand.slice(prevHandCount);
+    const newCardsCount = currentHand.length - prevHandCount;
+    const newCards = currentHand.slice(0, newCardsCount);
 
-    for (let i = 0; i < newCards.length; i++) {
+    for (let i = 0; i < newCardsCount; i++) {
       const card = newCards[i];
-      const cardIndex = prevHandCount + i;
 
       dealer.teleportCard(card, "market", { cardIndex: 0 });
       await new Promise(r => setTimeout(r, 40));
-      await dealer.dealCard(card, "computer", {
-        cardIndex: cardIndex,
-        handSize: currentHand.length
-      }, false);
 
-      if (i < newCards.length - 1) {
+      const animationPromises: Promise<void>[] = [];
+      // Animate the WHOLE computer hand to show the shift (index 0 insertion)
+      currentHand.forEach((c, idx) => {
+        animationPromises.push(dealer.dealCard(c, "computer", {
+          cardIndex: idx,
+          handSize: currentHand.length
+        }, false));
+      });
+
+      await Promise.all(animationPromises);
+
+      if (i < newCardsCount - 1) {
         await new Promise(r => setTimeout(r, 200)); // Gap between cards
       }
     }
+
+
 
     setIsAnimating(false);
     isAnimatingRef.current = false;
@@ -483,46 +509,86 @@ const WhotOnlineUI = () => {
     if (visualGameState?.currentPlayer !== 0) return;
     handleAction(async () => {
       const dealer = cardListRef.current;
-      let currentState = visualGameState!;
-      if (currentState.pendingAction?.type === 'draw') {
-        const { count } = currentState.pendingAction;
-        for (let i = 0; i < count; i++) {
-          const { newState, drawnCard } = executeForcedDraw(currentState);
-          if (drawnCard && dealer) {
-            const currentHandCount = newState.players[0].hand.length;
-            const cardIndex = currentHandCount - 1;
+      if (!dealer) return visualGameState!;
 
-            dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
-            await new Promise(r => setTimeout(r, 40));
-            // STABLE: Use 5 if paged
-            const stableHandSize = currentHandCount > 5 ? 5 : currentHandCount;
-            await dealer.dealCard(drawnCard, "player", {
-              cardIndex: cardIndex % 5,
-              handSize: stableHandSize
-            }, false);
-            await dealer.flipCard(drawnCard, true);
+      let currentState = visualGameState!;
+
+      // 1. Handle Surrender/Forced Draw Sequence
+      if (currentState.pendingAction?.type === 'defend' || currentState.pendingAction?.type === 'draw') {
+        let logicalState = currentState;
+
+        // Only trigger forced sequence if the action is targeted at ME (player 0 in visualGameState)
+        if (logicalState.pendingAction?.playerIndex === 0) {
+
+          // If it's a 'defend' action, pickCard will convert it to 'draw' (surrender)
+          if (logicalState.pendingAction?.type === 'defend') {
+            console.log("🛡️ Online: Player surrendering defense, converting to draw.");
+            const { newState } = pickCard(logicalState, 0);
+            logicalState = newState;
           }
-          currentState = newState;
-          if (i < count - 1) await new Promise(r => setTimeout(r, 200));
+
+          if (logicalState.pendingAction?.type === 'draw') {
+            const { count } = logicalState.pendingAction;
+            console.log(`🏳️ Online: Starting forced draw sequence for ${count} cards.`);
+
+            for (let i = 0; i < count; i++) {
+              const { newState, drawnCard } = executeForcedDraw(logicalState);
+              if (drawnCard) {
+                dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
+                await new Promise(r => setTimeout(r, 40));
+
+                const currentHand = newState.players[0].hand;
+                const visibleHand = currentHand.slice(0, 5);
+
+                const animationPromises: Promise<void>[] = [];
+                visibleHand.forEach((c, idx) => {
+                  const stableHandSize = currentHand.length > 5 ? 5 : currentHand.length;
+                  animationPromises.push(dealer.dealCard(c, "player", {
+                    cardIndex: idx,
+                    handSize: stableHandSize
+                  }, false));
+
+                  if (c.id === drawnCard.id) {
+                    animationPromises.push(dealer.flipCard(c, true));
+                  }
+                });
+
+                await Promise.all(animationPromises);
+                logicalState = newState;
+                if (i < count - 1) await new Promise(r => setTimeout(r, 200));
+              }
+            }
+            console.log("✅ Online: Forced draw sequence complete.");
+            return logicalState;
+          }
         }
-        return currentState;
       }
+
+      // 2. Normal Pick
       const { newState, drawnCards } = pickCard(currentState, 0);
-      if (dealer && drawnCards.length > 0) {
+      if (drawnCards.length > 0) {
         for (let i = 0; i < drawnCards.length; i++) {
           const d = drawnCards[i];
-          const cardIndex = (visualGameState!.players[0].hand.length) + i;
-
           dealer.teleportCard(d, "market", { cardIndex: 0 });
           await new Promise(r => setTimeout(r, 40));
-          // STABLE: Use 5 if paged
-          const stableHandSize = (visualGameState!.players[0].hand.length + i + 1) > 5 ? 5 : (visualGameState!.players[0].hand.length + i + 1);
-          await dealer.dealCard(d, "player", {
-            cardIndex: cardIndex % 5,
-            handSize: stableHandSize
-          }, false);
-          await dealer.flipCard(d, true);
 
+          const currentHand = newState.players[0].hand;
+          const visibleHand = currentHand.slice(0, 5);
+
+          const animationPromises: Promise<void>[] = [];
+          visibleHand.forEach((c, idx) => {
+            const stableHandSize = currentHand.length > 5 ? 5 : currentHand.length;
+            animationPromises.push(dealer.dealCard(c, "player", {
+              cardIndex: idx,
+              handSize: stableHandSize
+            }, false));
+
+            if (drawnCards.some(dc => dc.id === c.id)) {
+              animationPromises.push(dealer.flipCard(c, true));
+            }
+          });
+
+          await Promise.all(animationPromises);
           if (i < drawnCards.length - 1) await new Promise(r => setTimeout(r, 200));
         }
       }
