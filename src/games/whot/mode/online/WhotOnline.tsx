@@ -17,7 +17,8 @@ import { useSharedValue } from 'react-native-reanimated';
 import { playCard, pickCard, callSuit, executeForcedDraw } from '../core/game';
 import { socketService } from '../../../../services/api/socketService';
 
-// Error Boundary to catch crashes in child components
+// Error Boundary to catch crashes in child components move
+//move to whot
 interface ErrorBoundaryState {
   hasError: boolean;
   errorMessage: string;
