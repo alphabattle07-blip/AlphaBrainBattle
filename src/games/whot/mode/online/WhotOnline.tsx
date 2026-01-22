@@ -91,8 +91,7 @@ const WhotOnlineUI = () => {
   const [hasDealt, setHasDealt] = useState(false);
   const playerHandIdsSV = useSharedValue<string[]>([]);
   const previousGameStateRef = useRef<GameState | null>(null);
-  const playerHandIdsSV = useSharedValue<string[]>([]);
-  const previousGameStateRef = useRef<GameState | null>(null);
+
   const lastSyncBatchRef = useRef<string | null>(null);
 
   // Rapid Fire State Protection
