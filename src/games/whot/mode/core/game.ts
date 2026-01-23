@@ -536,24 +536,16 @@ export const applyCardEffectRule2 = (
       break;
 
     case 2: // Pick Two
-      newState.currentPlayer = opponentIndex; // Victim's turn
+      newState.currentPlayer = playerIndex; // Same player
       newState.pendingAction = {
-        type: "defend", // ✅ Use defend to allow counter-play
+        type: "draw",
         playerIndex: opponentIndex,
         count: 2,
-        returnTurnTo: playerIndex,
+        returnTurnTo: playerIndex, // ✅ Required for forced draw loop
       };
       break;
 
-    case 5: // Pick Three
-      newState.currentPlayer = opponentIndex; // Victim's turn
-      newState.pendingAction = {
-        type: "defend", // ✅ Use defend to allow counter-play
-        playerIndex: opponentIndex,
-        count: 3,
-        returnTurnTo: playerIndex,
-      };
-      break;
+    // Case 5 (Pick 3) REMOVED - Treated as normal card
 
     case 14: // General Market
       newState.currentPlayer = playerIndex; // Same player
