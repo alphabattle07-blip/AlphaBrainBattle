@@ -472,6 +472,19 @@ export const isValidMoveRule2 = (card: Card, state: GameState): boolean => {
   if (state.pile.length === 0) return true;
   const topCard = state.pile[state.pile.length - 1];
 
+  // --- DEFENSE STATE ---
+  if (
+    state.pendingAction?.type === "defend" &&
+    state.pendingAction.playerIndex === state.currentPlayer
+  ) {
+    // You must play the EXACT number to defend
+    // (e.g. attacked by 2 -> play 2, attacked by 5 -> play 5)
+    // You CANNOT defend 2 with 5 or vice versa.
+    const attackNumber = state.lastPlayedCard?.number || topCard.number;
+    return card.number === attackNumber;
+  }
+
+  // --- FORCED DRAW STATE ---
   if (
     state.pendingAction?.type === "draw" &&
     state.pendingAction.playerIndex === state.currentPlayer
@@ -523,22 +536,22 @@ export const applyCardEffectRule2 = (
       break;
 
     case 2: // Pick Two
-      newState.currentPlayer = playerIndex; // Same player
+      newState.currentPlayer = opponentIndex; // Victim's turn
       newState.pendingAction = {
-        type: "draw",
+        type: "defend", // ✅ Use defend to allow counter-play
         playerIndex: opponentIndex,
         count: 2,
-        returnTurnTo: playerIndex, // ✅ Required for forced draw loop
+        returnTurnTo: playerIndex,
       };
       break;
 
     case 5: // Pick Three
-      newState.currentPlayer = playerIndex; // Same player
+      newState.currentPlayer = opponentIndex; // Victim's turn
       newState.pendingAction = {
-        type: "draw",
+        type: "defend", // ✅ Use defend to allow counter-play
         playerIndex: opponentIndex,
         count: 3,
-        returnTurnTo: playerIndex, // ✅ Required for forced draw loop
+        returnTurnTo: playerIndex,
       };
       break;
 

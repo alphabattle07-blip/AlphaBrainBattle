@@ -560,10 +560,14 @@ const WhotOnlineUI = () => {
       const newState = playCard(currentBaseState, 0, card);
 
       if (dealer) {
-        const finalPileIndex = newState.pile.length - 1;
+        // ✅ FIX: Force z-index to be higher than anything else currently on pile
+        // We use a high number (e.g. pile length + 100) safely. 
+        // AnimatedCardList should handle high indices by rendering them last (on top).
+        const safeZIndex = newState.pile.length + 100;
+
         // FIRE AND FORGET: Animation runs in background
         Promise.all([
-          dealer.dealCard(card, "pile", { cardIndex: finalPileIndex }, false),
+          dealer.dealCard(card, "pile", { cardIndex: safeZIndex }, false),
           dealer.flipCard(card, true)
         ]).catch(e => console.warn("Animation skipped:", e));
       }
