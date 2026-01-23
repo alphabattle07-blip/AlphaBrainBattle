@@ -11,11 +11,13 @@ import { clearCurrentGame, setCurrentGame } from '../../../../store/slices/onlin
 import { matchmakingService } from '../../../../services/api/matchmakingService';
 import WhotCoreUI from '../core/ui/WhotCoreUI';
 import { useWhotFonts } from '../core/ui/useWhotFonts';
-import { Card, CardSuit, GameState } from '../core/types';
+import { Card, CardSuit, GameState, WhotGameAction } from '../core/types';
 import { AnimatedCardListHandle } from '../core/ui/AnimatedCardList';
 import { useSharedValue } from 'react-native-reanimated';
 import { playCard, pickCard, callSuit, executeForcedDraw } from '../core/game';
 import { socketService } from '../../../../services/api/socketService';
+import { WhotAssetManager } from '../core/ui/WhotAssetManager';
+import { LatencyLogger } from '../core/ui/LatencyLogger';
 
 // Error Boundary to catch crashes in child components move
 //move to whot
@@ -89,6 +91,7 @@ const WhotOnlineUI = () => {
   const isAnimatingRef = useRef(false); // Ref for synchronous animation tracking
   const cardListRef = useRef<AnimatedCardListHandle>(null);
   const [hasDealt, setHasDealt] = useState(false);
+  const [assetsReady, setAssetsReady] = useState(false);
   const playerHandIdsSV = useSharedValue<string[]>([]);
   const previousGameStateRef = useRef<GameState | null>(null);
 
@@ -148,18 +151,36 @@ const WhotOnlineUI = () => {
     }
   }, [currentGame?.id, isAnimating, dispatch]);
 
+  // --- ASSET PRELOADING ---
+  useEffect(() => {
+    if (currentGame?.id && userProfile) {
+      const opponent = needsRotation ? currentGame.player1 : currentGame.player2;
+      const avatarsToPreload = [
+        userProfile.avatar || '',
+        opponent?.avatar || ''
+      ].filter(Boolean);
+
+      WhotAssetManager.preload(avatarsToPreload).then(() => {
+        setAssetsReady(true);
+      });
+    }
+  }, [currentGame?.id, userProfile?.id]);
+
   // --- SOCKET.IO INTEGRATION ---
   useEffect(() => {
     if (currentGame?.id) {
       socketService.joinGame(currentGame.id);
 
-      const unsubscribe = socketService.onOpponentMove((boardState: GameState) => {
-        // console.log("[WhotOnline] ⚡ Socket update received");
-        // Update local store immediately
-        dispatch(setCurrentGame({
-          ...currentGame,
-          board: boardState
-        }));
+      const unsubscribe = socketService.onOpponentMove((payload: any) => {
+        if (payload && typeof payload === 'object' && 'type' in payload) {
+          handleRemoteAction(payload as WhotGameAction);
+        } else if (payload) {
+          // Legacy/Fallback: Full state sync
+          dispatch(setCurrentGame({
+            ...currentGame,
+            board: payload
+          }));
+        }
       });
 
       return () => {
@@ -502,7 +523,10 @@ const WhotOnlineUI = () => {
   };
 
   // Turn Handling
-  const handleAction = async (action: (baseState: GameState) => GameState | Promise<GameState>) => {
+  const handleAction = async (
+    logic: (baseState: GameState) => GameState | Promise<GameState>,
+    socketAction?: WhotGameAction
+  ) => {
     // REMOVED BLOCKING CHECKS: Allow rapid input ("Fire and Forget")
     setIsAnimating(true);
     isAnimatingRef.current = true;
@@ -510,7 +534,10 @@ const WhotOnlineUI = () => {
     try {
       // Use the LATEST pending state if we have one, else visual state
       const baseState = pendingLocalStateRef.current || visualGameState!;
-      const nextVisualState = await action(baseState);
+
+      // 1. Calculate new state & Start Animations (Client-Side Immediate)
+      const nextVisualStatePromise = logic(baseState);
+      const nextVisualState = await nextVisualStatePromise;
 
       // Update Ref IMMEDIATELY for the next rapid input
       pendingLocalStateRef.current = nextVisualState;
@@ -521,7 +548,18 @@ const WhotOnlineUI = () => {
         currentPlayer: nextVisualState.currentPlayer === 0 ? 1 : 0
       };
 
-      // OPTIMISTIC UPDATE: Update local store immediately to support fast sequential moves (e.g. 1, 1, 8)
+      // 3. EMIT SOCKET IMMEDIATELY
+      if (socketAction) {
+        const actionWithTick = { ...socketAction, timestamp: socketAction.timestamp || Date.now() };
+        LatencyLogger.logEmit();
+        socketService.emitMove(currentGame!.id, actionWithTick);
+      }
+
+      // 4. AWAIT ANIMATION COMPLETION before updating React state
+      // This ensures re-renders don't compete with the animation thread
+      await nextVisualStatePromise;
+
+      // 5. UPDATE REACT STATE (Now that animation is done)
       if (currentGame) {
         dispatch(setCurrentGame({
           ...currentGame,
@@ -529,7 +567,10 @@ const WhotOnlineUI = () => {
         }));
       }
 
-      await dispatch(updateOnlineGameState({
+      // 6. PERSIST VIA HTTP IN BACKGROUND
+
+      // 4. PERSIST VIA HTTP IN BACKGROUND (Fire & Forget)
+      dispatch(updateOnlineGameState({
         gameId: currentGame!.id,
         updates: {
           board: logicalBoard,
@@ -537,11 +578,18 @@ const WhotOnlineUI = () => {
           winnerId: nextVisualState.winner?.id || undefined,
           status: nextVisualState.winner ? 'COMPLETED' : 'IN_PROGRESS'
         }
-      }));
+      })).unwrap().catch(err => {
+        console.warn("⚠️ Server rejected optimistic update. Triggering rollback/re-sync.", err);
 
-      // --- Socket Emit ---
-      // Broadcast the move to the opponent instantly
-      socketService.emitMove(currentGame!.id, logicalBoard);
+        // 🚨 RECONCILIATION / ROLLBACK
+        // 1. Clear the local optimistic chain
+        pendingLocalStateRef.current = null;
+
+        // 2. Force a full state fetch from the server
+        if (currentGame?.id) {
+          dispatch(fetchGameState(currentGame.id));
+        }
+      });
 
     } catch (err) {
       console.error('Action failed:', err);
@@ -551,180 +599,242 @@ const WhotOnlineUI = () => {
     }
   };
 
-const onCardPress = (card: Card) => {
-    // 1. Basic Turn Check
-    if (visualGameState?.currentPlayer !== 0) return;
+  const handleRemoteAction = async (action: WhotGameAction) => {
+    LatencyLogger.logReceive(action.timestamp);
+    console.log("📥 Remote Action Received:", action.type);
 
     handleAction(async (currentBaseState) => {
       const dealer = cardListRef.current;
-      
-      // 2. Play the card locally (Updates pile, removes from your hand)
-      // NOTE: In your game.ts, playCard for 14 likely sets pendingAction = "draw"
+      const oppIndex = 1; // Visually, opponent is always index 1
+
+      switch (action.type) {
+        case 'CARD_PLAYED': {
+          const card = visualGameState?.allCards?.find(c => c.id === action.cardId);
+          if (!card) return currentBaseState;
+
+          // Animate card from opponent hand to pile
+          if (dealer) {
+            const zIndex = currentBaseState.pile.length + 100;
+            await Promise.all([
+              dealer.dealCard(card, "pile", { cardIndex: zIndex }, false, action.timestamp),
+              dealer.flipCard(card, true)
+            ]).catch(console.warn);
+          }
+
+          let newState = playCard(currentBaseState, oppIndex, card);
+
+          // Apply suit choice if it's a WHOT card
+          if (action.suitChoice && newState.pendingAction?.type === 'call_suit') {
+            newState = callSuit(newState, oppIndex, action.suitChoice);
+          }
+
+          // Handle Rule 2 General Market (14) cascade locally for consistency
+          if (card.number === 14 && newState.pendingAction?.type === 'draw') {
+            const { newState: finalState, drawnCard } = executeForcedDraw(newState);
+            if (drawnCard && dealer) {
+              dealer.teleportCard(drawnCard, "market", { cardIndex: 0 }, action.timestamp);
+              await new Promise(r => setTimeout(r, 40));
+              await dealer.dealCard(drawnCard, "player", {
+                cardIndex: finalState.players[0].hand.length - 1,
+                handSize: finalState.players[0].hand.length > 5 ? 5 : finalState.players[0].hand.length
+              }, false, action.timestamp);
+              await dealer.flipCard(drawnCard, true);
+            }
+            newState = finalState;
+          }
+
+          return newState;
+        }
+
+        case 'PICK_CARD': {
+          const { newState, drawnCards } = pickCard(currentBaseState, oppIndex);
+          if (drawnCards.length > 0 && dealer) {
+            const card = drawnCards[0];
+            dealer.teleportCard(card, "market", { cardIndex: 0 }, action.timestamp);
+            await new Promise(r => setTimeout(r, 40));
+            await dealer.dealCard(card, "computer", {
+              cardIndex: newState.players[1].hand.length - 1,
+              handSize: newState.players[1].hand.length
+            }, false, action.timestamp);
+          }
+          return newState;
+        }
+
+        case 'CALL_SUIT': {
+          return callSuit(currentBaseState, oppIndex, action.suit);
+        }
+
+        case 'FORCED_DRAW': {
+          let state = currentBaseState;
+          const pending = state.pendingAction;
+          if (pending?.type === 'draw' && pending.playerIndex === oppIndex) {
+            const total = pending.count;
+            for (let i = 0; i < total; i++) {
+              const { newState, drawnCard } = executeForcedDraw(state);
+              state = newState;
+              if (drawnCard && dealer) {
+                dealer.teleportCard(drawnCard, "market", { cardIndex: 0 }, action.timestamp);
+                await new Promise(r => setTimeout(r, 40));
+                await dealer.dealCard(drawnCard, "computer", {
+                  cardIndex: state.players[1].hand.length - 1,
+                  handSize: state.players[1].hand.length
+                }, false, action.timestamp);
+              }
+            }
+          }
+          return state;
+        }
+
+        default:
+          return currentBaseState;
+      }
+    }, undefined);
+  };
+
+  const onCardPress = (card: Card) => {
+    if (visualGameState?.currentPlayer !== 0) return;
+    LatencyLogger.logTap();
+
+    handleAction(async (currentBaseState) => {
+      const dealer = cardListRef.current;
+
+      // 1. Play the card locally
       let newState = playCard(currentBaseState, 0, card);
 
+      // Animate the card going to pile
       if (dealer) {
-        // Safe Z-Index for animation
         const safeZIndex = newState.pile.length + 100;
-        
-        // Animate the card flying to pile
         await Promise.all([
           dealer.dealCard(card, "pile", { cardIndex: safeZIndex }, false),
           dealer.flipCard(card, true)
-        ]);
+        ]).catch(console.warn);
       }
 
-      // =========================================================
-      // ⚡ SPECIAL RULE: CARD 14 (GENERAL MARKET) - AUTOMATIC
-      // =========================================================
+      // ⚡ SPECIAL RULE: CARD 14 (GENERAL MARKET) - AUTO ATTACK
       if (card.number === 14) {
-        console.log("⚡ General Market (14) played! Auto-issuing card to opponent...");
+        const { newState: stateAfterDraw, drawnCard } = executeForcedDraw(newState);
 
-        // 1. Determine Opponent Index (In visual state, opponent is always index 1)
-        const opponentIndex = 1;
-
-        // 2. Force the draw logic IMMEDIATELY on the local state
-        // We call pickCard for the opponent
-        const { newState: stateAfterDraw, drawnCards } = pickCard(newState, opponentIndex);
-        
-        // 3. Update our local state to the result of that draw
-        newState = stateAfterDraw;
-
-        // 4. RULE CHECK: 14 usually keeps turn with Player or Passes?
-        // Your prompt says: "allowing the other player to play again" (implies turn passes)
-        // BUT standard 14 usually means "I play again".
-        // IF you want the player to play again, force currentPlayer = 0.
-        // IF you want turn to pass to opponent (who effectively just missed their turn by drawing), 
-        // you keep currentPlayer as 0 (because playCard usually passes turn, but 14 is special).
-        
-        // Let's assume standard Whot 14: Victim draws 1, Attacker plays again.
-        newState.currentPlayer = 0; 
-        newState.pendingAction = null; // Clear the "draw" action since we just forced it
-
-        // 5. ANIMATE THE AUTOMATIC DRAW
-        if (dealer && drawnCards.length > 0) {
-          const drawnCard = drawnCards[0];
-
-          // A. Teleport to Market first (so it doesn't fly from weird place)
+        if (drawnCard && dealer) {
           dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
           await new Promise(r => setTimeout(r, 50));
 
-          // B. Fly to Opponent
-          const currentOppHand = newState.players[1].hand;
-          // Use 'computer' target for visual opponent
-          await dealer.dealCard(drawnCard, "computer", { 
-             cardIndex: currentOppHand.length - 1, 
-             handSize: currentOppHand.length 
+          const oppHand = stateAfterDraw.players[1].hand;
+          await dealer.dealCard(drawnCard, "computer", {
+            cardIndex: oppHand.length - 1,
+            handSize: oppHand.length
           }, false);
         }
+        newState = stateAfterDraw;
       }
 
-      // =========================================================
-      // ⚡ SPECIAL RULE: PICK 2 (Card 2) - MANUAL DEFENSE
-      // =========================================================
-      // For Card 2, playCard already sets pendingAction="draw" count=2.
-      // We do NOT auto-draw here. We let the state save as is.
-      // The opponent will receive this state, see "pendingAction: draw", 
-      // and their UI will block them until they play a 2 or click market.
-
       return newState;
-    });
+    }, { type: 'CARD_PLAYED', cardId: card.id, timestamp: Date.now() });
   };
 
   const onPickFromMarket = () => {
     if (visualGameState?.currentPlayer !== 0) return;
+
+    // Determine the action type for socket sync
+    const isSurrender = visualGameState?.pendingAction?.type === 'draw' && visualGameState?.pendingAction.playerIndex === 0;
+    const socketAction: WhotGameAction = isSurrender
+      ? { type: 'FORCED_DRAW', timestamp: Date.now() }
+      : { type: 'PICK_CARD', timestamp: Date.now() };
+
     handleAction(async (baseState) => {
       const dealer = cardListRef.current;
       if (!dealer) return baseState;
 
       let currentState = baseState;
+      const pending = currentState.pendingAction;
 
-      // 1. Handle Surrender/Forced Draw Sequence
-      if (currentState.pendingAction?.type === 'defend' || currentState.pendingAction?.type === 'draw') {
-        let logicalState = currentState;
-        const cardsToAnimate: { card: Card, stateAfterDraw: GameState }[] = [];
+      // =============================================================
+      // 🛡️ DEFENSE SURRENDER: PICK 2 / PICK 3 LOOP
+      // =============================================================
+      if (pending?.type === 'draw' && pending.playerIndex === 0) {
+        const totalToPick = pending.count;
+        for (let i = 0; i < totalToPick; i++) {
+          const { newState, drawnCard } = executeForcedDraw(currentState);
+          currentState = newState;
 
-        // Only trigger forced sequence if the action is targeted at ME (player 0)
-        if (logicalState.pendingAction?.playerIndex === 0) {
-
-          if (logicalState.pendingAction?.type === 'defend') {
-            console.log("🛡️ Online: Player surrendering defense, converting to draw.");
-            const { newState } = pickCard(logicalState, 0);
-            logicalState = newState;
-          }
-
-          if (logicalState.pendingAction?.type === 'draw') {
-            const { count } = logicalState.pendingAction;
-            console.log(`🏳️ Online: Starting forced draw sequence for ${count} cards.`);
-
-            // Pre-calculate all draws
-            for (let i = 0; i < count; i++) {
-              const { newState, drawnCard } = executeForcedDraw(logicalState);
-              if (drawnCard) {
-                cardsToAnimate.push({ card: drawnCard, stateAfterDraw: newState });
-              }
-              logicalState = newState;
-            }
-
-            // Fire-and-Forget Animation Loop
-            (async () => {
-              for (let i = 0; i < cardsToAnimate.length; i++) {
-                const { card, stateAfterDraw } = cardsToAnimate[i];
-                dealer.teleportCard(card, "market", { cardIndex: 0 });
-                await new Promise(r => setTimeout(r, 40));
-
-                const currentHand = stateAfterDraw.players[0].hand;
-                const visibleHand = currentHand.slice(0, 5);
-                const anims: Promise<void>[] = [];
-                visibleHand.forEach((c, idx) => {
-                  const stableHandSize = currentHand.length > 5 ? 5 : currentHand.length;
-                  anims.push(dealer.dealCard(c, "player", { cardIndex: idx, handSize: stableHandSize }, false));
-                  if (c.id === card.id) anims.push(dealer.flipCard(c, true));
-                });
-                await Promise.all(anims);
-                if (i < cardsToAnimate.length - 1) await new Promise(r => setTimeout(r, 200));
-              }
-              console.log("✅ Online: Forced draw animation complete.");
-            })();
-
-            return logicalState; // Return immediately!
-          }
-        }
-      }
-
-      // 2. Normal Pick
-      const { newState, drawnCards } = pickCard(currentState, 0);
-      if (drawnCards.length > 0) {
-        // Fire-and-Forget Animation
-        (async () => {
-          for (let i = 0; i < drawnCards.length; i++) {
-            const d = drawnCards[i];
-            dealer.teleportCard(d, "market", { cardIndex: 0 });
+          if (drawnCard) {
+            dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
             await new Promise(r => setTimeout(r, 40));
 
-            const currentHand = newState.players[0].hand;
-            const visibleHand = currentHand.slice(0, 5);
-            const anims: Promise<void>[] = [];
-
-            visibleHand.forEach((c, idx) => {
-              const stableHandSize = currentHand.length > 5 ? 5 : currentHand.length;
-              anims.push(dealer.dealCard(c, "player", { cardIndex: idx, handSize: stableHandSize }, false));
-              if (drawnCards.some(dc => dc.id === c.id)) anims.push(dealer.flipCard(c, true));
-            });
-
-            await Promise.all(anims);
-            if (i < drawnCards.length - 1) await new Promise(r => setTimeout(r, 200));
+            const myHand = currentState.players[0].hand;
+            const cardIdx = myHand.findIndex(c => c.id === drawnCard.id);
+            await dealer.dealCard(drawnCard, "player", {
+              cardIndex: cardIdx >= 0 ? cardIdx : 0,
+              handSize: myHand.length > 5 ? 5 : myHand.length
+            }, false);
+            await dealer.flipCard(drawnCard, true);
+            await new Promise(r => setTimeout(r, 200));
           }
-        })();
+          if (!drawnCard) break;
+        }
+        return currentState;
       }
-      return newState; // Return immediately!
-    });
+
+      // =============================================================
+      // 🖐️ STANDARD SINGLE PICK
+      // =============================================================
+      const { newState, drawnCards } = pickCard(currentState, 0);
+
+      if (drawnCards.length === 0 && newState.pendingAction?.type === 'draw') {
+        const forcedState = await onPickFromMarketRecursive(newState, dealer);
+        return forcedState;
+      }
+
+      if (drawnCards.length > 0) {
+        const drawnCard = drawnCards[0];
+        dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
+        await new Promise(r => setTimeout(r, 40));
+
+        const myHand = newState.players[0].hand;
+        const cardIdx = myHand.findIndex(c => c.id === drawnCard.id);
+
+        await dealer.dealCard(drawnCard, "player", {
+          cardIndex: cardIdx,
+          handSize: myHand.length > 5 ? 5 : myHand.length
+        }, false);
+        await dealer.flipCard(drawnCard, true);
+      }
+
+      return newState;
+    }, socketAction);
+  };
+
+  // Helper for the recursive call to avoid hooks issues
+  const onPickFromMarketRecursive = async (baseState: GameState, dealer: any): Promise<GameState> => {
+    let currentState = baseState;
+    const pending = currentState.pendingAction;
+
+    if (pending?.type === 'draw' && pending.playerIndex === 0) {
+      const totalToPick = pending.count;
+      for (let i = 0; i < totalToPick; i++) {
+        const { newState, drawnCard } = executeForcedDraw(currentState);
+        currentState = newState;
+        if (drawnCard) {
+          dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
+          await new Promise(r => setTimeout(r, 40));
+          const myHand = currentState.players[0].hand;
+          const cardIdx = myHand.findIndex(c => c.id === drawnCard.id);
+          await dealer.dealCard(drawnCard, "player", {
+            cardIndex: cardIdx >= 0 ? cardIdx : 0,
+            handSize: myHand.length > 5 ? 5 : myHand.length
+          }, false);
+          await dealer.flipCard(drawnCard, true);
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+    }
+    return currentState;
   };
 
   const onSuitSelect = (suit: CardSuit) => {
     handleAction(async (baseState) => {
       const newState = callSuit(baseState, 0, suit);
       return newState;
-    });
+    }, { type: 'CALL_SUIT', suit, timestamp: Date.now() });
   };
 
   const onCardListReady = () => {
@@ -809,15 +919,15 @@ const onCardPress = (card: Card) => {
     );
   }
 
-  // Block rendering until BOTH fonts AND game state are ready
-  if (!currentGame || !visualGameState || !areFontsReady) {
+  // Block rendering until BOTH fonts AND game state AND assets (avatars/audio) are ready
+  if (!currentGame || !visualGameState || !areFontsReady || !assetsReady) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
           <Text style={styles.loadingText}>Loading Game...</Text>
           <Text style={[styles.loadingText, { fontSize: 10, opacity: 0.6 }]}>
-            {!currentGame ? 'Waiting for match...' : !areFontsReady ? 'Loading fonts...' : 'Processing game state...'}
+            {!currentGame ? 'Waiting for match...' : !areFontsReady ? 'Loading fonts...' : !assetsReady ? 'Cashing assets...' : 'Processing game state...'}
           </Text>
         </View>
       </SafeAreaView>

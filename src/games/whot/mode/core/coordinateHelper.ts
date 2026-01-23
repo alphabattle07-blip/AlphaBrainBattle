@@ -12,6 +12,7 @@ export const getCoords = (
   screenWidth: number,
   screenHeight: number
 ): { x: number; y: number; rotation: number } => {
+  "worklet";
   const { cardIndex = 0, handSize = 1 } = options;
   const isLandscape = screenWidth > screenHeight;
 
@@ -66,7 +67,7 @@ export const getCoords = (
 
         if (handSize > maxCardsBeforeSqueeze) {
           totalWidth = maxAllowedWidth;
-          visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1) ;
+          visualWidth = (maxAllowedWidth - CARD_WIDTH) / (handSize - 1);
         }
 
         // Fixed: Ensure division by 2 is present

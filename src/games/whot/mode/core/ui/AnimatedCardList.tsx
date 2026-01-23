@@ -25,6 +25,7 @@ interface Props {
   height: number;
   onCardPress: (card: Card) => void;
   onReady: () => void;
+  gameTickSV: SharedValue<number>;
 }
 
 // Public handle for WhotComputerGameScreen
@@ -33,13 +34,15 @@ export interface AnimatedCardListHandle {
     card: Card,
     target: "player" | "computer" | "pile" | "market",
     options?: any,
-    instant?: boolean
+    instant?: boolean,
+    timestamp?: number
   ) => Promise<void>;
   flipCard: (card: Card, show: boolean) => Promise<void>;
   teleportCard: (
     card: Card,
     target: "player" | "computer" | "pile" | "market",
-    options?: any
+    options?: any,
+    timestamp?: number
   ) => void;
 }
 
@@ -55,6 +58,7 @@ const AnimatedCardList = memo(
         height,
         onCardPress,
         onReady,
+        gameTickSV,
       },
       ref
     ) => {
@@ -79,10 +83,10 @@ const AnimatedCardList = memo(
 
       // --- Public API for the parent component ---
       useImperativeHandle(ref, () => ({
-        dealCard: async (card, target, options, instant) => {
+        dealCard: async (card, target, options, instant, timestamp) => {
           const cardRef = cardRefs.current.get(card.id);
           if (cardRef) {
-            await cardRef.dealTo(target, options, instant);
+            await cardRef.dealTo(target, options, instant, timestamp);
           } else {
             console.warn(`No ref found for card ${card.id} during deal.`);
           }
@@ -95,10 +99,10 @@ const AnimatedCardList = memo(
             console.warn(`No ref found for card ${card.id} during flip.`);
           }
         },
-        teleportCard: (card, target, options) => {
+        teleportCard: (card, target, options, timestamp) => {
           const cardRef = cardRefs.current.get(card.id);
           if (cardRef) {
-            cardRef.teleportTo(target, options);
+            cardRef.teleportTo(target, options, timestamp);
           } else {
             console.warn(`No ref found for card ${card.id} during teleport.`);
           }
@@ -125,6 +129,7 @@ const AnimatedCardList = memo(
               width={width}
               height={height}
               onPress={onCardPress}
+              gameTickSV={gameTickSV}
             />
           ))}
         </>

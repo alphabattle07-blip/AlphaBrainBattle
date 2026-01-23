@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator, Pressable, TouchableOpacity } from 'react-native';
+import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import { SkFont } from '@shopify/react-native-skia';
 import { Card, CardSuit, GameState } from '../types';
 import AnimatedCardList, { AnimatedCardListHandle } from './AnimatedCardList';
@@ -93,6 +94,18 @@ const WhotCoreUI: React.FC<WhotCoreUIProps> = ({
     isLandscape,
     gameOver
 }) => {
+    // 💓 GAME HEARTBEAT (30Hz)
+    const gameTickSV = useSharedValue(0);
+    const lastTickTimeRef = useRef(0);
+
+    useFrameCallback((frameInfo) => {
+        const { timestamp } = frameInfo;
+        if (timestamp - lastTickTimeRef.current >= 33.3) { // 30Hz
+            gameTickSV.value += 1;
+            lastTickTimeRef.current = timestamp;
+        }
+    });
+
     const pileCoords = useMemo(() => {
         return getCoords("pile", { cardIndex: 0 }, stableWidth, stableHeight);
     }, [stableWidth, stableHeight]);
@@ -137,7 +150,7 @@ const WhotCoreUI: React.FC<WhotCoreUIProps> = ({
                                 handLength: opponentState.handLength,
                                 isCurrentPlayer: opponentState.isCurrentPlayer
                             }}
-                            level={level}
+                            level={level as any}
                         />
                     ) : (
                         <WhotPlayerProfile
@@ -233,6 +246,7 @@ const WhotCoreUI: React.FC<WhotCoreUIProps> = ({
                     height={stableHeight}
                     onCardPress={onCardPress}
                     onReady={onCardListReady}
+                    gameTickSV={gameTickSV}
                 />
             )}
 

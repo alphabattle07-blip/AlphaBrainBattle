@@ -9,11 +9,13 @@ export interface OnlineGameState {
       id: string;
       name: string;
       rating: number;
+      avatar?: string;
     };
     player2: {
       id: string;
       name: string;
       rating: number;
+      avatar?: string;
     } | null;
     board: any;
     currentTurn: string;
