@@ -299,6 +299,27 @@ const WhotOnlineUI = () => {
       allCards: uniqueAllCards // Pass the reconstructed cards
     } as GameState;
 
+    // ✅ CRITICAL FIX: Rotate PendingAction Indices too!
+    // If the server says "Pick 2 against Player 0", and I am Player 0 (but rotated to 0),
+    // we need to make sure the index aligns with the visual arrays.
+    // Actually, if I am Player 2 (index 1 on server), I am index 0 visually.
+    // So if server says "Action on Player 1", that means "Action on Me (Visual 0)".
+    if (rotatedState.pendingAction) {
+      const pAction = { ...rotatedState.pendingAction };
+
+      // Swap playerIndex (0 -> 1, 1 -> 0)
+      if (typeof pAction.playerIndex === 'number') {
+        pAction.playerIndex = pAction.playerIndex === 0 ? 1 : 0;
+      }
+
+      // Swap returnTurnTo if it exists
+      if ('returnTurnTo' in pAction && typeof pAction.returnTurnTo === 'number') {
+        pAction.returnTurnTo = pAction.returnTurnTo === 0 ? 1 : 0;
+      }
+
+      rotatedState.pendingAction = pAction as any;
+    }
+
     return { visualGameState: rotatedState, reconstructedAllCards: uniqueAllCards };
 
   }, [currentGame?.board, needsRotation, userProfile?.id]);

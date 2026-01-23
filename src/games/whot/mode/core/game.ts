@@ -532,6 +532,16 @@ export const applyCardEffectRule2 = (
       };
       break;
 
+    case 5: // Pick Three
+      newState.currentPlayer = playerIndex; // Same player
+      newState.pendingAction = {
+        type: "draw",
+        playerIndex: opponentIndex,
+        count: 3,
+        returnTurnTo: playerIndex, // ✅ Required for forced draw loop
+      };
+      break;
+
     case 14: // General Market
       newState.currentPlayer = playerIndex; // Same player
       newState.pendingAction = {
