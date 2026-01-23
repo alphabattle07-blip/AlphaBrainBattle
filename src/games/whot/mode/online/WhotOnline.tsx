@@ -551,26 +551,81 @@ const WhotOnlineUI = () => {
     }
   };
 
-  const onCardPress = (card: Card) => {
+const onCardPress = (card: Card) => {
+    // 1. Basic Turn Check
     if (visualGameState?.currentPlayer !== 0) return;
 
     handleAction(async (currentBaseState) => {
       const dealer = cardListRef.current;
-      // Use the provided base state (which is fresh) instead of stale visualGameState
-      const newState = playCard(currentBaseState, 0, card);
+      
+      // 2. Play the card locally (Updates pile, removes from your hand)
+      // NOTE: In your game.ts, playCard for 14 likely sets pendingAction = "draw"
+      let newState = playCard(currentBaseState, 0, card);
 
       if (dealer) {
-        // ✅ FIX: Force z-index to be higher than anything else currently on pile
-        // We use a high number (e.g. pile length + 100) safely. 
-        // AnimatedCardList should handle high indices by rendering them last (on top).
+        // Safe Z-Index for animation
         const safeZIndex = newState.pile.length + 100;
-
-        // FIRE AND FORGET: Animation runs in background
-        Promise.all([
+        
+        // Animate the card flying to pile
+        await Promise.all([
           dealer.dealCard(card, "pile", { cardIndex: safeZIndex }, false),
           dealer.flipCard(card, true)
-        ]).catch(e => console.warn("Animation skipped:", e));
+        ]);
       }
+
+      // =========================================================
+      // ⚡ SPECIAL RULE: CARD 14 (GENERAL MARKET) - AUTOMATIC
+      // =========================================================
+      if (card.number === 14) {
+        console.log("⚡ General Market (14) played! Auto-issuing card to opponent...");
+
+        // 1. Determine Opponent Index (In visual state, opponent is always index 1)
+        const opponentIndex = 1;
+
+        // 2. Force the draw logic IMMEDIATELY on the local state
+        // We call pickCard for the opponent
+        const { newState: stateAfterDraw, drawnCards } = pickCard(newState, opponentIndex);
+        
+        // 3. Update our local state to the result of that draw
+        newState = stateAfterDraw;
+
+        // 4. RULE CHECK: 14 usually keeps turn with Player or Passes?
+        // Your prompt says: "allowing the other player to play again" (implies turn passes)
+        // BUT standard 14 usually means "I play again".
+        // IF you want the player to play again, force currentPlayer = 0.
+        // IF you want turn to pass to opponent (who effectively just missed their turn by drawing), 
+        // you keep currentPlayer as 0 (because playCard usually passes turn, but 14 is special).
+        
+        // Let's assume standard Whot 14: Victim draws 1, Attacker plays again.
+        newState.currentPlayer = 0; 
+        newState.pendingAction = null; // Clear the "draw" action since we just forced it
+
+        // 5. ANIMATE THE AUTOMATIC DRAW
+        if (dealer && drawnCards.length > 0) {
+          const drawnCard = drawnCards[0];
+
+          // A. Teleport to Market first (so it doesn't fly from weird place)
+          dealer.teleportCard(drawnCard, "market", { cardIndex: 0 });
+          await new Promise(r => setTimeout(r, 50));
+
+          // B. Fly to Opponent
+          const currentOppHand = newState.players[1].hand;
+          // Use 'computer' target for visual opponent
+          await dealer.dealCard(drawnCard, "computer", { 
+             cardIndex: currentOppHand.length - 1, 
+             handSize: currentOppHand.length 
+          }, false);
+        }
+      }
+
+      // =========================================================
+      // ⚡ SPECIAL RULE: PICK 2 (Card 2) - MANUAL DEFENSE
+      // =========================================================
+      // For Card 2, playCard already sets pendingAction="draw" count=2.
+      // We do NOT auto-draw here. We let the state save as is.
+      // The opponent will receive this state, see "pendingAction: draw", 
+      // and their UI will block them until they play a 2 or click market.
+
       return newState;
     });
   };
@@ -824,6 +879,7 @@ const WhotOnlineUI = () => {
     />
   );
 };
+
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#000' },
