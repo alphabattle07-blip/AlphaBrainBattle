@@ -22,7 +22,7 @@ import { useSound } from '../../../../hooks/useSound';
 import hopSound from '../../../../../src/assets/sounds/hop.mp3';
 import captureSound from '../../../../assets/sounds/capture.mp3';
 import { useBackgroundSound } from "../../../../hooks/useBackgroundSound";
-import bgSound from "../../../../assets/sounds/backgrounds1 short.mp3";
+import bgSound from "../../../../assets/sounds/backgrounds1_short.mp3";
 import { AYO_BOARD_CONFIG } from './ayoConfig';
 
 const boardImageSource = require('../../../../assets/images/ayo-board.png');

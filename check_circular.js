@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const rootDir = 'd:/Document/react native work/alphaGameTolo/Alpha-Battle/src/games/whot';
+const rootDir = 'd:/Document/react native work/alphaGameTolo/Alpha-Battle/src';
 const visited = new Set();
 const stack = [];
 
