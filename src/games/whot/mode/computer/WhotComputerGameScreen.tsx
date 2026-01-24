@@ -38,7 +38,8 @@ import {
   pickCard,
   playCard,
 } from "../core/game";
-import ComputerUI, { ComputerLevel, levels } from "./whotComputerUI";
+import ComputerUI from "./whotComputerUI";
+import { WHOT_LEVELS as levels, ComputerLevel } from "../core/types";
 
 import { usePlayerProfile } from "../../../../hooks/usePlayerProfile";
 import { useSharedValue } from "react-native-reanimated";

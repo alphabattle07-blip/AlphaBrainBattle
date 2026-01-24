@@ -1,19 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet, Text, TouchableOpacity, useWindowDimensions, ScrollView } from "react-native";
 import Animated, { FadeIn, BounceIn, FadeOut } from "react-native-reanimated";
-import { Player } from "../types";
+import { Player, WHOT_LEVELS as levels, ComputerLevel } from "../types";
 import { Ionicons } from '@expo/vector-icons';
-import { ComputerLevel } from "../../computer/whotComputerUI";
 import { useAppDispatch } from "../../../../../store/hooks";
 import { updateGameStatsThunk } from "../../../../../store/thunks/gameStatsThunks";
 
-const levels = [
-  { label: "Apprentice (Easy)", value: 1, rating: 1250, reward: 10 },
-  { label: "Knight (Normal)", value: 2, rating: 1500, reward: 15 },
-  { label: "Warrior (Hard)", value: 3, rating: 1700, reward: 20 },
-  { label: "Master (Expert)", value: 4, rating: 1900, reward: 25 },
-  { label: "Alpha (Legend)", value: 5, rating: 2100, reward: 30 },
-];
 
 const BATTLE_BONUS = 15;
 
@@ -107,17 +99,17 @@ const GameOverModal = ({
       style={[styles.overlay, { width, height }]}
     >
       <View style={styles.backdrop} />
-      
-      <Animated.View 
-        entering={BounceIn.delay(100).duration(600)} 
+
+      <Animated.View
+        entering={BounceIn.delay(100).duration(600)}
         style={[
-          styles.modalContainer, 
+          styles.modalContainer,
           // ✅ FIX: Dynamic width based on orientation to prevent "too wide" landscape
           { width: isLandscape ? '60%' : '90%', maxHeight: isLandscape ? '90%' : 'auto' }
         ]}
       >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent} 
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* 1. Header Text */}
@@ -229,13 +221,13 @@ const styles = StyleSheet.create({
   winText: { fontSize: 32, fontWeight: 'bold', color: '#4CAF50', textAlign: 'center' },
   loseText: { fontSize: 32, fontWeight: 'bold', color: '#F44336', textAlign: 'center' },
   drawText: { fontSize: 32, fontWeight: 'bold', color: '#FFD700', textAlign: 'center' },
-  
+
   profilesSection: {
     marginVertical: 10,
     width: '100%',
     alignItems: 'center',
   },
-  
+
   winnerText: {
     fontSize: 18,
     color: '#FFFFFF',
@@ -243,7 +235,7 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     textAlign: 'center',
   },
-  
+
   rewardSection: {
     width: '100%',
     backgroundColor: '#444',
@@ -260,7 +252,7 @@ const styles = StyleSheet.create({
   rewardLabel: { color: '#E0E0E0', fontSize: 16 },
   rewardValue: { color: '#FFD700', fontSize: 16, fontWeight: '600' },
   totalRewardValue: { fontSize: 18, fontWeight: 'bold' },
-  
+
   buttonContainer: {
     flexDirection: 'row',
     width: '100%',

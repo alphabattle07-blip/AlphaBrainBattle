@@ -2,16 +2,7 @@
 import React, { memo } from "react";
 import { Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
-// Level definitions (kept the same)
-export const levels = [
-  { label: "Apprentice", value: 1, rating: 1200, reward: 10 },
-  { label: "Knight", value: 2, rating: 1400, reward: 15 },
-  { label: "Warrior", value: 3, rating: 1600, reward: 20 },
-  { label: "Master", value: 4, rating: 1800, reward: 25 },
-  { label: "Alpha", value: 5, rating: 2000, reward: 30 },
-] as const;
-
-export type ComputerLevel = 1 | 2 | 3 | 4 | 5;
+import { WHOT_LEVELS as levels, ComputerLevel } from "../core/types";
 
 type ComputerState = {
   name: string;
