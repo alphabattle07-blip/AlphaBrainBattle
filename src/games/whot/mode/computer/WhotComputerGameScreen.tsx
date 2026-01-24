@@ -7,7 +7,11 @@ import React, {
   useMemo,
   useRef,
   useState,
+  Component,
+  ErrorInfo,
+  ReactNode
 } from "react";
+
 import {
   ActivityIndicator,
   Button,
@@ -41,19 +45,64 @@ import { useSharedValue } from "react-native-reanimated";
 import WhotCoreUI from "../core/ui/WhotCoreUI";
 import { useWhotFonts } from "../core/ui/useWhotFonts";
 import { chooseComputerMove, chooseComputerSuit } from "./whotComputerLogic";
+import { WhotAssetManager } from "../core/ui/WhotAssetManager";
+import { useNavigation } from "@react-navigation/native";
+
+// Error Boundary for Computer Mode
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string;
+}
+
+class WhotErrorBoundary extends Component<{ children: ReactNode; onGoBack: () => void }, ErrorBoundaryState> {
+  constructor(props: { children: ReactNode; onGoBack: () => void }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, errorMessage: error.message || 'Unknown error occurred' };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('WhotErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ color: '#ef5350', fontSize: 20, fontWeight: 'bold', marginBottom: 10 }}>⚠️ Game Error</Text>
+          <Text style={{ color: '#FFD700', textAlign: 'center', marginBottom: 20 }}>{this.state.errorMessage}</Text>
+          <TouchableOpacity
+            style={{ padding: 15, borderWidth: 1, borderColor: '#d32f2f', borderRadius: 8 }}
+            onPress={this.props.onGoBack}
+          >
+            <Text style={{ color: '#ef5350', fontSize: 16, fontWeight: '600' }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 
 type GameData = {
   gameState: GameState;
   allCards: Card[];
 };
 
-const WhotComputerGameScreen = () => {
+const WhotComputerUI = () => {
   const { width, height } = useWindowDimensions();
+  const navigation = useNavigation();
   const isLandscape = width > height;
   const { font: loadedFont, whotFont: loadedWhotFont, areLoaded } =
     useWhotFonts();
   const playerProfile = usePlayerProfile("whot");
   const [gameInstanceId, setGameInstanceId] = useState(0);
+  const [readyToRender, setReadyToRender] = useState(false);
+
   // ✅ STABLE DIMENSIONS
   const [stableWidth, setStableWidth] = useState(width);
   const [stableHeight, setStableHeight] = useState(height);
@@ -77,7 +126,21 @@ const WhotComputerGameScreen = () => {
     }
   }, [areLoaded, stableFont, loadedFont, loadedWhotFont]);
 
+  useEffect(() => {
+    WhotAssetManager.preload().then(() => {
+      setAssetsReady(true);
+    });
+
+    const timer = setTimeout(() => {
+      setReadyToRender(true);
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+
   const [computerLevel, setComputerLevel] = useState<ComputerLevel>(
     levels[0].value
   );
@@ -88,6 +151,8 @@ const WhotComputerGameScreen = () => {
 
   const cardListRef = useRef<AnimatedCardListHandle>(null);
   const [hasDealt, setHasDealt] = useState(false);
+  const [assetsReady, setAssetsReady] = useState(false);
+
 
   const playerHand = useMemo(
     () => game?.gameState.players[0].hand || [],
@@ -751,7 +816,7 @@ const WhotComputerGameScreen = () => {
     // ✅ FIX: Small delay ensures cardListRef.current is attached before we try to deal
     setTimeout(() => {
       setIsCardListReady(true);
-    }, 100);
+    }, 300);
   }, []);
 
   const handleNewBattle = useCallback(() => {
@@ -1098,11 +1163,11 @@ const WhotComputerGameScreen = () => {
     });
   }, [stableWidth, stableHeight, isCardListReady, hasDealt]);
 
-  if (!areLoaded || !stableFont || !stableWhotFont) {
+  if (!readyToRender || !assetsReady || !stableFont || !stableWhotFont) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color="#FFFFFF" />
-        <Text style={styles.title}>Loading Game...</Text>
+        <Text style={styles.title}>Preparing Arena...</Text>
       </View>
     );
   }
@@ -1162,7 +1227,17 @@ const WhotComputerGameScreen = () => {
   );
 };
 
+const WhotComputerGameScreen = () => {
+  const navigation = useNavigation();
+  return (
+    <WhotErrorBoundary onGoBack={() => navigation.goBack()}>
+      <WhotComputerUI />
+    </WhotErrorBoundary>
+  );
+};
+
 export default WhotComputerGameScreen;
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },

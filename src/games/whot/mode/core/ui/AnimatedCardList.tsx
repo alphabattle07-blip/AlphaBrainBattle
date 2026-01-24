@@ -108,6 +108,10 @@ const AnimatedCardList = memo(
           }
         },
       }));
+      if (!font || !whotFont) {
+        return null;
+      }
+
       return (
         <>
           {cardsInPlay.map((card) => (

@@ -42,19 +42,22 @@ export const WhotAssetManager = {
             });
 
             // B. Load Audio Assets into cache
-            const soundAssets = Object.values(this.sounds);
-            soundAssets.forEach(module => {
-                promises.push(Asset.fromModule(module).downloadAsync());
+            const soundAssets = Object.entries(this.sounds);
+            soundAssets.forEach(([name, module]) => {
+                const p = Asset.fromModule(module).downloadAsync()
+                    .then(() => console.log(`🎵 Cached sound: ${name}`))
+                    .catch(err => console.warn(`⚠️ Failed to cache sound ${name}:`, err));
+                promises.push(p);
             });
 
             // Wait for all preloading to complete
             await Promise.allSettled(promises);
 
-            console.log('✅ WhotAssetManager: All assets cached in RAM.');
+            console.log('✅ WhotAssetManager: Preloading phase complete.');
             return true;
         } catch (error) {
-            console.warn('⚠️ WhotAssetManager: Preloading failed partially.', error);
-            return false; // Still return false to allow fallback, but warn
+            console.warn('❌ WhotAssetManager: CRITICAL preloading error:', error);
+            return false;
         }
     }
 };

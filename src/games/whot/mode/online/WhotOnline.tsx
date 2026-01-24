@@ -116,9 +116,10 @@ const WhotOnlineUI = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setCardsReadyToRender(true);
-    }, 500); // 500ms delay to ensure layout is measured
+    }, 800); // 800ms delay to ensure layout is measured
     return () => clearTimeout(timer);
   }, []);
+
 
   // ... (Matchmaking useEffects remain the same)
 
@@ -920,14 +921,14 @@ const WhotOnlineUI = () => {
   }
 
   // Block rendering until BOTH fonts AND game state AND assets (avatars/audio) are ready
-  if (!currentGame || !visualGameState || !areFontsReady || !assetsReady) {
+  if (!currentGame || !visualGameState || !areFontsReady || !assetsReady || !areCardsReadyToRender) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
-          <Text style={styles.loadingText}>Loading Game...</Text>
+          <Text style={styles.loadingText}>Preparing Arena...</Text>
           <Text style={[styles.loadingText, { fontSize: 10, opacity: 0.6 }]}>
-            {!currentGame ? 'Waiting for match...' : !areFontsReady ? 'Loading fonts...' : !assetsReady ? 'Cashing assets...' : 'Processing game state...'}
+            {!currentGame ? 'Waiting for match...' : !areFontsReady ? 'Loading fonts...' : !assetsReady ? 'Cashing assets...' : !areCardsReadyToRender ? 'Initializing layout...' : 'Processing board...'}
           </Text>
         </View>
       </SafeAreaView>
