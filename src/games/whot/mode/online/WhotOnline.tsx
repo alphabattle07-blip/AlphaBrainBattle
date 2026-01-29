@@ -77,6 +77,11 @@ const WhotOnlineUI = () => {
   const [stableFont, setStableFont] = useState<any>(null);
   const [stableWhotFont, setStableWhotFont] = useState<any>(null);
 
+  // --- Player Role Determination (MUST be before useEffects that depend on it) ---
+  const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
+  const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
+  const needsRotation = isPlayer2;
+
   // Matchmaking State
   const [isMatchmaking, setIsMatchmaking] = useState(false);
   const [matchmakingMessage, setMatchmakingMessage] = useState('Finding match...');
@@ -224,12 +229,6 @@ const WhotOnlineUI = () => {
       }
     }, 2000);
   };
-
-  // --- UI Transformation (CRASH FIX HERE) ---
-
-  const isPlayer1 = currentGame?.player1?.id === userProfile?.id;
-  const isPlayer2 = currentGame?.player2?.id === userProfile?.id;
-  const needsRotation = isPlayer2;
 
   // We process the game state here to ensure it's safe for rendering
   const { visualGameState, reconstructedAllCards } = useMemo(() => {

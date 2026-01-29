@@ -3,7 +3,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useSelector, } from "react-redux";  // ✅ for reading state
-import { RootState } from "../../store"; 
+import { RootState } from "../../store";
 import { ToastProvider } from '../../hooks/useToast';
 
 
@@ -25,12 +25,12 @@ export default function GameModeScreen() {
 
 
 
-  
+
 
   const renderGameScreen = () => {
     switch (gameId) {
       // case 'chess':
-        case 'whot':
+      case 'whot':
         return <WhotIndex mode={mode} />;
       //   return <ChessGameScreen />;
       case 'ayo':
@@ -53,13 +53,13 @@ export default function GameModeScreen() {
 
   return (
     <ToastProvider>
-    <View style={{ flex: 1, backgroundColor: "#0b1f3a" }}>
- 
+      <View style={{ flex: 1, backgroundColor: "#0b1f3a" }}>
 
-      
-      {renderGameScreen()}
 
-    </View>
+
+        {renderGameScreen()}
+
+      </View>
     </ToastProvider>
   );
 }
